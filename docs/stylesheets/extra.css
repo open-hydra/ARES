@@ -1,0 +1,499 @@
+/* Let SVG inherit text color */
+.md-content svg {
+  color: inherit;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ARES Home Page — Modern Landing Page
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Base wrapper ───────────────────────────────────────────────────── */
+.ares-home {
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────── */
+.ares-hero {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(140deg, #0f1740 0%, #0b0f26 50%, #0d1524 100%);
+  padding: 7rem 2rem 5rem;
+  text-align: center;
+}
+
+.ares-hero__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.06) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: ares-grid-drift 25s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes ares-grid-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 48px 48px; }
+}
+
+.ares-hero__glow {
+  position: absolute;
+  width: 640px;
+  height: 640px;
+  border-radius: 50%;
+  filter: blur(130px);
+  opacity: 0.16;
+  pointer-events: none;
+}
+.ares-hero__glow--a {
+  background: #6366f1;
+  top: -260px;
+  left: -200px;
+}
+.ares-hero__glow--b {
+  background: #06b6d4;
+  bottom: -280px;
+  right: -200px;
+}
+
+.ares-hero__wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+/* Badge */
+.ares-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.1);
+  color: #a5b4fc;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 2rem;
+}
+.ares-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #818cf8;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+  animation: ares-pulse 2.2s ease-in-out infinite;
+}
+@keyframes ares-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3); }
+  50%       { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.08); }
+}
+
+/* Title */
+.ares-hero__h1 {
+  font-size: clamp(4.5rem, 12vw, 9rem) !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.04em !important;
+  line-height: 0.95 !important;
+  margin: 0 0 1.25rem !important;
+  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 45%, #7dd3fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  border: none !important;
+}
+.ares-hero__h1::before,
+.ares-hero__h1::after { display: none !important; }
+
+.ares-hero__sub {
+  font-size: clamp(1rem, 2.5vw, 1.35rem);
+  color: #94a3b8;
+  font-weight: 400;
+  margin: 0 0 1.25rem;
+  line-height: 1.5;
+}
+
+.ares-hero__body {
+  font-size: 0.975rem;
+  color: #64748b;
+  max-width: 580px;
+  margin: 0 auto 2.75rem;
+  line-height: 1.75;
+}
+
+/* CTA buttons */
+.ares-hero__btns {
+  display: flex;
+  gap: 0.875rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 3rem;
+}
+
+/* Stats pills */
+.ares-hero__pills {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.ares-pill {
+  padding: 0.4rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  font-size: 0.825rem;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+.ares-pill strong {
+  color: #c7d2fe;
+  font-weight: 600;
+}
+
+/* ── Buttons (shared) ───────────────────────────────────────────────── */
+.ares-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.7rem 1.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none !important;
+  transition: all 0.18s ease;
+  border: 1px solid transparent;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.ares-btn--primary {
+  background: #6366f1;
+  color: #fff !important;
+  border-color: #6366f1;
+  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.38);
+}
+.ares-btn--primary:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.48);
+}
+.ares-btn--ghost {
+  background: transparent;
+  color: #94a3b8 !important;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.ares-btn--ghost:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.05);
+}
+.ares-btn--secondary {
+  background: transparent;
+  color: var(--md-default-fg-color) !important;
+  border-color: var(--md-default-fg-color--lighter, #aaa);
+}
+.ares-btn--secondary:hover {
+  border-color: #6366f1;
+  color: #6366f1 !important;
+}
+
+/* ── Shared section helpers ─────────────────────────────────────────── */
+.ares-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+.ares-section-hd {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+.ares-section-hd h2 {
+  font-size: clamp(1.5rem, 4vw, 2.1rem);
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+  color: var(--md-default-fg-color);
+}
+.ares-section-hd p {
+  color: var(--md-default-fg-color--light, #666);
+  font-size: 1rem;
+  margin: 0;
+}
+
+/* ── Feature cards ──────────────────────────────────────────────────── */
+.ares-features {
+  padding: 5.5rem 0;
+  background: var(--md-default-bg-color);
+}
+.ares-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1.25rem;
+}
+.ares-card {
+  padding: 1.75rem;
+  border-radius: 0.875rem;
+  border: 1px solid var(--md-default-fg-color--lightest, rgba(0,0,0,0.1));
+  background: var(--md-default-bg-color);
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+.ares-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.08);
+}
+.ares-card__icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0.6rem;
+  border-radius: 0.6rem;
+  margin-bottom: 1.1rem;
+}
+.ares-card__icon svg {
+  width: 100%;
+  height: 100%;
+}
+.ares-card h3 {
+  font-size: 0.975rem !important;
+  font-weight: 600 !important;
+  margin: 0 0 0.5rem !important;
+  color: var(--md-default-fg-color);
+  border: none !important;
+}
+.ares-card p {
+  font-size: 0.875rem;
+  color: var(--md-default-fg-color--light, #666);
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* Card accent colors */
+.ares-card--indigo .ares-card__icon { background: rgba(99, 102, 241, 0.1);  color: #6366f1; }
+.ares-card--violet .ares-card__icon { background: rgba(139, 92, 246, 0.1);  color: #8b5cf6; }
+.ares-card--orange .ares-card__icon { background: rgba(249, 115, 22, 0.1);  color: #f97316; }
+.ares-card--teal   .ares-card__icon { background: rgba(20, 184, 166, 0.1);  color: #14b8a6; }
+.ares-card--green  .ares-card__icon { background: rgba(34, 197, 94, 0.1);   color: #22c55e; }
+.ares-card--pink   .ares-card__icon { background: rgba(236, 72, 153, 0.1);  color: #ec4899; }
+
+.ares-card--indigo:hover { border-color: #6366f1; }
+.ares-card--violet:hover { border-color: #8b5cf6; }
+.ares-card--orange:hover { border-color: #f97316; }
+.ares-card--teal:hover   { border-color: #14b8a6; }
+.ares-card--green:hover  { border-color: #22c55e; }
+.ares-card--pink:hover   { border-color: #ec4899; }
+
+/* ── Quick start ────────────────────────────────────────────────────── */
+.ares-qs {
+  padding: 5.5rem 0;
+  background: var(--md-code-bg-color, #f5f5f5);
+}
+.ares-qs__inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: center;
+}
+.ares-qs__text h2 {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 700;
+  margin: 0 0 1rem;
+  color: var(--md-default-fg-color);
+}
+.ares-qs__text p {
+  color: var(--md-default-fg-color--light, #666);
+  line-height: 1.75;
+  margin: 0 0 1.75rem;
+  font-size: 0.975rem;
+}
+.ares-qs__links {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Terminal */
+.ares-term {
+  border-radius: 0.875rem;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+}
+.ares-term__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.1rem;
+  background: #1c2333;
+}
+.ares-term__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ares-term__dot--r { background: #ff5f57; }
+.ares-term__dot--y { background: #febc2e; }
+.ares-term__dot--g { background: #28c840; }
+.ares-term__label {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: #3d4f6b;
+  font-family: 'Fira Code', monospace;
+}
+.ares-term__body {
+  margin: 0 !important;
+  padding: 1.4rem 1.6rem !important;
+  background: #0d1117 !important;
+  color: #c9d1d9 !important;
+  font-family: 'Fira Code', 'Cascadia Code', 'Menlo', monospace !important;
+  font-size: 0.84rem !important;
+  line-height: 1.85 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.ares-term__body code {
+  background: none !important;
+  padding: 0 !important;
+  font-size: inherit !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+.tc { color: #3d4f6b; display: block; }
+.tp { color: #818cf8; font-weight: 700; user-select: none; }
+
+/* ── Ecosystem ──────────────────────────────────────────────────────── */
+.ares-eco {
+  padding: 5.5rem 0;
+  background: var(--md-default-bg-color);
+}
+.ares-eco__flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.ares-eco__flow--graph {
+  flex-wrap: nowrap;
+}
+.ares-eco__parallel,
+.ares-eco__branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+.ares-eco__parallel {
+  gap: 1.25rem;
+}
+.ares-eco__arrow {
+  font-size: 1.75rem;
+  color: var(--md-default-fg-color--light, #888);
+  flex-shrink: 0;
+}
+.ares-eco__arrow--diag {
+  line-height: 1;
+}
+.ares-eco__node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2rem 2.5rem;
+  border-radius: 1rem;
+  border: 1px solid var(--md-default-fg-color--lightest, rgba(0,0,0,0.1));
+  min-width: 210px;
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: all 0.2s;
+  background: var(--md-default-bg-color);
+  position: relative;
+}
+.ares-eco__node:hover:not(.ares-eco__node--active) {
+  border-color: #6366f1;
+  transform: translateY(-3px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.07);
+}
+.ares-eco__node--active {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.05);
+}
+.ares-eco__node-tag {
+  position: absolute;
+  top: -0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  background: #6366f1;
+  padding: 0.2rem 0.8rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ares-eco__node-name {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--md-default-fg-color);
+  margin-top: 0.5rem;
+  letter-spacing: -0.02em;
+}
+.ares-eco__node-role {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #6366f1;
+  margin-top: 0.3rem;
+}
+.ares-eco__node-desc {
+  font-size: 0.82rem;
+  color: var(--md-default-fg-color--light, #666);
+  margin-top: 0.6rem;
+  line-height: 1.5;
+  max-width: 180px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .ares-qs__inner {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+  .ares-hero {
+    padding: 5rem 1.5rem 4rem;
+  }
+  .ares-eco__flow,
+  .ares-eco__flow--graph {
+    flex-direction: column;
+  }
+  .ares-eco__arrow {
+    transform: rotate(90deg);
+  }
+  .ares-eco__branch {
+    flex-direction: row;
+  }
+  .ares-eco__arrow--diag {
+    transform: none;
+  }
+}
+
+/* Recolor ONLY text */
+.md-content svg text {
+  fill: currentColor !important;
+}
+
+/* Recolor ONLY axes spines and ticks */
+.md-content svg .matplotlib-axis path,
+.md-content svg .matplotlib-axis line {
+  stroke: currentColor !important;
+}

@@ -1,0 +1,123 @@
+site_name: ARES Documentation
+site_url: https://open-hydra.github.io/ARES/
+repo_name: open-hydra/ARES
+repo_url: https://github.com/open-hydra/ARES
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  highlightjs: true
+  code_style: monokai
+  font:
+    text: Roboto
+    code: Fira Code
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: cyan
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue grey
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+  icon:
+    repo: fontawesome/brands/github
+
+# Extensions
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - admonition
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+      toc_depth: 2-3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+# Plugins
+plugins:
+  - search:
+      lang: en
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Home: index.md
+  - Overview: overview.md
+
+  - Getting Started:
+    - getting-started/index.md
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quick-start.md
+
+  - User Guide:
+    - user/index.md
+    - Running ARES: user/using.md
+    - Input File: user/input.md
+    - Input Parameters: user/registry.md
+    - Initial Conditions: user/initial-conditions.md
+    - Boundary Conditions: user/boundary-conditions.md
+
+  - Theoretical Guide:
+    - theory/index.md
+    - Governing Equations: theory/governing-equations.md
+    - Spatial Discretization: theory/numerics.md
+    - Riemann Solvers: theory/riemann-solvers.md
+    - Time Integration: theory/time-integration.md
+    - Low-Mach Preconditioning: theory/preconditioning.md
+    - Turbulence Modelling: theory/turbulence.md
+    - Real-Fluid Thermodynamics: theory/thermo.md
+
+  - Verification & Validation:
+    - vv/index.md
+    - Turbulent Flat Plate: vv/2D-flat-plate-turbulent.md
+    - Supercritical Heat Transfer (HTD): vv/htd.md
+    - Turbulent Prandtl Correction: vv/prt-correction.md
+
+  - Developer Guide:
+    - development/index.md
+    - Code Structure: development/structure.md
+    - Testing: development/testing.md
+    - Contributing: development/contributing.md
+
+  - About:
+    - about/index.md
+    - Acknowledgements: about/acknowledgements.md
+    - License: about/license.md

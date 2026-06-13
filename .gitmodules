@@ -1,0 +1,10 @@
+[submodule "lib/third_party/FiNeR"]
+	path = lib/third_party/FiNeR
+	url = https://github.com/szaghi/FiNeR.git
+
+[submodule "lib/ORION"]
+	path = lib/ORION
+	url = git@github.com:MarcoGrossi92/ORION.git
+[submodule "lib/FLINT"]
+	path = lib/FLINT
+	url = git@github.com:MarcoGrossi92/FLINT.git

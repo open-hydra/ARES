@@ -1,0 +1,216 @@
+{% extends "main.html" %}
+
+{% block tabs %}
+{{ super() }}
+
+<style>.md-header { position: initial; }</style>
+
+<div class="ares-home">
+
+  <!-- ══════════════════════════════════════════ HERO ══════════════════════════════════════════ -->
+  <section class="ares-hero">
+    <div class="ares-hero__grid"></div>
+    <div class="ares-hero__glow ares-hero__glow--a"></div>
+    <div class="ares-hero__glow ares-hero__glow--b"></div>
+    <div class="ares-hero__wrap">
+
+      <span class="ares-badge">
+        <span class="ares-badge__dot"></span>
+        Hydra CFD Suite
+      </span>
+
+      <h1 class="ares-hero__h1">ARES</h1>
+      <p class="ares-hero__sub">A Real-fluid Equations Solver</p>
+      <p class="ares-hero__body">
+        Open-source compressible-flow solver for the Euler and Navier-Stokes equations on
+        multi-block structured grids, with real-fluid thermodynamics and low-Mach
+        preconditioning — from supercritical real-fluid flows to turbulent boundary layers.
+      </p>
+
+      <div class="ares-hero__btns">
+        <a href="{{ 'getting-started/' | url }}" class="ares-btn ares-btn--primary">
+          Get Started &nbsp;&rarr;
+        </a>
+        <a href="{{ 'overview/' | url }}" class="ares-btn ares-btn--ghost">
+          Overview
+        </a>
+      </div>
+
+      <div class="ares-hero__pills">
+        <div class="ares-pill"><strong>6</strong>&nbsp;Riemann Solvers</div>
+        <div class="ares-pill"><strong>Real-fluid</strong>&nbsp;EOS</div>
+        <div class="ares-pill"><strong>Low-Mach</strong>&nbsp;Preconditioning</div>
+        <div class="ares-pill"><strong>Modern</strong>&nbsp;Fortran</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════ FEATURES ════════════════════════════════════════ -->
+  <section class="ares-features">
+    <div class="ares-container">
+      <div class="ares-section-hd">
+        <h2>Compressible flow with real-fluid physics</h2>
+        <p>A finite-volume CFD solver written in modern Fortran</p>
+      </div>
+      <div class="ares-grid">
+
+        <article class="ares-card ares-card--indigo">
+          <div class="ares-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
+          <h3>Compressible Flow Solver</h3>
+          <p>Euler and Navier-Stokes equations on multi-block structured grids, with steady-state and time-accurate computation modes.</p>
+        </article>
+
+        <article class="ares-card ares-card--violet">
+          <div class="ares-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <h3>High-Order Numerics</h3>
+          <p>MUSCL reconstruction with six flux limiters. Six Riemann solvers including preconditioned and rotated HLLC variants.</p>
+        </article>
+
+        <article class="ares-card ares-card--orange">
+          <div class="ares-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 2h8M12 2v6M5 22a7 7 0 0 1 14 0z"/><circle cx="12" cy="14" r="3"/>
+            </svg>
+          </div>
+          <h3>Real-Fluid Thermodynamics</h3>
+          <p>Tabulated real-fluid equation of state via the FLINT library: properties evaluated from pressure-enthalpy lookup tables.</p>
+        </article>
+
+        <article class="ares-card ares-card--teal">
+          <div class="ares-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+          <h3>Turbulence Modelling</h3>
+          <p>RANS: Spalart-Allmaras (with R/RC/QCR/rough variants), Menter SST, Wilcox k-&#969; 2006, and the SSG-LRR Reynolds-stress model.</p>
+        </article>
+
+        <article class="ares-card ares-card--pink">
+          <div class="ares-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>
+            </svg>
+          </div>
+          <h3>Low-Mach Preconditioning</h3>
+          <p>Weiss-Smith-type preconditioning recovers accuracy and convergence at low Mach number, where standard density-based schemes stall.</p>
+        </article>
+
+        <article class="ares-card ares-card--green">
+          <div class="ares-card__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </div>
+          <h3>Parallel &amp; Multigrid</h3>
+          <p>Shared-memory OpenMP and distributed-memory MPI, with geometric multigrid acceleration for fast convergence to steady state.</p>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════ QUICK START ══════════════════════════════════════ -->
+  <section class="ares-qs">
+    <div class="ares-container ares-qs__inner">
+
+      <div class="ares-qs__text">
+        <h2>Up and running in minutes</h2>
+        <p>ARES ships with a single install script that handles all dependencies, compiles the Fortran core, and produces the solver binary.</p>
+        <div class="ares-qs__links">
+          <a href="{{ 'getting-started/installation/' | url }}" class="ares-btn ares-btn--primary">
+            Installation guide &rarr;
+          </a>
+          <a href="{{ 'getting-started/quick-start/' | url }}" class="ares-btn ares-btn--secondary">
+            Quick start
+          </a>
+        </div>
+      </div>
+
+      <div class="ares-qs__code">
+        <div class="ares-term">
+          <div class="ares-term__bar">
+            <span class="ares-term__dot ares-term__dot--r"></span>
+            <span class="ares-term__dot ares-term__dot--y"></span>
+            <span class="ares-term__dot ares-term__dot--g"></span>
+            <span class="ares-term__label">terminal</span>
+          </div>
+          <pre class="ares-term__body"><code><span class="tc"># Clone and build</span>
+<span class="tp">$</span> git clone https://github.com/open-hydra/ARES.git
+<span class="tp">$</span> cd ARES &amp;&amp; ./install.sh build --compilers=gnu
+
+<span class="tc"># Run a simulation</span>
+<span class="tp">$</span> ./bin/ARES</code></pre>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════ ECOSYSTEM ════════════════════════════════════════ -->
+  <section class="ares-eco">
+    <div class="ares-container">
+      <div class="ares-section-hd">
+        <h2>The Hydra CFD Suite</h2>
+        <p>ARES is the real-fluid compressible-flow solver in an integrated multi-physics simulation suite</p>
+      </div>
+      <div class="ares-eco__flow ares-eco__flow--graph">
+        <a href="https://github.com/open-hydra/ATLAS" target="_blank" rel="noopener" class="ares-eco__node">
+          <span class="ares-eco__node-name">ATLAS</span>
+          <span class="ares-eco__node-role">Pre-processor</span>
+          <span class="ares-eco__node-desc">Mesh, initial &amp; boundary conditions, real-fluid thermodynamic data</span>
+        </a>
+
+        <div class="ares-eco__branch" aria-hidden="true">
+          <span class="ares-eco__arrow ares-eco__arrow--diag">&#8599;</span>
+          <span class="ares-eco__arrow ares-eco__arrow--diag">&#8600;</span>
+        </div>
+
+        <div class="ares-eco__parallel">
+          <div class="ares-eco__node ares-eco__node--active">
+            <span class="ares-eco__node-tag">You are here</span>
+            <span class="ares-eco__node-name">ARES</span>
+            <span class="ares-eco__node-role">Solver/Library</span>
+            <span class="ares-eco__node-desc">Real-fluid compressible CFD solver</span>
+          </div>
+          <a href="https://github.com/open-hydra/FUSS" target="_blank" rel="noopener" class="ares-eco__node">
+            <span class="ares-eco__node-name">FUSS</span>
+            <span class="ares-eco__node-role">Solver/Library</span>
+            <span class="ares-eco__node-desc">Solid heat conduction solver</span>
+          </a>
+          <a href="https://github.com/open-hydra/GROOT" target="_blank" rel="noopener" class="ares-eco__node">
+            <span class="ares-eco__node-name">GROOT</span>
+            <span class="ares-eco__node-role">Solver/Library</span>
+            <span class="ares-eco__node-desc">Radiative transfer equation solver</span>
+          </a>
+        </div>
+
+        <div class="ares-eco__branch" aria-hidden="true">
+          <span class="ares-eco__arrow ares-eco__arrow--diag">&#8600;</span>
+          <span class="ares-eco__arrow ares-eco__arrow--diag">&#8599;</span>
+        </div>
+
+        <a href="https://github.com/open-hydra" target="_blank" rel="noopener" class="ares-eco__node">
+          <span class="ares-eco__node-name">Hydra</span>
+          <span class="ares-eco__node-role">Solver</span>
+          <span class="ares-eco__node-desc">Integrated solver for fully-coupled simulations</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+</div><!-- /.ares-home -->
+{% endblock %}
+
+{% block content %}{% endblock %}
+{% block footer %}{{ super() }}{% endblock %}
