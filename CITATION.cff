@@ -21,4 +21,5 @@ authors:
     given-names: "Gianluca"
 license: GPL-3.0
 url: "https://github.com/open-hydra/ARES"
+doi: "https://doi.org/10.5281/zenodo.20677441"
 type: software
