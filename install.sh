@@ -25,7 +25,7 @@ Commands:
   build                     Perform a full build
     --include-orion=<path>  Set external ORION path
     --include-flint=<path>  Set external FLINT path
-    --include-oslo=<path>   Set external OSlo path
+    --include-oslo=<path>   Set external OSLO path
     --include-finer=<path>  Set external FiNeR path
     --compilers=<name>      Set compilers (intel, gnu)
     --use-openmp            Use OpenMP
@@ -110,7 +110,7 @@ COMMAND=""
 COMPILERS=""
 ORION_PATH=$(pwd)'/lib/ORION/'
 FLINT_PATH=$(pwd)'/lib/FLINT/'
-OSLO_PATH=$FLINT_PATH'/lib/OSlo/'
+OSLO_PATH=$FLINT_PATH'/lib/OSLO/'
 FINER_PATH=$(pwd)'/lib/third_party/FiNeR/'
 USE_OPENMP="false"
 USE_MPI="false"
@@ -253,7 +253,7 @@ case "$COMMAND" in
         else
           log "Compilers: FC=$FC, CXX=$CXX, CC=$CC"
         fi
-        OSLO_PATH=$FLINT_PATH'/lib/OSlo/'
+        OSLO_PATH=$FLINT_PATH'/lib/OSLO/'
         rm -rf $BUILD_DIR
         cmake -B $BUILD_DIR -DORION_PATH=$ORION_PATH -DOSLO_PATH=$OSLO_PATH -DFINER_PATH=$FINER_PATH -DFLINT_PATH=$FLINT_PATH -DUSE_TECIO=$USE_TECIO -DUSE_OPENMP=$USE_OPENMP -DUSE_MPI=$USE_MPI -DUSE_SUNDIALS=$USE_SUNDIALS -DUSE_CANTERA=$USE_CANTERA -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
         cmake --build $BUILD_DIR || exit 1

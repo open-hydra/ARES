@@ -35,7 +35,7 @@ ARES/
 │   └── test/                # Unit-test scaffold (built with BASIC_TEST=ON; currently empty)
 │
 ├── lib/                     # External dependencies (git submodules)
-│   ├── FLINT/               #   Real-fluid thermodynamic tables (bundles the OSlo ODE library)
+│   ├── FLINT/               #   Real-fluid thermodynamic tables (bundles the OSLO ODE library)
 │   ├── ORION/               #   Structured-grid I/O library
 │   └── third_party/
 │       └── FiNeR/           #   INI file parser
@@ -54,7 +54,7 @@ ARES/
 
 | Library | Purpose |
 |---------|---------|
-| `FLINT` | Real-fluid thermodynamic & transport tables (ships the OSlo ODE solver library under `lib/FLINT/lib/OSlo`) |
+| `FLINT` | Real-fluid thermodynamic & transport tables (ships the OSLO ODE solver library under `lib/FLINT/lib/OSLO`) |
 | `ORION` | Structured multi-block grid I/O |
 | `FiNeR` | INI file parser |
 

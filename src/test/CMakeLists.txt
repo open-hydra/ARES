@@ -9,7 +9,7 @@ foreach(TEST ${TESTS})
   set_target_properties(${EXE_NAME} PROPERTIES
       RUNTIME_OUTPUT_DIRECTORY ${EXE_DIR}
       OUTPUT_NAME ${EXE_NAME}.exe)
-  target_link_libraries(${EXE_NAME} PRIVATE ${lib} FiNeR::FiNeR OSlo ORION)
+  target_link_libraries(${EXE_NAME} PRIVATE ${lib} FiNeR::FiNeR OSLO ORION)
   target_include_directories(${EXE_NAME} INTERFACE
       $<BUILD_INTERFACE:${CMAKE_Fortran_MODULE_DIRECTORY}>)
 

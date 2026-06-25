@@ -119,4 +119,4 @@ The `extract1d` step is needed by the cases whose script reads `OUTPUT/1d.dat` (
 
 ## Unit Tests
 
-Building with `-DBASIC_TEST=ON` (CMake) compiles every `*.f90` / `*.F90` placed under `src/test/`: each file becomes a standalone executable linked against `libARES` (plus FiNeR, OSlo, ORION), written to `test/basic/<name>/<name>.exe`. The directory currently contains only the CMake scaffold — no unit tests are present; the suite above is validation-level.
+Building with `-DBASIC_TEST=ON` (CMake) compiles every `*.f90` / `*.F90` placed under `src/test/`: each file becomes a standalone executable linked against `libARES` (plus FiNeR, OSLO, ORION), written to `test/basic/<name>/<name>.exe`. The directory currently contains only the CMake scaffold — no unit tests are present; the suite above is validation-level.
