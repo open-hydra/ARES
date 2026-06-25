@@ -1,6 +1,6 @@
 # Spatial Discretization
 
-ARES uses a cell-centred finite volume method (FVM) on structured multi-block grids. This page describes the discretization framework, the MUSCL reconstruction that provides second-order accuracy, the slope limiters that ensure monotonicity, and the shock-detection sensor that adaptively reduces the order near discontinuities.
+ARES uses a cell-centred finite volume method (FVM) on structured multi-block grids. This page describes the discretization framework, the MUSCL reconstruction that provides second-order accuracy, and the slope limiters that ensure monotonicity.
 
 ---
 
@@ -54,21 +54,17 @@ where $\phi$ is the chosen limiter.
 3. Reconstruct interface values:
 
 $$
-P_L = P_i + \beta\,\bar{s}_L\,\delta l_L,\qquad
-P_R = P_{i+1} - \beta\,\bar{s}_R\,\delta l_R,
+P_L = P_i + \bar{s}_L\,\delta l_L,\qquad
+P_R = P_{i+1} - \bar{s}_R\,\delta l_R,
 $$
 
-with $\delta l_L,\delta l_R$ the cell-centre-to-interface distances and $\beta$ a blending parameter set by the shock detector.
+with $\delta l_L,\delta l_R$ the cell-centre-to-interface distances.
 
 | `space-reconstruction` | Meaning |
 |------------------------|---------|
-| `first-order` | Donor-cell ($\beta=0$); most robust, most diffusive |
+| `first-order` | Donor-cell; most robust, most diffusive |
 | `MUSCL` | Second-order MUSCL with the selected limiter |
-| `MUSCL-SD` | MUSCL with the **shock-detection** sensor modulating $\beta$ (see below) |
 | `none` | No reconstruction (used for some pure-diffusion configurations) |
-
-!!! note "Role of β"
-    $\beta = 1$ recovers full second-order MUSCL; $\beta = 0$ reduces to first order (donor-cell) in the immediate vicinity of shocks. The `MUSCL-SD` variant lets the shock sensor smoothly modulate $\beta$ between these limits.
 
 ---
 
@@ -124,29 +120,6 @@ $$
 | MC | Low | $C^0$ |
 | superbee | Lowest | $C^0$ |
 | LIMO3 | Low (3rd-order smooth) | piecewise |
-
----
-
-## Shock Detection
-
-Even with TVD limiters, MUSCL reconstruction can produce oscillations near strong shocks (the carbuncle phenomenon). With `MUSCL-SD`, ARES uses a pressure-based sensor to detect shocks and smoothly degrade to first order in their vicinity.
-
-A $3\times3\times3$ stencil of pressures centred on cell $(i,j,k)$ gives second-order undivided differences in each direction:
-
-$$
-\kappa_d = \frac{|p_{+}-2p_0+p_{-}|}{p_{+}+2p_0+p_{-}},\qquad d=1,2,3,
-$$
-
-and the shock strength is $\sigma=\max(\kappa_1,\kappa_2,\kappa_3)$. A smooth blending with threshold $\Delta$ gives
-
-$$
-\beta=\begin{cases}1-\tanh\!\bigl(10(\sigma\Delta)^3\bigr) & \sigma<1/\Delta\\ 0 & \text{otherwise}\end{cases}
-$$
-
-so $\beta\to1$ in smooth flow (full second order) and $\beta\to0$ at shocks (first order). This $\beta$ multiplies the limited slope in the reconstruction step.
-
-!!! note "Solver-level use"
-    Some Riemann solvers (notably the rotated HLLC) also consult the shock flag to tune their numerical dissipation, adding a second layer of robustness near discontinuities.
 
 ---
 

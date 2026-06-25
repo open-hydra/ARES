@@ -88,10 +88,14 @@ The real-fluid table is requested in the ATLAS block:
 ```ini
 [GPB-Phase1]
 type  = real-fluid
+name  = air
 fluid = air
-pmin  = 0.50e5   ;  pmax = 2.0e5      ! pressure range [Pa]
-Tmin  = 500.0    ;  Tmax = 600.0      ! temperature range [K]
-NP    = 200      ;  NH   = 200        ! table resolution (p × h)
+pmin  = 0.50e5    ; minimum pressure [Pa]
+pmax  = 2.0e5     ; maximum pressure [Pa]
+Tmin  = 500.0     ; minimum temperature [K]
+Tmax  = 600.0     ; maximum temperature [K]
+NP    = 200       ; pressure grid points
+NH    = 200       ; enthalpy grid points
 ```
 
 The inflow carries freestream turbulence values (`kappa` = $k$, `omega` = $\omega$) in the `[ICB-Block1]` block, as required by the two-equation model.

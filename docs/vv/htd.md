@@ -40,10 +40,14 @@ Prt = 0.9
 
 [GPB-Phase1]
 type  = real-fluid
+name  = parahydrogen
 fluid = parahydrogen
-pmin  = 30.0d5   ;  pmax = 80.0d5     ! [Pa]
-Tmin  = 25.0d0   ;  Tmax = 800.0d0    ! [K]
-NP    = 800      ;  NH   = 800
+pmin  = 30.0e5    ; minimum pressure [Pa]
+pmax  = 80.0e5    ; maximum pressure [Pa]
+Tmin  = 25.0e0    ; minimum temperature [K]
+Tmax  = 800.0e0   ; maximum temperature [K]
+NP    = 800       ; pressure grid points
+NH    = 800       ; enthalpy grid points
 ```
 
 The geometry is a two-block axisymmetric pipe: an **adiabatic entrance** block develops the flow, and a **heated** block applies the wall heat flux. The cryogenic supercritical inflow and the high back pressure are:

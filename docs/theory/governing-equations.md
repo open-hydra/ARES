@@ -13,7 +13,7 @@ $$
 
 where $\mathbf{U}$ is the vector of conservative variables, $\mathbf{F}^{c}$ the convective (inviscid) flux, $\mathbf{F}^{v}$ the viscous (diffusive) flux, and $\mathbf{S}$ the source-term vector (turbulence model, optional rotating frame).
 
-Unlike an ideal-gas solver, ARES does **not** close the system with $p=\rho R T$. The thermodynamic state is closed by a **tabulated real-fluid equation of state** expressed on a pressure–enthalpy grid (see [Real-Fluid Thermodynamics](thermo.md)).
+ARES does **not** close the system with an analytic relation such as $p=\rho R T$. The thermodynamic state is closed by a **tabulated real-fluid equation of state** expressed on a pressure–enthalpy grid (see [Real-Fluid Thermodynamics](thermo.md)).
 
 ---
 

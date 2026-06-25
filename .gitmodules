@@ -4,7 +4,8 @@
 
 [submodule "lib/ORION"]
 	path = lib/ORION
-	url = git@github.com:MarcoGrossi92/ORION.git
+	url = https://github.com/MarcoGrossi92/ORION.git
+
 [submodule "lib/FLINT"]
 	path = lib/FLINT
-	url = git@github.com:MarcoGrossi92/FLINT.git
+	url = https://github.com/MarcoGrossi92/FLINT.git

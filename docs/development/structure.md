@@ -142,10 +142,9 @@ Each `Explicit_Step` performs one time step:
 
 The convective flux at each interface is built in stages from a 4-point stencil:
 
-1. **Shock detection** (with `MUSCL-SD`) — pressure sensor flags cells near discontinuities.
-2. **MUSCL reconstruction** — interface left/right states using the selected limiter.
-3. **Riemann solver** — one of six solvers resolves the jump (`Mod_Riemann` binds `Riemann => …`).
-4. **Numerical flux** — multiplied by the interface area vector.
+1. **MUSCL reconstruction** — interface left/right states using the selected limiter.
+2. **Riemann solver** — one of six solvers resolves the jump (`Mod_Riemann` binds `Riemann => …`).
+3. **Numerical flux** — multiplied by the interface area vector.
 
 ---
 

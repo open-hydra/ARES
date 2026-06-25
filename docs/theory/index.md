@@ -16,7 +16,7 @@ This section provides the theoretical foundations for the physical models and nu
 
     ---
 
-    Cell-centred finite volume, MUSCL / MUSCL-SD reconstruction, six flux limiters, shock detection
+    Cell-centred finite volume, second-order MUSCL reconstruction, six flux limiters
 
     [:octicons-arrow-right-24: Spatial discretization](numerics.md)
 

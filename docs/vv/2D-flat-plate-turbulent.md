@@ -88,7 +88,7 @@ python3 validate_sa.py
 ```
 
 !!! tip "Constant-property comparison"
-    The `Flat_Plate_SST`, `Flat_Plate_Wilcox2006`, and `Flat_Plate_SGGLRR` cases ship `set_constant_cp.py` and `set_constant_transport.py`, which flatten the real-fluid table to constant $c_p$ / transport so the comparison against the (ideal-gas) NASA reference is exact rather than approximate.
+    The `Flat_Plate_SST`, `Flat_Plate_Wilcox2006`, and `Flat_Plate_SGGLRR` cases ship `set_constant_cp.py` and `set_constant_transport.py`, which flatten the real-fluid table to constant $c_p$ / transport so the comparison against the constant-property NASA reference is exact rather than approximate.
 
 ---
 

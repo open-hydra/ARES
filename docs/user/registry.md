@@ -29,7 +29,7 @@ This page is the reference for every `[ARES-*]` parameter. It mirrors the output
 | irs-beta | 0.0 | >= 0 | no | IRS smoothing coefficient |
 | preconditioning-Uref | -1.0 |  | no | Reference velocity for preconditioning (< 0 ⇒ use sound speed) |
 | preconditioning-eps-min | -1.0 |  | no | Minimum cut-off $\varepsilon$ for preconditioning (< 0 ⇒ default 0.10) |
-| space-reconstruction | none | MUSCL-SD, MUSCL, first-order, none | **yes** | Space reconstruction method |
+| space-reconstruction | none | MUSCL, first-order, none | **yes** | Space reconstruction method |
 | flux-limiter | none | vanalbada, minmod, superbee, vanleer, MC, LIMO3, none | no | Flux limiter for reconstruction |
 | riemann-solver | HLLC | Rusanov, PLLF, HLLE, HLLC, HLLC Prec, HLLC Rotated | no | Riemann (numerical flux) solver |
 | riemann-options-Minf | 0.0 | >= 0 | no | Reference Mach number for the Riemann solver |

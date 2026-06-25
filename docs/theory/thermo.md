@@ -2,17 +2,21 @@
 
 ## Overview
 
-ARES does **not** assume an ideal gas. The equation of state and the transport properties are supplied as **tabulated real-fluid data** on a structured **pressure–enthalpy $(p,h)$ grid**, generated and interpolated by the [FLINT](https://github.com/MarcoGrossi92/FLINT) library. This lets ARES reproduce the genuine real-fluid behaviour of a chosen working fluid (compressibility factor $\neq 1$, variable specific heats, near-critical effects) over the tabulated range, while keeping the per-cell property evaluation as cheap as a bilinear lookup.
+ARES models the working fluid as a **real fluid**. The equation of state and the transport properties are supplied as **tabulated real-fluid data** on a structured **pressure–enthalpy $(p,h)$ grid**, generated and interpolated by the [FLINT](https://github.com/MarcoGrossi92/FLINT) library. This lets ARES reproduce the genuine real-fluid behaviour of a chosen working fluid (compressibility factor $\neq 1$, variable specific heats, near-critical effects) over the tabulated range, while keeping the per-cell property evaluation as cheap as a bilinear lookup.
 
 The table is requested from a `[GPB-*]` block in `input.ini`:
 
 ```ini
 [GPB-Phase1]
 type  = real-fluid
+name  = air
 fluid = air
-pmin  = 0.80e5   ;  pmax = 2.0e5      ! pressure range [Pa]
-Tmin  = 280.0    ;  Tmax = 340.0      ! temperature range [K]
-NP    = 200      ;  NH   = 200        ! resolution: NP × NH points
+pmin  = 0.80e5    ; minimum pressure [Pa]
+pmax  = 2.0e5     ; maximum pressure [Pa]
+Tmin  = 280.0     ; minimum temperature [K]
+Tmax  = 340.0     ; maximum temperature [K]
+NP    = 200       ; pressure grid points
+NH    = 200       ; enthalpy grid points
 ```
 
 ATLAS / FLINT build the data over $[p_\min,p_\max]\times$ the enthalpy range corresponding to $[T_\min,T_\max]$, sampling reference data (e.g. CoolProp or NASA correlations) at $N_P \times N_H$ points and writing `thermo.dat` (thermodynamics) and the transport table.
@@ -89,7 +93,7 @@ with the turbulent Prandtl number $\mathrm{Pr}_t$ taken from `[ARES-RANS]` (defa
 The FLINT real-fluid tables are verified independently of ARES: a self-consistency check confirms the tabulated $(\rho,T,a,\dots)$ satisfy the thermodynamic relations to machine precision, and the values are cross-checked against reference databases (CoolProp). Validation scripts live under `lib/FLINT/test/real-fluid/`.
 
 !!! tip "Constant-property checks"
-    The bundled flat-plate cases ship helper scripts (`set_constant_cp.py`, `set_constant_transport.py`) that flatten the table to constant $c_p$ / constant transport. These reduce the real-fluid case to a textbook ideal-gas / constant-property problem so the solution can be checked against an analytic result (e.g. Blasius) without table-interpolation effects.
+    The bundled flat-plate cases ship helper scripts (`set_constant_cp.py`, `set_constant_transport.py`) that flatten the table to constant $c_p$ / constant transport. These reduce the real-fluid case to a textbook constant-property problem so the solution can be checked against an analytic result (e.g. Blasius) without table-interpolation effects.
 
 ---
 
