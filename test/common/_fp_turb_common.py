@@ -28,7 +28,7 @@ import numpy as np
 # 0:x 6:U 11:rho 16:mi(=mu) 25:tau(total)
 C_X, C_U, C_RHO, C_MU, C_TAU = 0, 6, 11, 16, 25
 
-X_LO      = 0.0125    # cf error-metric lower bound (matches MOSE verify.py)
+X_LO      = 0.0125    # cf error-metric lower bound
 RE_REF    = 5.0e6     # NASA-TMR reference Reynolds per unit length
 X_STATION = 0.97      # NASA profile station
 
@@ -194,7 +194,7 @@ def validate_cf(f_field, f_wall, f_cf, cell_vars, case_name, ares_color="C0"):
        a constant mu=1.18587e-5 in transport.dat.) Returns free-stream state."""
     import matplotlib.pyplot as plt
     print("=" * 74)
-    print(" 1) SKIN FRICTION  cf(x)   (wall.tec + field.tec, MOSE verify.py style)")
+    print(" 1) SKIN FRICTION  cf(x)   (wall.tec + field.tec)")
     print("=" * 74)
 
     _, _, _, xN, yN, cv = read_field_tec(f_field, cell_vars)
@@ -227,7 +227,7 @@ def validate_cf(f_field, f_wall, f_cf, cell_vars, case_name, ares_color="C0"):
     print(f"  -> cf consistent with NASA-TMR reference : {verdict}  (tol 5% RMS)")
 
     # ---- plot Cf vs x (MOSE verify.py style) ----
-    fig, ax = plt.subplots(figsize=(9, 6))
+    fig, ax = plt.subplots(figsize=(9, 6), num="cf")
     ax.plot(xp, cf, "o", ms=5, mfc="none", color='red', label=f"ARES ({case_name})")
     for name, arr in reference_curves(zones):
         ax.plot(arr[:, 0], arr[:, 1], "-", lw=2, label=name)

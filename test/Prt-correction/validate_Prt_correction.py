@@ -47,8 +47,12 @@ non-dimensional plots in the style of Fig. 5 / Fig. 9 of the paper:
 
   2) Non-dimensional Nusselt number  Nu / Nu_theo    vs  x/D   (Fig. 9 style)
         Nu_theo   -> Dipprey-Sabersky, Eq.(11), via Stanton number
+        Two reference guide-lines are drawn: Nu/Nu_theo = 1 (Dipprey-Sabersky,
+        the target of the correction) and Nu/Nu_theo ~ 2.6, the level the
+        UNcorrected SA reaches for this hs/D=0.08 case (interpolated from the
+        paper Fig. 5 anchors, ~2.2x at hs/D=0.04 and >4x at hs/D=0.21).
 
-The plots are shown on screen (plt.show()), not saved.
+The plots are shown on screen and also saved as PNG into reference/.
 ================================================================================
 """
 
@@ -70,6 +74,19 @@ HERE     = os.path.dirname(os.path.abspath(__file__))
 DATFILE  = os.path.join(HERE, "OUTPUT", "1d.dat")
 INI      = os.path.join(HERE, "input.ini")
 
+
+def save_figures(outdir=None):
+    """Save every open matplotlib figure into <outdir> (default: reference/),
+       using each figure's short label (set via num= at creation) as file name."""
+    outdir = outdir or os.path.join(HERE, "reference")
+    os.makedirs(outdir, exist_ok=True)
+    for num in plt.get_fignums():
+        fig = plt.figure(num)
+        name = fig.get_label() or f"fig{num}"
+        path = os.path.join(outdir, name + ".png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"  saved figure -> {path}")
+
 KARMAN   = 0.41        # von Karman constant (not used directly here)
 KF_DS    = 5.19        # k_f coefficient of the Dipprey-Sabersky correlation [8]
 PR_TS    = 0.9         # smooth-wall turbulent Prandtl number (info)
@@ -88,6 +105,11 @@ X_REF_FRAC = 0.90
 # itself (Eq.11), i.e. the corrected model should give Nu/Nu_theo ~ 1.
 REF_NU_RATIO_EQ11     = 1.0    # theoretical reference Dipprey-Sabersky (Eq.11)
 REF_NU_RATIO_CORR     = 1.0    # ARES paper, "SA - Pr_t correction" -> ~1
+# Uncorrected SA (equivalent sand grain): the Reynolds analogy is kept, so Nu is
+# strongly overpredicted.  Paper Fig. 5 gives ~2.2x at hs/D=0.04 and >4x at
+# hs/D=0.21; the hs/D=0.08 panel is not reported, so this value is INTERPOLATED
+# between those two anchors (it is a reference guide-line, not a digitized point).
+REF_NU_RATIO_NOCORR   = 2.6    # SA without Pr_t correction (paper, interp. @ hs/D=0.08)
 # Fig. 5(b) / Sec.4 text: developed f_D/f_D,theo (~5% below Colebrook at hs/D=0.08)
 REF_FD_RATIO_EXTRAP    = 0.95  # extrapolated value (Richardson), ~5% shift
 
@@ -238,7 +260,7 @@ def main():
     relabel = r"$Re_{ref}=%.2g$ @ $x/D=%.0f$" % (Re_ref, xD[i_ref])
 
     # Fig 1 -- non-dimensional friction (Fig. 5 style)
-    fig1, ax = plt.subplots(figsize=(7, 5))
+    fig1, ax = plt.subplots(figsize=(7, 5), num="cf")
     ax.plot(xD, cf_ratio, "b-", lw=1.8, label=r"ARES")
     ax.axhline(REF_FD_RATIO_EXTRAP, color="grey", ls="--", lw=1.4,
                label=r"Paper reference")
@@ -252,10 +274,12 @@ def main():
     fig1.tight_layout()
 
     # Fig 2 -- non-dimensional Nusselt (Fig. 9 style)
-    fig2, ax = plt.subplots(figsize=(7, 5))
+    fig2, ax = plt.subplots(figsize=(7, 5), num="Nu")
     ax.plot(xD, nu_ratio, "r-", lw=1.8, label=r"ARES ($SA$ - $Pr_t$ correction)")
     ax.axhline(REF_NU_RATIO_EQ11, color="k", ls=":", lw=1.4,
-               label="Dipprey-Sabersky ")
+               label="reference")
+    ax.axhline(REF_NU_RATIO_NOCORR, color="grey", ls="--", lw=1.4,
+               label=r"$SA$, no correction")
     ax.set_xlabel(r"$x/D$")
     ax.set_ylabel(r"$Nu\,/\,Nu_{theo}$")
     ax.set_title(r"Non-dimensional Nusselt ($h_s/D=%.2f$, $Pr=%.2f$, %s)"
@@ -265,6 +289,7 @@ def main():
     ax.legend(loc="best")
     fig2.tight_layout()
 
+    save_figures()
     plt.show()
 
 

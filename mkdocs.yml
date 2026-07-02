@@ -13,14 +13,14 @@ theme:
     code: Fira Code
   palette:
     - scheme: default
-      primary: indigo
-      accent: cyan
+      primary: green
+      accent: light green
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - scheme: slate
-      primary: blue grey
-      accent: cyan
+      primary: green
+      accent: light green
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
@@ -92,6 +92,7 @@ nav:
     - Running ARES: user/using.md
     - Input File: user/input.md
     - Input Parameters: user/registry.md
+    - Gas Properties: user/gas-properties.md
     - Initial Conditions: user/initial-conditions.md
     - Boundary Conditions: user/boundary-conditions.md
 

@@ -17,7 +17,7 @@
 .ares-hero {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(140deg, #0f1740 0%, #0b0f26 50%, #0d1524 100%);
+  background: linear-gradient(140deg, #0a2a1c 0%, #06140d 50%, #0a1f16 100%);
   padding: 7rem 2rem 5rem;
   text-align: center;
 }
@@ -26,8 +26,8 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(99, 102, 241, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99, 102, 241, 0.06) 1px, transparent 1px);
+    linear-gradient(rgba(34, 197, 94, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 197, 94, 0.06) 1px, transparent 1px);
   background-size: 48px 48px;
   animation: ares-grid-drift 25s linear infinite;
   pointer-events: none;
@@ -48,12 +48,12 @@
   pointer-events: none;
 }
 .ares-hero__glow--a {
-  background: #6366f1;
+  background: #22c55e;
   top: -260px;
   left: -200px;
 }
 .ares-hero__glow--b {
-  background: #06b6d4;
+  background: #10b981;
   bottom: -280px;
   right: -200px;
 }
@@ -72,9 +72,9 @@
   gap: 0.5rem;
   padding: 0.35rem 1rem;
   border-radius: 999px;
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  background: rgba(99, 102, 241, 0.1);
-  color: #a5b4fc;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.1);
+  color: #86efac;
   font-size: 0.78rem;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -85,13 +85,13 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #818cf8;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+  background: #4ade80;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
   animation: ares-pulse 2.2s ease-in-out infinite;
 }
 @keyframes ares-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3); }
-  50%       { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0.08); }
+  0%, 100% { box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3); }
+  50%       { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.08); }
 }
 
 /* Title */
@@ -101,7 +101,7 @@
   letter-spacing: -0.04em !important;
   line-height: 0.95 !important;
   margin: 0 0 1.25rem !important;
-  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 45%, #7dd3fc 100%);
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 45%, #4ade80 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -154,7 +154,7 @@
   backdrop-filter: blur(6px);
 }
 .ares-pill strong {
-  color: #c7d2fe;
+  color: #bbf7d0;
   font-weight: 600;
 }
 
@@ -174,16 +174,16 @@
   cursor: pointer;
 }
 .ares-btn--primary {
-  background: #6366f1;
+  background: #22c55e;
   color: #fff !important;
-  border-color: #6366f1;
-  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.38);
+  border-color: #22c55e;
+  box-shadow: 0 4px 18px rgba(34, 197, 94, 0.38);
 }
 .ares-btn--primary:hover {
-  background: #4f46e5;
-  border-color: #4f46e5;
+  background: #16a34a;
+  border-color: #16a34a;
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.48);
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.48);
 }
 .ares-btn--ghost {
   background: transparent;
@@ -201,8 +201,8 @@
   border-color: var(--md-default-fg-color--lighter, #aaa);
 }
 .ares-btn--secondary:hover {
-  border-color: #6366f1;
-  color: #6366f1 !important;
+  border-color: #22c55e;
+  color: #22c55e !important;
 }
 
 /* ── Shared section helpers ─────────────────────────────────────────── */
@@ -274,14 +274,14 @@
 }
 
 /* Card accent colors */
-.ares-card--indigo .ares-card__icon { background: rgba(99, 102, 241, 0.1);  color: #6366f1; }
+.ares-card--indigo .ares-card__icon { background: rgba(16, 185, 129, 0.1);  color: #10b981; }
 .ares-card--violet .ares-card__icon { background: rgba(139, 92, 246, 0.1);  color: #8b5cf6; }
 .ares-card--orange .ares-card__icon { background: rgba(249, 115, 22, 0.1);  color: #f97316; }
 .ares-card--teal   .ares-card__icon { background: rgba(20, 184, 166, 0.1);  color: #14b8a6; }
 .ares-card--green  .ares-card__icon { background: rgba(34, 197, 94, 0.1);   color: #22c55e; }
 .ares-card--pink   .ares-card__icon { background: rgba(236, 72, 153, 0.1);  color: #ec4899; }
 
-.ares-card--indigo:hover { border-color: #6366f1; }
+.ares-card--indigo:hover { border-color: #10b981; }
 .ares-card--violet:hover { border-color: #8b5cf6; }
 .ares-card--orange:hover { border-color: #f97316; }
 .ares-card--teal:hover   { border-color: #14b8a6; }
@@ -365,7 +365,7 @@
   box-shadow: none !important;
 }
 .tc { color: #3d4f6b; display: block; }
-.tp { color: #818cf8; font-weight: 700; user-select: none; }
+.tp { color: #4ade80; font-weight: 700; user-select: none; }
 
 /* ── Ecosystem ──────────────────────────────────────────────────────── */
 .ares-eco {
@@ -417,13 +417,13 @@
   position: relative;
 }
 .ares-eco__node:hover:not(.ares-eco__node--active) {
-  border-color: #6366f1;
+  border-color: #22c55e;
   transform: translateY(-3px);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.07);
 }
 .ares-eco__node--active {
-  border-color: #6366f1;
-  background: rgba(99, 102, 241, 0.05);
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.05);
 }
 .ares-eco__node-tag {
   position: absolute;
@@ -433,7 +433,7 @@
   font-size: 0.68rem;
   font-weight: 700;
   color: #fff;
-  background: #6366f1;
+  background: #22c55e;
   padding: 0.2rem 0.8rem;
   border-radius: 999px;
   white-space: nowrap;
@@ -452,7 +452,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #6366f1;
+  color: #22c55e;
   margin-top: 0.3rem;
 }
 .ares-eco__node-desc {

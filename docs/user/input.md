@@ -58,8 +58,8 @@ These define the case and are consumed by **ATLAS** to generate the `INPUT/` dat
 | Section | Role |
 |---------|------|
 | `[GRIB-*]` | **GRI**d **B**lock — mesh generation (e.g. `method = gmsh`, a `.geo`/`.msh` input, or analytic surfaces) |
-| `[GPB-*]` | **G**as **P**roperty **B**lock — the real-fluid table: `type = real-fluid`, `fluid`, pressure/temperature range (`pmin/pmax/Tmin/Tmax`), and resolution (`NP × NH`) |
-| `[ICB-*]` | **I**nitial **C**ondition **B**lock — the initial flow state per block (`p`, `T`, `u`, and turbulence variables `kappa`/`omega` if applicable) |
+| `[GPB-*]` | **G**as **P**roperty **B**lock — the real-fluid table: `type = real-fluid`, `fluid`, pressure/temperature range (`pmin/pmax/Tmin/Tmax`), and resolution (`NP × NH`) (see [Gas Properties](gas-properties.md)) |
+| `[ICB-*]` | **I**nitial **C**ondition **B**lock — the initial flow state per block (`p`, `T`, `u`, and turbulence variables `kappa`/`omega` if applicable) (see [Initial Conditions](initial-conditions.md)) |
 | `[BCB-*]` | **B**oundary **C**ondition **B**lock — assigns a named boundary type to each of the six block faces (see [Boundary Conditions](boundary-conditions.md)) |
 
 A minimal real-fluid block:

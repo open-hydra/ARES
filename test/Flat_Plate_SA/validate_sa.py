@@ -144,7 +144,7 @@ def validate_cf():
     print(f"  -> cf consistent with NASA-TMR SA reference : {verdict}")
 
     # ---- plot cf vs x ----
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots(figsize=(7, 5), num="cf")
     ax.plot(xp, cf_cfd, "o", ms=4, mfc="none", color="red", label="ARES (SA)")
     xs    = np.linspace(xp.min(), xp.max(), 400)
     Re_xs = rho_inf * U_inf * xs / mu_inf
@@ -162,11 +162,26 @@ def validate_cf():
 
 
 # --------------------------------------------------------------------------- #
+def save_figures(outdir=None):
+    """Save every open matplotlib figure into <outdir> (default: reference/),
+       using each figure's short label (set via num= at creation) as file name."""
+    outdir = outdir or os.path.join(HERE, "reference")
+    os.makedirs(outdir, exist_ok=True)
+    for num in plt.get_fignums():
+        fig = plt.figure(num)
+        name = fig.get_label() or f"fig{num}"
+        path = os.path.join(outdir, name + ".png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"  saved figure -> {path}")
+
+
+# --------------------------------------------------------------------------- #
 def main():
     if not os.path.exists(F_1D):
         sys.exit(f"ERROR: {F_1D} not found - run the case first.")
     validate_cf()
     print()
+    save_figures()
     print("Done. Showing plot (close the window to exit)...")
     plt.show()
 

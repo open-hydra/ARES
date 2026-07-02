@@ -141,5 +141,19 @@ Use the imperative mood:
 Add rotated-HLLC carbuncle fix for blunt-body cases
 
 Blend HLLE in the velocity-difference direction with HLLC in the
-orthogonal direction. Validated on the hypersonic cylinder.
+orthogonal direction. Validated on the supercritical HTD case.
 ```
+
+---
+
+## Pull Request Checklist
+
+Before submitting a PR, please verify:
+
+- [ ] Code builds cleanly (`./install.sh build --compilers=gnu`) with no new warnings
+- [ ] Every new procedure has `implicit none` and explicit argument `intent`s
+- [ ] New input keys are added through the `Register_*` registry (not parsed ad hoc), so `DocGen` and the [parameter registry](../user/registry.md) stay in sync
+- [ ] Layer boundaries are respected (see [above](#layer-boundaries))
+- [ ] At least one `test/` case still validates (`./ARES.sh solve` + its `validate_*.py`); new functionality ships with a case where practical
+- [ ] Documentation updated if user-facing behaviour changed
+- [ ] Commit messages follow the convention above

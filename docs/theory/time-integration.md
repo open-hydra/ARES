@@ -41,6 +41,27 @@ $$
 \end{aligned}
 $$
 
+### Unified coefficient form
+
+The three schemes share a single kernel. At stage $k$ the update is
+
+$$
+\mathbf U^{(k)} = \mathbf U^n + c_{s,k}\bigl(\mathbf U^{(k-1)} - \mathbf U^n + \mathbf R^\ast\bigr),
+$$
+
+where $\mathbf R^\ast$ is the scaled residual of stage $k$ and the stage coefficients $c_{s,k}$ are stored in the `RKcoeff` matrix
+
+$$
+\mathbf C =
+\begin{pmatrix}
+1 & 0 & 0 \\[2pt]
+1 & \tfrac12 & 0 \\[2pt]
+1 & \tfrac14 & \tfrac23
+\end{pmatrix}.
+$$
+
+The row index $s$ is the scheme order (1 = `euler`, 2 = `RK2`, 3 = `RK3`) and the column index $k$ is the stage, so a single coded loop realises all three integrators.
+
 ### State update per stage
 
 At each RK stage:
@@ -125,6 +146,25 @@ $$
 ### Prolongation (coarse → fine)
 
 The coarse-grid correction is transferred back with cubic interpolation (3-D) or biquadratic interpolation (2-D); each fine cell receives a weighted contribution from its parent and neighbouring coarse cells according to its position within the coarse cell.
+
+**Interpolation weights.** In 3-D each fine cell is built from its parent coarse cell plus the three face-, three edge- and one corner-neighbour selected toward its octant:
+
+$$
+a_1 = \tfrac{27}{64},\quad
+a_2 = \tfrac{9}{64},\quad
+a_3 = \tfrac{3}{64},\quad
+a_4 = \tfrac{1}{64},
+$$
+
+applied as $1\cdot a_1 + 3\cdot a_2 + 3\cdot a_3 + 1\cdot a_4 = 1$. In 2-D ($n_k=1$) the stencil collapses to the parent, two face-neighbours and one corner-neighbour:
+
+$$
+a_1 = \tfrac{9}{16},\quad
+a_2 = \tfrac{3}{16},\quad
+a_3 = \tfrac{1}{16},
+$$
+
+with $a_1 + 2\,a_2 + a_3 = 1$. The weights are normalised by construction, so the prolongation is conservative in the mean.
 
 ### Cycle
 

@@ -112,20 +112,35 @@ $$
 \phi(a,b)=\max\!\bigl(0,\min(2r,1),\min(r,2)\bigr)\,a
 $$
 
-| Limiter | Dissipation | Smoothness |
-|---------|:-----------:|:----------:|
-| minmod | High | $C^0$ |
-| van Leer | Medium | $C^\infty$ |
-| van Albada | Medium-low | $C^\infty$ |
-| MC | Low | $C^0$ |
-| superbee | Lowest | $C^0$ |
-| LIMO3 | Low (3rd-order smooth) | piecewise |
+### TVD Diagram
+
+In Sweby's $(r,\phi)$ diagram every second-order TVD limiter must lie inside the shaded region bounded below by the **minmod** envelope and above by the **superbee** envelope, while passing through the consistency point $\phi(1)=1$:
+
+$$
+0 \le \phi(r) \le \min(2r,\,2),\qquad \phi(r)=0\ \text{for } r\le 0 .
+$$
+
+A limiter sitting near the lower (minmod) edge is the most dissipative and monotone; one near the upper (superbee) edge is the sharpest but can steepen smooth extrema. Van Leer and van Albada are smooth ($C^\infty$) curves through the middle of the region; MC follows the monotonized-central envelope. LIMO3 is a third-order limiter that leaves the strict second-order TVD region in smooth flow to recover third-order accuracy, while staying non-oscillatory.
+
+| Limiter | Dissipation | Smoothness | Position in TVD region |
+|---------|:-----------:|:----------:|------------------------|
+| minmod | High | $C^0$ | lower envelope |
+| van Leer | Medium | $C^\infty$ | mid (smooth) |
+| van Albada | Medium-low | $C^\infty$ | mid (smooth) |
+| MC | Low | $C^0$ | monotonized-central edge |
+| superbee | Lowest | $C^0$ | upper envelope |
+| LIMO3 | Low (3rd-order smooth) | piecewise | third-order (leaves 2nd-order TVD region) |
 
 ---
 
 ## Gradient Computation for Diffusive Fluxes
 
-Velocity and temperature gradients for the viscous flux are computed at each interface from a stencil spanning the face-normal and tangential directions. The computational-space gradient $(\xi,\eta,\zeta)$ is mapped to Cartesian $(x,y,z)$ with the **face-metric tensor** $M_{3\times3}$, computed from the grid geometry and stored per face. The same metric provides the physical spacing $\Delta l$ used in the MUSCL reconstruction.
+Velocity and temperature gradients for the viscous flux are computed at each interface from a **10-point stencil**:
+
+- **2 points** in the face-normal direction — the two cells sharing the face, giving the normal derivative directly;
+- **8 points** in the two tangential directions — four cells per direction, each tangential derivative being the average of the two consecutive differences.
+
+The resulting computational-space gradient $(\xi,\eta,\zeta)$ is mapped to Cartesian $(x,y,z)$ with the **face-metric tensor** $M_{3\times3}$, taken as the average $M = \tfrac12(M_1 + M_2)$ of the two adjacent cells' metrics, computed from the grid geometry and stored per face. The same metric provides the physical spacing $\Delta l$ used in the MUSCL reconstruction.
 
 ---
 

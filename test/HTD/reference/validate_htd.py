@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as pl
 import re
@@ -8,6 +9,19 @@ import pandas as pd
 HYDROGEN FLOWING IN TUBES AT SUBCRITICAL AND
 SUPERCRITICAL PRESSURES TO 800 POUNDS
 PER SQUARE INCH ABSOLUTE"""
+
+
+def save_figures(outdir=None):
+    """Save every open matplotlib figure into <outdir> (default: this folder),
+       using each figure's short label (set via num= at creation) as file name."""
+    outdir = outdir or os.path.dirname(os.path.abspath(__file__))
+    os.makedirs(outdir, exist_ok=True)
+    for num in pl.get_fignums():
+        fig = pl.figure(num)
+        name = fig.get_label() or f"fig{num}"
+        path = os.path.join(outdir, name + ".png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"  saved figure -> {path}")
 
 
 def read_tecplot_dat(filepath: str, zone: str = None) -> pd.DataFrame:
@@ -190,7 +204,7 @@ Tb_CFD = df_cfd["T[K]"].to_numpy()
 # ----------------------------------------------------------------
 # Plot: Temperatura Bulk
 # ----------------------------------------------------------------
-pl.figure()
+pl.figure("Tbulk")
 pl.minorticks_on()
 pl.plot(x_CFD, Tb_CFD, '-', color='black', label='ARES')
 pl.plot(xm, Tb_NASA, 'o', label='Experimental', markerfacecolor='white', markeredgecolor='red', markersize=8)
@@ -205,7 +219,7 @@ pl.legend()
 # ----------------------------------------------------------------
 # Plot: Temperatura a Parete
 # ----------------------------------------------------------------
-pl.figure()
+pl.figure("Twall")
 ax = pl.gca()
 ax.set_box_aspect(1)
 pl.minorticks_on()
@@ -220,4 +234,5 @@ pl.title('Wall Temperature along the Tube')
 pl.legend()
 
 
+save_figures()
 pl.show()

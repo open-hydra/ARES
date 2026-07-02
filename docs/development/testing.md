@@ -120,3 +120,17 @@ The `extract1d` step is needed by the cases whose script reads `OUTPUT/1d.dat` (
 ## Unit Tests
 
 Building with `-DBASIC_TEST=ON` (CMake) compiles every `*.f90` / `*.F90` placed under `src/test/`: each file becomes a standalone executable linked against `libARES` (plus FiNeR, OSLO, ORION), written to `test/basic/<name>/<name>.exe`. The directory currently contains only the CMake scaffold — no unit tests are present; the suite above is validation-level.
+
+---
+
+## Reference Solution Generation
+
+ARES does not bundle an exact-solution generator. Each case carries its trusted reference data and the script that compares against it:
+
+| Case | Reference source | Where it lives |
+|------|------------------|----------------|
+| Turbulent flat plate | **NASA Turbulence Modeling Resource** skin-friction distributions | `reference/` in each `Flat_Plate_*` case |
+| HTD | Experimental wall-temperature data for the supercritical para-hydrogen pipe | `reference/` in `test/HTD` |
+| Prt-correction | Analytic rough-pipe correlations (Colebrook–White friction, Dipprey–Sabersky Nusselt) | embedded in `validate_Prt_correction.py` |
+
+For the turbulence-model validations the canonical references assume a calorically simple gas, so the cases ship `set_constant_cp.py` / `set_constant_transport.py` to flatten the real-fluid $(p,h)$ table to constant $c_p$ / transport — isolating the numerics from real-fluid property variation. The HTD case instead keeps the full table, since the property variation *is* the physics under test.

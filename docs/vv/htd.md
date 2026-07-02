@@ -19,6 +19,46 @@ HTD is a stringent test because it stacks the distinguishing ARES features:
 
 ---
 
+## Physical background — supercritical heat transfer
+
+### The pseudo-critical point
+
+Above the thermodynamic critical point ($p>p_c$, $T>T_c$) a fluid is a single phase, but it still passes through a sharp — yet continuous — transition between a *liquid-like* and a *gas-like* state. At a given supercritical pressure this transition is centred on the **pseudo-critical temperature** $T_{pc}(p)$, defined as the temperature at which the isobaric specific heat peaks:
+
+$$
+c_p\bigl(p,\,T_{pc}\bigr) = \max_T c_p(p,T),
+\qquad
+c_p = \left.\frac{\partial h}{\partial T}\right|_p .
+$$
+
+For **para-hydrogen** the critical point is $p_c \approx 1.286$ MPa ($\approx 12.86$ bar) and $T_c \approx 32.94$ K. This case runs at $p \approx 46$ bar, i.e. a reduced pressure $p_r = p/p_c \approx 3.6$ — firmly supercritical. Across $T_{pc}$ the density falls by roughly an order of magnitude while $c_p$, the conductivity $k$ and the viscosity $\mu$ all vary steeply. This is precisely the property variation the real-fluid $(p,h)$ table (see [Real-Fluid Thermodynamics](../theory/thermo.md)) is built to capture, and a Newton-inverted ideal-gas EOS cannot.
+
+### Bulk enthalpy and temperature along the tube
+
+For a tube of diameter $D$ with a uniform wall heat flux $q_w$ and mass flux $G = \dot m / A = \rho U$, a one-dimensional energy balance, $\dot m\, dh_b = q_w\,(\pi D\, dx)$, gives the **bulk (mixed-mean) enthalpy**:
+
+$$
+\frac{dh_b}{dx} = \frac{q_w\,\pi D}{\dot m} = \frac{4\,q_w}{G\,D},
+\qquad
+h_b(x) = h_{in} + \frac{4\,q_w}{G\,D}\,x .
+$$
+
+The bulk temperature $T_b(x)$ then follows by inverting the real-fluid table at the local $(p,\,h_b)$. While $h_b$ traverses the pseudo-critical enthalpy $h_{pc}=h(p,T_{pc})$, the large $c_p$ holds $T_b$ nearly flat — this is the gentle bulk-temperature curve in the validation plot.
+
+### Heat-transfer coefficient and deterioration
+
+The wall heat flux is tied to the wall-to-bulk temperature difference through the local heat-transfer coefficient $h_c$ and Nusselt number:
+
+$$
+q_w = h_c\,(T_w - T_b),
+\qquad
+Nu = \frac{h_c\,D}{k_b}.
+$$
+
+**Heat-transfer deterioration (HTD)** is a localized *collapse* of $h_c$ — equivalently, at fixed $q_w$, a *spike* in the wall temperature $T_w$ — that appears when the near-wall fluid is heated past $T_{pc}$ while the bulk is still liquid-like. The near-wall density drop thickens the thermal layer, accelerates the flow, and distorts the turbulent shear through the strong property gradients, suppressing the near-wall turbulent mixing. The onset is controlled chiefly by the **heat-flux-to-mass-flux ratio** $q_w/G$: above a threshold the wall temperature overshoots. Reproducing the $T_w(x)$ peak therefore stresses the full coupling of the real-fluid EOS, the turbulence model, and the [low-Mach preconditioned](../theory/preconditioning.md) scheme at once.
+
+---
+
 ## Configuration
 
 ```ini
@@ -70,7 +110,7 @@ p    = 46.11d5     ; back pressure [Pa]  (above the H₂ critical pressure ≈ 1
 
 ## Reference data and verification
 
-The verification script is `reference/validate_htd.py`. The experimental reference — **NASA test 24-1027** (*“Experimental heat-transfer results for cryogenic hydrogen flowing in tubes at subcritical and supercritical pressures to 800 psia”*) — is embedded directly in the script: measured **bulk temperature** and **wall temperature** at twelve axial stations along the heated tube.
+The verification script is `reference/validate_htd.py`. The experimental reference is **NASA TN D-3095** (Hendricks, Graham, Hsu & Friedman, *Experimental heat-transfer results for cryogenic hydrogen flowing in tubes at subcritical and supercritical pressures to 800 psia*), **run 24-1027** — measured **bulk temperature** and **wall temperature** at twelve axial stations along the heated tube, embedded directly in the script. The data are reported in Rankine and inches and converted to SI inside the script ($T[\mathrm{K}] = \tfrac59\,T[^{\circ}\mathrm{R}]$, $x[\mathrm{m}] = 0.0254\,x[\mathrm{in}]$).
 
 The script reads:
 
@@ -92,6 +132,24 @@ The script plots the bulk- and wall-temperature distributions along the tube aga
 
 ---
 
+## Results
+
+`validate_htd.py` overlays the ARES profiles (black line) on the NASA TN D-3095 measurements (red circles) and writes the figures into `test/HTD/reference/`.
+
+### Bulk temperature
+
+![Bulk temperature along the tube: ARES vs NASA experiment](img/htd_Tbulk.png){ width="600" }
+
+*`test/HTD/reference/Tbulk.png`.* Mixed-mean (bulk) temperature along the heated tube. It rises smoothly from the cryogenic inlet (~31 K) as the wall heat flux adds enthalpy, following $h_b(x)=h_{in}+\tfrac{4q_w}{GD}x$ (then inverted on the real-fluid table). The agreement with the twelve experimental stations is essentially exact — a direct check that the $(p,h)$ table and the energy balance are consistent.
+
+### Wall temperature — the HTD peak
+
+![Wall temperature along the tube showing the heat-transfer-deterioration peak](img/htd_Twall.png){ width="600" }
+
+*`test/HTD/reference/Twall.png`.* Wall temperature along the tube. The sharp **peak near $x\approx0.1$ m** ($T_w\approx410$ K) is the **heat-transfer deterioration**: where the near-wall fluid crosses the pseudo-critical line the local heat-transfer coefficient collapses and, at fixed wall heat flux, $T_w$ overshoots before recovering downstream. ARES reproduces both the location and the height of the peak, which is the headline result of the case — it can only be captured with the full real-fluid EOS.
+
+---
+
 ## What this validates
 
 - The **real-fluid $(p,h)$ table and thermo inversion** under steep property variation near the pseudo-critical line.
@@ -100,3 +158,11 @@ The script plots the bulk- and wall-temperature distributions along the tube aga
 
 !!! warning "Long run"
     HTD is a deep-convergence case (`iter-threshold = 6,000,000`, `cfl = 0.3`). Run it in the background and monitor `logfile`.
+
+---
+
+## References
+
+1. R. C. Hendricks, R. W. Graham, Y. Y. Hsu, R. Friedman, *Experimental heat-transfer results for cryogenic hydrogen flowing in tubes at subcritical and supercritical pressures to 800 pounds per square inch absolute*, **NASA TN D-3095**, NASA Lewis Research Center, 1966 — [NTRS 19660011645](https://ntrs.nasa.gov/citations/19660011645). *(experimental reference, run 24-1027)*
+2. J. D. Jackson, "Fluid flow and convective heat transfer to fluids at supercritical pressure," *Nucl. Eng. Des.* 264 (2013) 24–40 — DOI: [10.1016/j.nucengdes.2012.09.040](https://doi.org/10.1016/j.nucengdes.2012.09.040). *(heat-transfer deterioration review)*
+3. I. H. Bell, J. Wronski, S. Quoilin, V. Lemort, "Pure and pseudo-pure fluid thermophysical property evaluation and the open-source thermophysical property library CoolProp," *Ind. Eng. Chem. Res.* 53 (2014) — DOI: [10.1021/ie4033999](https://doi.org/10.1021/ie4033999). *(reference para-hydrogen properties)*

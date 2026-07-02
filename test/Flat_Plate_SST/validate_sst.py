@@ -76,13 +76,13 @@ def validate_profiles():
     # ----- plots -----
     ymax = 0.04
     if have_kw:
-        fig2, (a1, a2) = plt.subplots(1, 2, figsize=(11, 5.5))
-        a1.plot(k_nd, yn, "o", ms=3, mfc="none", color="C2", label="ARES")
+        fig2, (a1, a2) = plt.subplots(1, 2, figsize=(11, 5.5), num="kappa")
+        a1.plot(k_nd, yn, "o", ms=5, mfc="none", color="C2", label="ARES")
         a1.plot(kkw, ykw, "-", color="k", label=f"NASA {zkw[0].split(',')[0]}")
         a1.set_xlabel(r"$k^+ = k/a_\infty^2$"); a1.set_ylabel(r"$y$ [m]")
         a1.set_ylim(0, ymax); a1.grid(True, ls=":", alpha=0.6); a1.legend()
         a1.set_title("SST - turbulent kinetic energy")
-        a2.semilogx(om_nd, yn, "o", ms=3, mfc="none", color="C3", label="ARES")
+        a2.semilogx(om_nd, yn, "o", ms=5, mfc="none", color="C3", label="ARES")
         a2.semilogx(omkw, ykw, "-", color="k", label=f"NASA {zkw[0].split(',')[0]}")
         a2.set_xlabel(r"$\omega^+ = \omega\,\mu_\infty/(\rho_\infty a_\infty^2)$")
         a2.set_ylabel(r"$y$ [m]")
@@ -91,11 +91,25 @@ def validate_profiles():
         fig2.tight_layout()
 
 
+def save_figures(outdir=None):
+    """Save every open matplotlib figure into <outdir> (default: reference/),
+       using each figure's short label (set via num= at creation) as file name."""
+    outdir = outdir or os.path.join(HERE, "reference")
+    os.makedirs(outdir, exist_ok=True)
+    for num in plt.get_fignums():
+        fig = plt.figure(num)
+        name = fig.get_label() or f"fig{num}"
+        path = os.path.join(outdir, name + ".png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"  saved figure -> {path}")
+
+
 def main():
     if not os.path.exists(F_FIELD):
         sys.exit(f"ERROR: {F_FIELD} not found - run the case first.")
     C.validate_cf(F_FIELD, F_WALL, F_CF, CELL_VARS, "SST")
     validate_profiles()
+    save_figures()
     print("\nDone. Showing plots (close the windows to exit)...")
     plt.show()
 

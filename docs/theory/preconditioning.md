@@ -35,7 +35,7 @@ riemann-solver           = HLLC Prec ; pair with a preconditioned flux
 |-----|:-------:|---------|
 | `integration-variables = prec` | `prim` | Switch the update (and time step) to the preconditioned formulation |
 | `preconditioning-Uref` | `-1.0` | Global reference velocity $U_\text{ref}$. If negative, the **local sound speed** is used (fully local preconditioning) |
-| `preconditioning-eps-min` | `-1.0` | Lower cut-off $\varepsilon_\min$ on the preconditioning parameter. If negative, the built-in default **0.10** is used |
+| `preconditioning-eps-min` | `-1.0` | Lower cut-off $\varepsilon_\text{min}$ on the preconditioning parameter. If negative, the built-in default **0.10** is used |
 
 !!! warning "Use a matching Riemann solver"
     Preconditioning rescales the wave speeds, so the interface dissipation must be rescaled consistently. Pair `integration-variables = prec` with **`HLLC Prec`** or **`PLLF`**; using a non-preconditioned solver re-introduces the $\sim a$ dissipation and defeats the purpose.
@@ -53,17 +53,17 @@ U_\text{ref} =
 a & \text{otherwise (local sound speed)}
 \end{cases}
 \qquad
-\varepsilon_\min =
+\varepsilon_\text{min} =
 \begin{cases}
 \texttt{preconditioning-eps-min} & \text{if } \ge 0\\
 0.10 & \text{otherwise}
 \end{cases}
 $$
 
-A local Mach-squared parameter is formed and clipped from below by $\varepsilon_\min$ and from above by 1:
+A local Mach-squared parameter is formed and clipped from below by $\varepsilon_\text{min}$ and from above by 1:
 
 $$
-\varepsilon = \min\!\Bigl(1,\ \max\bigl(\varepsilon_\min,\ M_\text{loc}^2\bigr)\Bigr),
+\varepsilon = \min\!\Bigl(1,\ \max\bigl(\varepsilon_\text{min},\ M_\text{loc}^2\bigr)\Bigr),
 \qquad
 M_\text{loc} = \frac{\lVert\mathbf u\rVert}{U_\text{ref}} .
 $$

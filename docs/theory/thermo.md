@@ -19,10 +19,10 @@ NP    = 200       ; pressure grid points
 NH    = 200       ; enthalpy grid points
 ```
 
-ATLAS / FLINT build the data over $[p_\min,p_\max]\times$ the enthalpy range corresponding to $[T_\min,T_\max]$, sampling reference data (e.g. CoolProp or NASA correlations) at $N_P \times N_H$ points and writing `thermo.dat` (thermodynamics) and the transport table.
+ATLAS / FLINT build the data over $[p_\text{min},p_\text{max}]\times$ the enthalpy range corresponding to $[T_\text{min},T_\text{max}]$, sampling reference data (e.g. CoolProp or NASA correlations) at $N_P \times N_H$ points and writing `thermo.dat` (thermodynamics) and the transport table.
 
 !!! warning "Stay inside the table"
-    Properties are only valid inside the tabulated $(p,h)$ box. A simulation whose pressure or enthalpy leaves $[p_\min,p_\max]$ or the enthalpy range corresponding to $[T_\min,T_\max]$ will extrapolate, which is inaccurate and can destabilise the run. Choose the `[GPB]` range to comfortably bracket the expected flow states.
+    Properties are only valid inside the tabulated $(p,h)$ box. A simulation whose pressure or enthalpy leaves $[p_\text{min},p_\text{max}]$ or the enthalpy range corresponding to $[T_\text{min},T_\text{max}]$ will extrapolate, which is inaccurate and can destabilise the run. Choose the `[GPB]` range to comfortably bracket the expected flow states.
 
 ---
 

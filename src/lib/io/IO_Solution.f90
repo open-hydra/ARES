@@ -45,8 +45,6 @@ contains
     character(llen) :: try
     character(6)    :: extension
 
-    obj_io%ini_format=obj_io%sol_format
-
     if (obj_sim_param%newrun) then
       if (index(obj_io%ini_format,'vtk')>0) then
         extension = '.vtm'

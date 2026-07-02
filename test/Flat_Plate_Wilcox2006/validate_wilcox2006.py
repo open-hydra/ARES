@@ -49,7 +49,7 @@ def validate_profile():
     print(f"  mut/mu : ARES peak = {mut_mu.max():7.1f}   "
           f"ref({zmut[0]}) peak = {mutref.max():7.1f}")
 
-    fig, ax = plt.subplots(figsize=(6.5, 5.5))
+    fig, ax = plt.subplots(figsize=(6.5, 5.5), num="mut")
     ax.plot(mut_mu, yn, "o", ms=3, mfc="none", color="C1", label="ARES")
     ax.plot(mutref, ymut, "-", color="k", label=f"NASA {zmut[0].split(',')[0]}")
     ax.set_xlabel(r"$\mu_t/\mu$"); ax.set_ylabel(r"$y$ [m]")
@@ -59,11 +59,25 @@ def validate_profile():
     fig.tight_layout()
 
 
+def save_figures(outdir=None):
+    """Save every open matplotlib figure into <outdir> (default: reference/),
+       using each figure's short label (set via num= at creation) as file name."""
+    outdir = outdir or os.path.join(HERE, "reference")
+    os.makedirs(outdir, exist_ok=True)
+    for num in plt.get_fignums():
+        fig = plt.figure(num)
+        name = fig.get_label() or f"fig{num}"
+        path = os.path.join(outdir, name + ".png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"  saved figure -> {path}")
+
+
 def main():
     if not os.path.exists(F_FIELD):
         sys.exit(f"ERROR: {F_FIELD} not found - run the case first.")
     C.validate_cf(F_FIELD, F_WALL, F_CF, CELL_VARS, "Wilcox2006")
     validate_profile()
+    save_figures()
     print("\nDone. Showing plots (close the windows to exit)...")
     plt.show()
 

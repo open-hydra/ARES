@@ -221,13 +221,49 @@ ARES_simulation_type
 
 ## Build System
 
+### CMake targets
+
 | Target | Type | Description |
 |--------|------|-------------|
-| `ARES` (library) | Static library | Core solver; links FLINT, ORION, FiNeR |
+| `ARES` (library) | Static library | Core solver + all physics/numerics; links FLINT, ORION, FiNeR |
 | `ARES` (executable) | Executable | Standalone solver (`src/app/main.f90`) |
 | `DocGen` | Executable | Input-parameter docs generator (`src/app/docgen.f90`) |
 
-CMake options defined by ARES itself: `USE_OPENMP`, `USE_MPI`, `BASIC_TEST`. The optional-dependency switches (`USE_TECIO`, `USE_SUNDIALS`, `USE_CANTERA`) are consumed by the submodule builds — `install.sh build` writes them all into `CMakePresets.json`. Dependency paths: `ORION_PATH`, `FLINT_PATH`, `OSLO_PATH`, `FINER_PATH` (defaults under `lib/`). The top-level `CMakeLists.txt` only builds the executable when ARES is the top project, so it can be embedded as a sub-directory by the Hydra coupled solver.
+The top-level `CMakeLists.txt` builds the executable **only when ARES is the top project**, so the library can be embedded as a sub-directory by the Hydra coupled solver.
+
+### Build workflow
+
+```bash
+# Option A: install.sh (recommended for the first build)
+./install.sh build --compilers=gnu --use-openmp
+
+# Option B: re-compile only, reusing the written preset (iterative development)
+./install.sh compile          # uses CMakePresets.json
+# or equivalently:
+cmake --preset default && cmake --build build
+```
+
+`install.sh build` writes the resolved compilers, options, and dependency paths into `CMakePresets.json`; subsequent `install.sh compile` (or `cmake --preset default`) reuse it.
+
+### Key CMake options
+
+| Option | Default | Library | Effect |
+|--------|:-------:|---------|--------|
+| `USE_OPENMP` | OFF | OpenMP | Enable shared-memory threading |
+| `USE_MPI` | OFF | MPI | Enable distributed-memory parallelism |
+| `USE_TECIO` | OFF | TecIO | Enable Tecplot binary (`.szplt`) I/O (consumed by ORION) |
+| `BASIC_TEST` | OFF | — | Build unit tests in `src/test/` |
+
+### Dependency paths
+
+External library paths are set via CMake cache variables (or written automatically by `install.sh`):
+
+| Variable | Default | Library |
+|----------|---------|---------|
+| `ORION_PATH` | `lib/ORION/` | ORION I/O |
+| `FLINT_PATH` | `lib/FLINT/` | FLINT real-fluid tables |
+| `OSLO_PATH` | `lib/FLINT/lib/OSLO/` | OSLO (FLINT dependency) |
+| `FINER_PATH` | `lib/third_party/FiNeR/` | FiNeR INI parser |
 
 ---
 

@@ -36,7 +36,7 @@ $$
 + \mathbf{S}
 $$
 
-where $\mathbf{U}$ is the conservative-variable vector, $\mathbf{F}^c$ the convective fluxes, $\mathbf{F}^v$ the viscous fluxes, and $\mathbf{S}$ the source terms (turbulence, rotating frame). Both the inviscid limit (Euler equations) and the full viscous form (Navier–Stokes) are supported. The simulation regime is selected with a single switch, `simulation-type` = `euler`, `laminar`, or `turbulent`.
+where $\mathbf{U}$ is the conservative-variable vector, $\mathbf{F}^c$ the convective fluxes, $\mathbf{F}^v$ the viscous fluxes, and $\mathbf{S}$ the source terms (turbulence). Both the inviscid limit (Euler equations) and the full viscous form (Navier–Stokes) are supported. The simulation regime is selected with a single switch, `simulation-type` = `euler`, `laminar`, or `turbulent`.
 
 ---
 
@@ -156,13 +156,11 @@ See [Low-Mach Preconditioning](theory/preconditioning.md).
 
 ARES is free and open-source software released under the **[GNU General Public License v3.0](about/license.md)** (GPL-3.0).
 
-| Permission | |
-|------------|-|
-| :white_check_mark: Use freely | For any purpose, including commercial |
-| :white_check_mark: Modify | Change the source code as needed |
-| :white_check_mark: Distribute | Share original or modified versions |
-| :white_check_mark: Patent grant | Contributors grant patent rights |
-| :warning: Share-alike | Derivative works must use GPL-3.0 |
-| :warning: Disclose source | Source code must be provided when distributing |
+- ✅ **Use freely** — for any purpose, including commercial
+- ✅ **Modify** — change the source code as needed
+- ✅ **Distribute** — share original or modified versions
+- ✅ **Patent grant** — contributors grant patent rights
+- ⚠️ **Share-alike** — derivative works must use GPL-3.0
+- ⚠️ **Disclose source** — source code must be provided when distributing
 
 Full license text: [`LICENSE`](about/license.md)

@@ -11,7 +11,7 @@ $$
 + \mathbf{S}
 $$
 
-where $\mathbf{U}$ is the vector of conservative variables, $\mathbf{F}^{c}$ the convective (inviscid) flux, $\mathbf{F}^{v}$ the viscous (diffusive) flux, and $\mathbf{S}$ the source-term vector (turbulence model, optional rotating frame).
+where $\mathbf{U}$ is the vector of conservative variables, $\mathbf{F}^{c}$ the convective (inviscid) flux, $\mathbf{F}^{v}$ the viscous (diffusive) flux, and $\mathbf{S}$ the source-term vector (turbulence model).
 
 ARES does **not** close the system with an analytic relation such as $p=\rho R T$. The thermodynamic state is closed by a **tabulated real-fluid equation of state** expressed on a pressure–enthalpy grid (see [Real-Fluid Thermodynamics](thermo.md)).
 
@@ -132,6 +132,5 @@ i.e. viscous work plus heat conduction in the energy equation. Gradients are eva
 | Physical process | Affected variables | Treatment |
 |------------------|--------------------|-----------|
 | Turbulence | RANS variables ($\tilde\nu$; $k,\omega$; $R_{ij},\omega$) | Production/destruction added to the spatial residual; wall corrections |
-| Rotating frame *(optional)* | Momentum, energy | Coriolis and centrifugal source terms on the relative velocity |
 
 ARES has no chemical-source term: it solves a single fluid whose properties are fixed by the real-fluid table, so there is no species transport or finite-rate kinetics.

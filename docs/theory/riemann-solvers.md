@@ -94,6 +94,29 @@ Strong grid-aligned shocks can trigger the *carbuncle* instability with single-d
 
 ---
 
+## Practical Solver Selection Guide
+
+### Quick Reference
+
+For most real-fluid wall-bounded simulations, start with the default **`HLLC`** — it resolves contact and shear layers that `HLLE` smears, at moderate cost. Switch solver only when the flow regime demands it.
+
+| Flow type | Recommended `riemann-solver` | Reason |
+|-----------|------------------------------|--------|
+| General subsonic / transonic | `HLLC` | Accurate, robust default |
+| **Low-Mach** (with `integration-variables = prec`) | `HLLC Prec` or `PLLF` | Dissipation scaled consistently as $M\to0$ |
+| Strong-shock / blunt-body / hypersonic | `HLLC Rotated` | Carbuncle-resistant |
+| Robustness over resolution (start-up, bad cells) | `Rusanov` / `HLLE` | Most diffusive, most stable |
+| Emergency (solver divergence) | `Rusanov` | Maximum stability; accept extra diffusion |
+
+### Convergence Tips
+
+1. **Start robust, refine if needed.** Begin a difficult case on `HLLE`/`Rusanov`, then switch to `HLLC` once the residual is descending cleanly.
+2. **Pair preconditioned solvers with the preconditioned update.** `HLLC Prec` / `PLLF` are only consistent with `integration-variables = prec` (and vice-versa) — mixing the two scalings is not recommended.
+3. **Carbuncle on blunt bodies.** If a bow shock develops odd-even decoupling, move to `HLLC Rotated`.
+4. **Coarse vs. fine meshes.** Coarse meshes tolerate the more dissipative solvers; fine meshes benefit from `HLLC` to avoid smearing boundary layers.
+
+---
+
 ## References
 
 1. A. Harten, P. D. Lax, B. van Leer, "On upstream differencing and Godunov-type schemes for hyperbolic conservation laws," *SIAM Rev.* 25 (1983).

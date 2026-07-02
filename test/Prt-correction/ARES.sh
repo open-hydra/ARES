@@ -85,10 +85,6 @@ if [[ $1 == solve ]]; then
   export KMP_STACKSIZE=100M
   export OMP_NUM_THREADS=$NTHREADS
 
-  # Binding: ogni rank MPI occupa NTHREADS core contigui
-  export OMP_PROC_BIND=close
-  export OMP_PLACES=cores
-
   # Check executable
   if [[ "$MASTER" -nt "$LOCAL" ]]; then
     cp $MASTER $LOCAL
@@ -96,8 +92,17 @@ if [[ $1 == solve ]]; then
 
   # Costruisci il comando base
   if [[ $NPROCS -gt 1 ]]; then
+    # MPI: mpirun assegna a ogni rank NTHREADS core DISGIUNTI; il pinning OpenMP
+    # qui serve solo per la localita' dei thread dentro il set di core del rank.
+    export OMP_PROC_BIND=close
+    export OMP_PLACES=cores
     CMD="mpirun -np $NPROCS --map-by socket:PE=$NTHREADS $LOCAL"
   else
+    # OpenMP puro: NIENTE pinning. Con OMP_PROC_BIND=close+OMP_PLACES=cores ogni
+    # processo lanciato separatamente fisserebbe i thread sugli stessi primi
+    # NTHREADS core: piu' run in parallelo si accalcano la' e i restanti core
+    # restano liberi. Lasciando il bind allo scheduler i run si distribuiscono.
+    export OMP_PROC_BIND=false
     CMD="$LOCAL"
   fi
 

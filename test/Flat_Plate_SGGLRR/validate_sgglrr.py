@@ -35,12 +35,26 @@ CELL_VARS = ["p", "u", "v", "w", "h",
              "T", "rho", "sound", "mil", "kl", "mit"]
 
 
+def save_figures(outdir=None):
+    """Save every open matplotlib figure into <outdir> (default: reference/),
+       using each figure's short label (set via num= at creation) as file name."""
+    outdir = outdir or os.path.join(HERE, "reference")
+    os.makedirs(outdir, exist_ok=True)
+    for num in plt.get_fignums():
+        fig = plt.figure(num)
+        name = fig.get_label() or f"fig{num}"
+        path = os.path.join(outdir, name + ".png")
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        print(f"  saved figure -> {path}")
+
+
 def main():
     if not os.path.exists(F_FIELD):
         sys.exit(f"ERROR: {F_FIELD} not found - run the case first.")
     # ARES drawn in red: the SSG-LRR cf overlaps the (C0/blue) NASA reference
     # curve and was indistinguishable in the default colour.
     C.validate_cf(F_FIELD, F_WALL, F_CF, CELL_VARS, "SSG-LRR", ares_color="red")
+    save_figures()
     print("\nDone. Showing plots (close the windows to exit)...")
     plt.show()
 
