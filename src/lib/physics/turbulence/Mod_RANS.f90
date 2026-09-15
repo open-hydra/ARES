@@ -24,6 +24,7 @@ contains
     obj_rans%QCR2000 = .false.
     obj_rans%blowing_corr = .false.
     obj_rans%rough = .false.
+    obj_rans%RSM = .false.
 
     if (trim(obj_rans%rans_name) == 'SAcomp') then
       obj_rans%SAcomp = .true.
@@ -67,6 +68,12 @@ contains
         write(*,'(A,F0.4,A)') '[WARNING] Prt-correction was calibrated for Prt = 0.9, but Prt = ', &
                               obj_rans%Prt, ' is being used.'
       end if
+    end if
+
+    ! The asymptotic omega wall treatment is specific to the SST closure.
+    if ( obj_rans%sst_asymptotic .and. index(trim(obj_rans%rans_name), 'SST') == 0 ) then
+      write(*,'(A)') '[WARNING] sst-asymptotic is only available for the SST model: option disabled.'
+      obj_rans%sst_asymptotic = .false.
     end if
 
     obj_rans%description = 'RANS model: '//trim(obj_rans%rans_name)

@@ -78,6 +78,20 @@ contains
 
       call parse(obj_io%sol_format,' ', format)
 
+      ! The residual field holds nres+1 variables (5 mean-flow residuals, the
+      ! nrans turbulence residuals, and dt). Build the name list to match that
+      ! count; a fixed string omits the RANS residual(s) and makes the binary
+      ! writer declare fewer variable names than the data written.
+      Dvarnames = '"rho" "rhou" "rhov" "rhow" "rhoe"'
+      if (nrans==1) then
+        Dvarnames = trim(Dvarnames)//' "nut"'
+      elseif (nrans==2) then
+        Dvarnames = trim(Dvarnames)//' "kappa" "omega"'
+      elseif (nrans==7) then
+        Dvarnames = trim(Dvarnames)//' "ruu" "rvv" "rww" "ruv" "ruw" "rvw" "omega"'
+      endif
+      Dvarnames = trim(Dvarnames)//' "dt"'
+
       ! Update IOfield variables with domain residuals
       do b = 1, size(IOfield%block)
         IOfield%block(b)%vars(1:5,:,:,:) = domain%blk(b)%r(np:nh,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk)
@@ -100,7 +114,7 @@ contains
                                                              vtmpath=trim(path)//trim(file),varnames=Dvarnames,time=domain%time)
       case('tecplot')
         IOfield%tec%format = trim(format(2))
-        E_IO = tec_write_structured_multiblock(Nvars=nres+1,orion=IOfield,varnames=Dvarnames,filename=trim(path)//trim(file)//'.tec')
+        E_IO = tec_write_structured_multiblock(Nvars=nres+1,orion=IOfield,varnames=Dvarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
       end select
     end if
 

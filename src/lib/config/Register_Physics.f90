@@ -22,12 +22,17 @@ contains
     !! Turbulence -------------------------------------------
     !! ------------------------------------------------------
     section = trim(codename)//'-RANS'
+    obj_rans%warning_message = 'none'
+    obj_rans%error_message   = 'none'
     call reg%add(section, 'turbulence-model', obj_rans%rans_name, '', 'RANS turbulence model', 'SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, Wilcox2006, SSGLRR, none', .false.)
     call reg%add(section, 'Prt', obj_rans%Prt, '0.90', 'Turbulent Prandtl number', '> 0', .false.)
     call reg%add(section, 'Sct', obj_rans%Sct, '0.90', 'Turbulent Schmidt number', '> 0', .false.)
     call reg%add(section, 'Sc', obj_rans%Sc, '0.7', 'Schmidt number', '> 0', .false.)
     call reg%add(section, 'k-coupling', obj_rans%k_energy_coupling, '.false.', 'Turbulent kinetic energy coupling', 'logical', .false.)
+    call reg%add(section, 'point-implicit', obj_rans%point_implicit, '.false.', 'Point-implicit (Patankar) treatment of turbulence destruction source terms', 'logical', .false.)
     call reg%add(section, 'Prt-correction', obj_rans%Prt_correction, '.false.', 'Turbulent Prandtl correction for wall roughness', 'logical', .false.)
+    call reg%add(section, 'sst-asymptotic', obj_rans%sst_asymptotic, '.false.', 'Impose the asymptotic solution omega = 6*nu/(beta_1*d^2) on the near-wall cells (SST only)', 'logical', .false.)
+    call reg%add(section, 'sst-asymptotic-cells', obj_rans%sst_asymptotic_cells, '1', 'Number of cells off viscous walls where the asymptotic omega is imposed', '>= 1', .false.)
 
     
     !! ------------------------------------------------------

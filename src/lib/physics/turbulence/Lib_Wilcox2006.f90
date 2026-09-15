@@ -31,19 +31,21 @@ contains
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
-      call Wilcox_Blk ( domain % blk(b) % P,    &
-                        domain % blk(b) % r,    &
-                        domain % blk(b) % M,    &
-                        domain % blk(b) % vol,  &
-                        domain % blk(b) % dim,  &
-                        k_energy_coupling       )
+      call Wilcox_Blk ( domain % blk(b) % P,       &
+                        domain % blk(b) % r,       &
+                        domain % blk(b) % M,       &
+                        domain % blk(b) % vol,     &
+                        domain % blk(b) % dtlocal, &
+                        domain % blk(b) % dim,     &
+                        k_energy_coupling,         &
+                        obj_rans%point_implicit )
     
     end do
 
   end subroutine Wilcox2006_Source_Terms
 
 
-  subroutine Wilcox_Blk ( Prim, Res, M, Volume, n, k_energy_coupling )
+  subroutine Wilcox_Blk ( Prim, Res, M, Volume, dt, n, k_energy_coupling, point_implicit )
     use ARES_Base_Types_m
     use ARES_Global_m
     use FLINT_Lib_Thermodynamic
@@ -52,18 +54,20 @@ contains
 
     implicit none
     integer, intent(in) :: n(3)
-    logical, intent(in) :: k_energy_coupling
+    logical, intent(in) :: k_energy_coupling, point_implicit
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    real(kind=8), dimension(n(1), n(2), n(3)), intent(in) :: dt
     ! Local
     integer :: i, j, k, ii, jj, kk
     real(kind=8) :: rho, kap, ome, Gradvel(3,3), Divel, Sij(3,3), Sij_bar(3,3), diag, ome_hat, mi_t, Tij(3,3), Prod(2)
     real(kind=8) :: Gradkw(2,3), dkDotdw, sigma_d, Diff, Sij_hat(3,3), Wij(3,3), Num, X_w, f_beta, beta, Diss(2), Source(2)
+    real(kind=8) :: fk, fw
 
     !$omp do collapse (3) private (rho, kap, ome, Gradvel, Divel, Sij, Sij_bar, diag, ome_hat, mi_t, Tij, Prod), &
-    !$omp private ( Gradkw, dkDotdw, sigma_d, Diff, Sij_hat, Wij, Num, X_w, f_beta, beta, Diss, Source ), &
+    !$omp private ( Gradkw, dkDotdw, sigma_d, Diff, Sij_hat, Wij, Num, X_w, f_beta, beta, Diss, Source, fk, fw ), &
     !$omp private ( i, j, k, ii, jj, kk )
 
     do k = 1, n(3)
@@ -151,10 +155,18 @@ contains
       Diss(2) = beta * rho * ome**2
 
       ! Source terms
-      Source(1) = Prod(1) - Diss(1) 
+      Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
-      
-      Res(nt:nt+1,i,j,k) = Res(nt:nt+1,i,j,k) - Source * Volume(i,j,k)
+
+      ! Point-implicit (Patankar) treatment of the destruction terms.
+      fk = 1d0 ; fw = 1d0
+      if ( point_implicit ) then
+        fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
+        fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+      end if
+
+      Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
+      Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
       if (k_energy_coupling) Res(nh,i,j,k) = Res(nh,i,j,k) + Source(1) * Volume(i,j,k)
 
     enddo ; enddo ; enddo ! (i, j, k) loop

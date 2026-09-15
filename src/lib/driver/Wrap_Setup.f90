@@ -394,8 +394,12 @@ contains
         write(*,'(A,T35,A)') '   Viscous model', 'Laminar'
       elseif (model==2) then
         write(*,'(A,T35,A)') '   Viscous model', 'Turbulent, '//trim(obj_rans%rans_name)
+        if (obj_rans%point_implicit) &
+          write(*,'(A,T35,A)') '   Point-implicit', 'ON (Patankar destruction source terms)'
         if (obj_rans%Prt_correction) &
           write(*,'(A,T35,A)') '   Prt correction', 'ON (rough-wall turbulent Prandtl)'
+        if (obj_rans%sst_asymptotic) &
+          write(*,'(A,T35,A,I0,A)') '   Asymptotic wall omega', 'ON, first ', obj_rans%sst_asymptotic_cells, ' cell(s)'
       end if
       write(*,'(A,T35,A)') '   Equation of state', trim(eosword)
       write(*,'(A,T35,A)') '   Thermodynamics', trim(obj_thermo%description)

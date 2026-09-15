@@ -184,13 +184,6 @@ contains
       obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "mit"'
       obj_io%Onvar = obj_io%Onvar + 1
     endif
-    ! Composition
-    ! write_composition = .false.
-    ! if (index(sol_variables,'compos')>0) then
-    !   write_composition = .true.
-    !   Ovarnames = trim(Ovarnames)//' "mu" "kl"'
-    !   Onvar = Onvar + 2
-    ! endif
 
     do m = 1, obj_multigrid%MGL
       IOfield(m)%vtk%node = .false.

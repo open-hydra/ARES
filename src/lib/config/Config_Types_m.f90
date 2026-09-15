@@ -235,7 +235,10 @@ module ARES_Config_Types_m
     character(len=llen) :: rans_name
     logical :: SAcomp, SpalartShur, SAR, rough
     logical :: QCR2000, blowing_corr, k_energy_coupling
+    logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
     logical :: Prt_correction   ! Turbulent Prandtl correction for wall roughness
+    logical :: sst_asymptotic       ! Impose the SST asymptotic omega solution on the near-wall cells
+    integer :: sst_asymptotic_cells ! Number of cells off the wall where the asymptotic omega is imposed
     ! Useful variables
     logical :: RSM, SD
   end type rans_t

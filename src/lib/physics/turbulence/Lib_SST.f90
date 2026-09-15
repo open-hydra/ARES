@@ -53,15 +53,17 @@ contains
                      domain % blk(b) % vel_gradient, &
                      domain % blk(b) % rc_term1,     &
                      domain % blk(b) % rc_term2,     &
+                     domain % blk(b) % dtlocal,      &
                      domain % blk(b) % dim,          &
-                     SpalartShur, k_energy_coupling )
+                     SpalartShur, k_energy_coupling, &
+                     obj_rans%point_implicit )
     
     end do
 
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, n, SpalartShur, k_energy_coupling )
+  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit )
     use ARES_Base_Types_m
     use ARES_Global_m
     use FLINT_Lib_Thermodynamic
@@ -70,7 +72,7 @@ contains
 
     implicit none
     integer, intent(in) :: n(3)
-    logical, intent(in) :: SpalartShur, k_energy_coupling
+    logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
@@ -78,14 +80,15 @@ contains
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(kind=8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
+    real(kind=8), dimension(n(1), n(2), n(3)), intent(in) :: dt
     ! Local
     integer :: i, j, k, ii, jj
     real(kind=8) :: rho, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
     real(kind=8) :: vort(3), O, rstar, D, rtilde, frot, fr1
-    real(kind=8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2)
+    real(kind=8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
 
     !$omp do collapse (3) private ( rho, mil, kap, ome, dist, Gradvel, Divel, Sij, S, Wij, diag, mi_t, F ), &
-    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, i, j, k, ii, jj )
+    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj )
     
     do k = 1, n(3)
     do j = 1, n(2)
@@ -170,10 +173,21 @@ contains
       Diss(2) = beta*rho*ome**2
 
       ! Source terms
-      Source(1) = Prod(1) - Diss(1) 
+      Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
-      
-      Res(nt:nt+1,i,j,k) = Res(nt:nt+1,i,j,k) - Source * Volume(i,j,k)
+
+      ! Point-implicit (Patankar) treatment of the destruction terms.
+      ! For omega, the cross-diffusion is included only when destabilizing:
+      ! dDiff/d(rho*w) = -Diff/(rho*w), negative (hence admissible in the
+      ! Patankar denominator) only for Diff > 0.
+      fk = 1d0 ; fw = 1d0
+      if ( point_implicit ) then
+        fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
+        fw = 1d0 / ( 1d0 + dt(i,j,k) * ( 2d0 * beta * ome + Max( Diff, 0d0 ) / ( rho * ome ) ) )
+      end if
+
+      Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
+      Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
       if (obj_rans%k_energy_coupling) Res(nh,i,j,k) = Res(nh,i,j,k) + Source(1) * Volume(i,j,k)
 
     enddo ; enddo ; enddo ! (i, j, k) loop
@@ -254,6 +268,56 @@ contains
     rkw_wall(2) = 8d2 * mil_wall / ( dist**2 ) ! approximate BC for smooth surface (Menter kw-SST)
 
   end subroutine SST_Set_Wall_Values
+
+
+  subroutine SST_Asymptotic_Wall_Omega ( domain )
+    !> Impose the asymptotic near-wall solution omega = 6*nu/(beta_1*d^2)
+    !> (exact solution of the destruction-diffusion balance for d -> 0) on the
+    !> first obj_rans%sst_asymptotic_cells cells off viscous walls. Dirichlet-type
+    !> enforcement: called after each stage update, it removes those cells from
+    !> the time integration of the omega equation. Stored variable is rho*omega,
+    !> hence the imposed value reduces to 6*mu/(beta_1*d^2).
+    use ARES_Advanced_Types_m
+    use ARES_Global_m
+    use ARES_Parameters_m, only: guide
+    use ARES_Config_Types_m, only: obj_rans
+    use ARES_Lib_Ghost, only: Is_Wall
+    use FLINT_Lib_Thermodynamic
+    use ARES_Lib_Fluid
+
+    implicit none
+    type(ARES_domain_type), intent(inout) :: domain
+    ! Local
+    integer :: ii, i, m, bm, im, jm, km, fm, dir, ic, jc, kc, ncells
+    real(kind=8) :: mil, dist
+
+    !$omp do private ( ii, i, m, bm, im, jm, km, fm, dir, ic, jc, kc, ncells, mil, dist )
+    do ii = 1, domain%n_local_bc
+      i = domain%local_bc_idx(ii)
+      if ( .not. Is_Wall( domain%bc(i)%type ) ) cycle
+
+      bm = domain % bc(i) % b
+      im = domain % bc(i) % i
+      jm = domain % bc(i) % j
+      km = domain % bc(i) % k
+      fm = domain % bc(i) % f
+
+      dir = (fm+1)/2
+      ncells = Min ( obj_rans%sst_asymptotic_cells, domain%blk(bm)%dim(dir) )
+
+      ! March inward from the wall-adjacent cell (guide points into the domain)
+      do m = 0, ncells-1
+        ic = im + m*guide(fm,1)
+        jc = jm + m*guide(fm,2)
+        kc = km + m*guide(fm,3)
+        mil  = ph2vars( domain%blk(bm)%P(np,ic,jc,kc), domain%blk(bm)%P(nh,ic,jc,kc), mi_tab2D )
+        dist = domain%blk(bm)%yn(ic,jc,kc)
+        domain%blk(bm)%P(nt+1,ic,jc,kc) = 6d0 * mil / ( beta_1 * dist**2 )
+      end do
+
+    end do
+
+  end subroutine SST_Asymptotic_Wall_Omega
 
 
   subroutine SST_Blowing_Correction ( rho, mil, tau, rkw, mdot, dist )

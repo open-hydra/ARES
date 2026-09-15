@@ -63,15 +63,17 @@ contains
                            domain % blk(b) % vel_gradient, &
                            domain % blk(b) % rc_term1,     &
                            domain % blk(b) % rc_term2,     &
+                           domain % blk(b) % dtlocal,      &
                            domain % blk(b) % dim,          &
-                           SpalartShur, SAR, SAcomp,rough  )
+                           SpalartShur, SAR, SAcomp, rough,&
+                           obj_rans%point_implicit         )
     
     end do
 
     end subroutine Spalart_Source_Terms
 
 
-  subroutine SA_Source_Blk ( Prim, Res, M, yn, ks, vol, gradv, rc1, rc2, n, SpalartShur, SAR, SAcomp, rough )
+  subroutine SA_Source_Blk ( Prim, Res, M, yn, ks, vol, gradv, rc1, rc2, dt, n, SpalartShur, SAR, SAcomp, rough, point_implicit )
     use ARES_Base_Types_m
     use ARES_Global_m
     use FLINT_Lib_Thermodynamic
@@ -80,7 +82,7 @@ contains
 
     implicit none
     integer, intent(in) :: n(3)
-    logical, intent(in) :: SpalartShur, SAR, SAcomp, rough
+    logical, intent(in) :: SpalartShur, SAR, SAcomp, rough, point_implicit
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: yn
@@ -89,15 +91,16 @@ contains
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
+    real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
     ! Local
     integer :: i, j, k
     real(R8) :: rho, nitilde, mil, nil, Gradvel(3,3), Gradnit(3), omega(3), Om, abs_Eij, Wij(3,3)
     real(R8) :: Eij(3,3), chi, ynlocal, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, rstar, D2, rtilde
-    real(R8) :: Production, Diffusion, Destruction, Source
+    real(R8) :: Production, Diffusion, Destruction, Source, fnu
 
     !$omp do collapse (3) private ( rho, nitilde, mil, nil, Gradvel, Gradnit, omega, Om, abs_Eij, Wij ), &
     !$omp private ( Eij, chi, ynlocal, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, rstar, D2, rtilde ), &
-    !$omp private ( Production, Diffusion, Destruction, Source, i, j, k)
+    !$omp private ( Production, Diffusion, Destruction, Source, fnu, i, j, k)
     
     do k = 1, n(3)
     do j = 1, n(2)
@@ -182,8 +185,13 @@ contains
       if ( SAcomp ) call Compressibility_Correction &
       ( nitilde, rho, chi, Prim(nh,i,j,k), Prim(np,i,j,k), Om, Production )
 
+      ! Point-implicit (Patankar) treatment of the SA destruction term
+      fnu = 1d0
+      if ( point_implicit ) &
+        fnu = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * cw1 * fw * nitilde / ynlocal**2 )
+
       ! Source multiplied by rho since the SA equation is integrated in conservative form
-      Source = rho * ( Production + Diffusion - Destruction ) * vol(i,j,k)
+      Source = rho * ( Production + Diffusion - Destruction ) * vol(i,j,k) * fnu
       Res(nt,i,j,k) = Res(nt,i,j,k) - Source
 
     enddo ; enddo ; enddo ! (i, j, k) loop

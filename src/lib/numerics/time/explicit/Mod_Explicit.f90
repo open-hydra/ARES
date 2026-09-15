@@ -16,6 +16,7 @@ contains
     use ARES_Mod_Fluxes,     only: Fluxes
     use ARES_Mod_BC_Fluxes,  only: BC_Fluxes
     use ARES_Lib_RANS,       only: RANS_Source_Terms
+    use ARES_Lib_SST,        only: SST_Asymptotic_Wall_Omega
     use ARES_Mod_Newstate,   only: RK_Newstate
     use ARES_Mod_Diagnostic, only: Compute_Residual
     !use ARES_Lib_RotatingFrame, only: RotatingFrame_Source_Terms
@@ -65,6 +66,9 @@ contains
       endif
 
       call RK_Newstate ( domain(level), i_rk )             ! State update
+
+      if ( model==2 .and. obj_rans%sst_asymptotic ) &
+        call SST_Asymptotic_Wall_Omega ( domain(level) )   ! Impose asymptotic omega on near-wall cells
 
     enddo rk
 

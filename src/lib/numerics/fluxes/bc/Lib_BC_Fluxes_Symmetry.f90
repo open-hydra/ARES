@@ -128,6 +128,16 @@ contains
     dist = Blk % yn(Im,Jm,Km)
     M = Blk % M (Im,Jm,Km) % c
 
+    ! On the collapsed axis of an axisymmetric grid the boundary face has zero area
+    ! and Compute_Norm_Area returns a null normal. No flux crosses it, but the RSM
+    ! ghost values still need the mirror plane: take it from the adjacent face along
+    ! the same grid direction.
+    if ( Area == 0d0 ) then
+      Normal = Blk % dir(Dir) % f( Face_i + guide(Fm,1), &
+                                   Face_j + guide(Fm,2), &
+                                   Face_k + guide(Fm,3) ) % n
+    end if
+
     ! roughness
     if ( obj_rans%rough ) then
       hs = Blk % ks ( Im,Jm,Km )

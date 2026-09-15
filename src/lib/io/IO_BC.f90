@@ -7,7 +7,7 @@ module ARES_IO_BC
   public :: Print_BC_Summary
 
   ! BC type counters — populated by Read_BCfile, consumed by Print_BC_Summary
-  integer :: nconnect, nwall, nio, nsym, nper, ncoupled, next
+  integer :: nconnect, nwall, nio, nsym, nper, ncoupled, ncoupled_ks, next
   logical :: has_tdep_bc
 
 contains
@@ -131,9 +131,10 @@ contains
     integer, dimension(1:,1:), intent(inout)        :: n_bf
     ! Local
     integer :: cc, i, s
-    integer :: unitfile, ios, cios, ip
+    integer :: unitfile, ios, cios, ip, ios_ks, idum(9)
     character(len=32) :: p0file
     character(len=32) :: alpha_tok, beta_tok
+    character(len=256) :: line
 
     cios = 0
     
@@ -156,6 +157,7 @@ contains
       nsym = 0
       nper = 0
       ncoupled = 0
+      ncoupled_ks = 0
       next = 0
       has_tdep_bc = .false.
     endif
@@ -186,11 +188,22 @@ contains
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Coupled multi-solver wall
+        ! Second line: bs, is, js, ks, fs, d11, d12, d21, d22 [, roughness_ks]
+        ! The trailing roughness is optional (older files have none): the line
+        ! is read into a buffer, since a list-directed read from the unit would
+        ! take a missing value from the next record.
         case(103)
           if (level == 1) ncoupled = ncoupled + 1
           obj_io_bc%coupling_flag( bc(i)%b , bc(i)%f ) = .true.
-          read( unitfile,*,iostat=ios ) &
+          read( unitfile,'(A)',iostat=ios ) line
+          read( line,*,iostat=ios ) &
             bc(i)%bs, bc(i)%is, bc(i)%js, bc(i)%ks, bc(i)%fs, bc(i)%d11, bc(i)%d12, bc(i)%d21, bc(i)%d22
+          read( line,*,iostat=ios_ks ) idum, bc(i)%k_rough
+          if (ios_ks == 0) then
+            if (level == 1) ncoupled_ks = ncoupled_ks + 1
+          else
+            bc(i)%k_rough = 0.0_R8 ! smooth
+          endif
           allocate(bc(i)%ext_flux(nprim))
           bc(i)%ext_flux = 0.0
           allocate ( bc(i) % Pg (1, 6) )
@@ -267,6 +280,7 @@ contains
 
 
   subroutine Print_BC_Summary ()
+    use ARES_Config_Types_m, only: obj_rans
     implicit none
 
     write(*,*)
@@ -278,7 +292,13 @@ contains
     if (nper > 0) write(*,'(A,T35,I0)') '   Periodicity', nper
     if (next > 0) write(*,'(A,T35,I0)') '   Extrapolation', next
     if (ncoupled > 0) write(*,'(A,T35,I0)') '   Coupled wall', ncoupled
+    if (ncoupled_ks > 0) write(*,'(A,T35,I0)') '   Coupled wall with roughness', ncoupled_ks
     if (has_tdep_bc) write(*,'(A)') '   Time-dependent BC detected'
+    ! Coupled walls without the trailing roughness in bc.txt enter the
+    ! nearest-wall roughness map with ks = 0, i.e. as smooth walls.
+    if (ncoupled_ks < ncoupled .and. obj_rans%rough) &
+      write(*,'(A,I0,A)') '   [WARNING] ', ncoupled - ncoupled_ks, &
+        ' coupled walls carry no roughness: treated as smooth (ks = 0) by the rough-wall model'
 
   end subroutine Print_BC_Summary
 

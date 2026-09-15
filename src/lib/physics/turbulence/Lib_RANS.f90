@@ -108,24 +108,30 @@ contains
     real(R8), intent(in), dimension(:) :: Rij
     real(R8), intent(out), dimension(:) :: Rij_w, Rij_g
     real(R8), intent(in), dimension(3) :: n
+    real(R8), dimension(3) :: an
+
+    ! the mirroring only depends on which axis the plane is normal to, not on
+    ! whether the normal points inward or outward
+    an = abs(n)
 
     Rij_w(1:3) = Rij(1:3) ! zero-gradient
+    Rij_g(1:3) = Rij(1:3) ! zero-gradient
 
-    if ( n(1) > n(2)+n(3)  ) then ! x-plane
+    if ( an(1) > an(2)+an(3)  ) then ! x-plane
       Rij_w(4) = 0d0
       Rij_w(5) = 0d0
       Rij_w(6) = Rij(6)
       Rij_g(4) = -Rij(4)
       Rij_g(5) = -Rij(5)
       Rij_g(6) = Rij(6)
-    elseif ( n(2) > n(1)+n(3) ) then ! y-plane
+    elseif ( an(2) > an(1)+an(3) ) then ! y-plane
       Rij_w(4) = 0d0
       Rij_w(5) = Rij(5)
       Rij_w(6) = 0d0
       Rij_g(4) = -Rij(4)
       Rij_g(5) = Rij(5)
       Rij_g(6) = -Rij(6)
-    elseif ( n(3) > n(1)+n(2) ) then ! y-plane
+    elseif ( an(3) > an(1)+an(2) ) then ! z-plane
       Rij_w(4) = Rij(4)
       Rij_w(5) = 0d0
       Rij_w(6) = 0d0

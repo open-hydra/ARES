@@ -10,7 +10,7 @@ contains
 
   subroutine Assign_Setup()
     use ARES_Config_Types_m
-    use ARES_Global_m,            only: model, Uref, emin
+    use ARES_Global_m,            only: model, nRANS, Uref, emin
     use ARES_IO_Solution,         only: Setup_Input_Solution
     use ARES_Mod_Space,           only: Setup_Space_Scheme
     use ARES_Mod_Riemann,         only: Assign_Riemann_Solver
@@ -81,6 +81,14 @@ contains
     ! Assign RANS model
     if (model==1) obj_rans%rans_name = 'laminar'
     call Setup_RANS_Model()
+
+    ! Point-implicit treatment of the turbulence source terms is a steady-state
+    ! stabilization: it alters the time accuracy of the turbulence equations.
+    if ( nRANS > 0 .and. .not. obj_rans%RSM .and. obj_rans%point_implicit .and. &
+         ( obj_time_scheme%time_accurate .or. obj_sim_param%HYDRA_time_accurate ) ) then
+      obj_rans%error_message = '[ERROR] Time-accurate simulations are not compatible with the point-implicit ' // &
+        'treatment of the turbulence source terms. Set point-implicit = .false. in the RANS section.'
+    end if
 
     ! Assign Rotating frame
     !call Setup_RotatingFrame()
