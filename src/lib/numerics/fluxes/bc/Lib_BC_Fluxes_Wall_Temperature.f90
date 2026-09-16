@@ -76,7 +76,7 @@ contains
       Gradient(nt:nprim,Dir) = ( Prim(nt:nprim)/rho - Prim_Wall(nt:nprim)/rho_wall ) * modfm3 
       call Eddy_Viscosity ( mut=mit, rans_variables=Prim_Wall(nt:nprim), &
                             mul=mil, rho=rho_wall, vel_gradient=Gradient(nu:nw,:), &
-                            walldist=dl, ks=hs)
+                            walldist=0d0, ks=hs)   ! wall face: y = 0 (dl stays the cell distance for Set_Wall_Values)
     else 
       mit = 0d0
     end if
@@ -88,7 +88,10 @@ contains
     Stress = Stress_Vector ( Gradient(nu:nw,:), Normal, mil, mit, Prim(nt:) )
     cp = ph2vars(pressure, entalpy, hT_tab ) 
     if ( obj_rans%Prt_correction ) then
-      dPrt = delta_Prt ( mil, cp, kl, Prim(nt), hs, dl )
+      ! Evaluated at the wall face (y=0). The rough-wall value mitilde_w = vk*u_tau*rho*0.03*hs
+      ! yields the same u_tau as the cell value taken at y=dl, but leaves the near-wall damping
+      ! exp(-y/hs) equal to 1, as required for a flux computed on the wall face itself.
+      dPrt = delta_Prt ( mil, cp, kl, Prim_Wall(nt), hs, 0d0 )
     else
       dPrt = 0.00d0
     end if

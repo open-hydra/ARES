@@ -99,8 +99,54 @@ $$
 - **SA-R (rotation).** Adds $c_\text{rot}\,\min\!\bigl(0,\,\lVert S\rVert-\Omega\bigr)$ to the production ($c_\text{rot}=2$), sensitising the model to system rotation.
 - **SA-RC (rotation/curvature).** The Spalart–Shur correction multiplies the production by a factor $f_{r1}(r^\ast,\tilde r)$ built from the strain/vorticity ratio $r^\ast=S/\Omega$ and the material derivative of $S_{ij}$, bounded to $[0,\,1.25]$ — the recommended choice for strongly curved and swirling flows.
 - **SAcomp (compressibility).** Paciorri–Sabetta correction scaling the production with the turbulent-stress ratio $S_\tau = \omega\,\tilde\nu f_{v1}/a^2$, for high-speed shear layers.
-- **SA-rough (roughness).** Modifies $\chi$ and the wall distance with an offset $d_0 = 0.03\,k_s$ ($k_s$ = sand-grain height) so that a non-zero $\tilde\nu$ enters at a rough wall.
+- **SA-rough (roughness).** Equivalent sand-grain roughness via the Aupoix–Spalart (“Boeing”) extension — see [Rough walls](#rough-walls-sa-rough) below.
 - **SA-QCR2000.** Replaces the Boussinesq stress with the [Quadratic Constitutive Relation](#quadratic-constitutive-relation-qcr2000) to capture stress anisotropy in corner and secondary flows.
+
+### Rough walls (SA-rough)
+
+The `-rough` suffix activates the Aupoix–Spalart (“Boeing”) equivalent sand-grain extension. The geometric wall distance $y$ is offset by a roughness length, and the viscosity ratio gains a roughness term:
+
+$$
+d = y + d_0,\qquad d_0 = 0.03\,k_s,\qquad
+\chi = \frac{\tilde\nu}{\nu} + c_{R1}\frac{k_s}{d},\qquad c_{R1} = 0.5
+$$
+
+with $d$ replacing $y$ in $\bar S$, in the destruction function $r$, in the destruction term itself and in the point-implicit factor. The wall condition on $\tilde\nu$ becomes $(\partial\tilde\nu/\partial n)_w = \tilde\nu_w/(0.03\,k_s)$, discretised in `Spalart_Set_Wall_Values` as
+
+$$
+\tilde\mu_w = \frac{2\,\tilde\mu_c\,m\,(0.03\,k_s)}{1 + 2\,m\,(0.03\,k_s)},\qquad m = \mathbf{M}_{(\text{dir})}\!\cdot\!\mathbf{n}
+$$
+
+Note also that $f_{v2}$ is evaluated from the **molecular** ratio rather than the augmented $\chi$:
+
+$$
+f_{v2} = 1 - \frac{\tilde\nu}{\nu + \tilde\nu\,f_{v1}(\chi)}
+$$
+
+Smooth-wall this is algebraically the same as the $1-\chi/(1+\chi f_{v1})$ form quoted above, since $\chi=\tilde\nu/\nu$; with roughness the two differ, because $\chi$ carries the extra $c_{R1}k_s/d$ term while the numerator must not. ARES uses this form unconditionally, so it is correct in both regimes.
+
+#### Where $\chi$ is evaluated
+
+$\chi$ is a **field function of the local coordinate** $y$, so `Spalart_Eddy_Viscosity` must receive the wall distance *of the point being evaluated* — not a fixed reference length:
+
+| Location | $\tilde\nu$ | $y$ |
+|---|---|---|
+| Cell centre | cell value | $y_n(i,j,k)$ |
+| Interior / connection face | interface value | $\tfrac12\bigl(y_{n,L}+y_{n,R}\bigr)$ |
+| **Wall face** | **wall value $\tilde\mu_w$** | **$0$** |
+
+On a wall face the flux itself is formed there, so $y=0$ and the roughness term collapses to a constant independent of $k_s$:
+
+$$
+c_{R1}\frac{k_s}{0 + 0.03\,k_s} = \frac{0.5}{0.03} \simeq 16.67
+$$
+
+The expression is regular at $y=0$ (the denominator tends to $0.03\,k_s>0$), so this is a genuine field value, not a limit that has to be guarded.
+
+!!! note "Eddy viscosity does not vanish at a rough wall"
+    On a **smooth** wall $\tilde\nu_w = 0$, hence $\chi=0$, $f_{v1}(0)=0$ and $\mu_t = 0$ — exact, since all Reynolds stresses vanish under no-slip and $\tau_w$ is purely molecular. On a **rough** wall the Boeing extension deliberately leaves $\tilde\nu_w \neq 0$, so $\mu_t$ at the wall is finite: that non-zero wall eddy viscosity *is* the mechanism producing the $\Delta U^+$ log-layer shift. Evaluating $\chi$ with the first-cell distance instead of $y=0$ therefore under-predicts the wall eddy viscosity, by an amount that grows as the near-wall cell coarsens.
+
+Roughness is implemented for the Spalart–Allmaras family only; with a $k$–$\omega$ model the `-rough` suffix raises a warning and the smooth-wall $\omega$ condition is used.
 
 ---
 
@@ -163,6 +209,8 @@ $$
 F_2 = \tanh\!\bigl(\arg_2^2\bigr),\qquad
 \arg_2 = \max\!\left(\frac{2\sqrt{k}}{\beta^\ast\omega y},\;\frac{500\nu}{\omega y^2}\right)
 $$
+
+Both arguments diverge as $y\to0$, so $F_2\to\tanh(\infty)=1$ at a wall face. `compute_F2` returns that limit directly for $y\le0$, which keeps the blending function well defined when the wall boundary condition evaluates transport properties on the face itself. The value is immaterial to the result there — $k_\text{wall}=0$ forces $\mu_t=0$ regardless — but it avoids a division by zero.
 
 ### Wall boundary conditions
 

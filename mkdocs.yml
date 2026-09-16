@@ -92,6 +92,7 @@ nav:
     - Running ARES: user/using.md
     - Input File: user/input.md
     - Input Parameters: user/registry.md
+    - Convergence & Tuning: user/convergence.md
     - Gas Properties: user/gas-properties.md
     - Initial Conditions: user/initial-conditions.md
     - Boundary Conditions: user/boundary-conditions.md

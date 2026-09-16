@@ -409,8 +409,13 @@ contains
     real(kind=8), intent(in) :: rho, w, k, mil, d
     real(kind=8) :: arg2, F2
 
-    arg2 = Max ( 2d0*Sqrt(k)/(beta_star*w*d), 5d2*mil/(rho*w*d**2) )
-    F2 = Tanh ( arg2**2 )
+    if ( d <= 0d0 ) then
+      F2 = 1d0   ! Wall face: arg2 -> infinity and tanh -> 1 is the exact limit.
+                 ! Guard needed because the wall BC evaluates mut at y = 0.
+    else
+      arg2 = Max ( 2d0*Sqrt(k)/(beta_star*w*d), 5d2*mil/(rho*w*d**2) )
+      F2 = Tanh ( arg2**2 )
+    end if
 
   end function compute_F2
   

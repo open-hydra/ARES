@@ -66,6 +66,29 @@ $$
 
 Here $\kappa=0.41$ is the von Kármán constant, $n_k=e^{1.3325}$ the Nikuradse constant, and $\mathrm{Pr}_{ts}=0.9$ the smooth-wall value. The factor $e^{-y_n/h_s}$ confines the correction to within a few roughness heights of the wall; the increment **raises** $\mathrm{Pr}_t$ there, **lowers** the turbulent conductivity $\kappa_t=\mu_t c_p/\mathrm{Pr}_t$ and hence the wall heat flux — breaking the Reynolds analogy by exactly the amount the rough-wall data demand. On a smooth wall ($h_s\to0$) the shift $\Delta U^+\to0$ and $\Delta\mathrm{Pr}_t\to0$, recovering the standard constant $\mathrm{Pr}_t$.
 
+### Where the increment is evaluated
+
+$\Delta\mathrm{Pr}_t$ is formed **per face**, from the local state, everywhere the effective conductivity is assembled — but the two kinds of face are treated differently:
+
+| Face | SA variable | $y_n$ | Source |
+|---|---|---|---|
+| Interior | interface value $\tilde\nu$ | wall distance of the interface | `src/lib/numerics/fluxes/Lib_Diffusive.f90` |
+| Wall | wall value $\tilde\nu_w$ from the rough-wall BC | $0$ | `src/lib/numerics/fluxes/bc/Lib_BC_Fluxes_Wall_Heat.f90`, `…_Wall_Temperature.f90` |
+
+The two are consistent because the Aupoix–Spalart rough-wall condition is the discrete form of $\tilde\nu=\kappa u_\tau\,(y+0.03\,h_s)$. Evaluating that relation at the wall and at the first cell centre $y_c$ returns the *same* friction velocity,
+
+$$
+\frac{\tilde\nu_w}{\kappa\,(0 + 0.03\,h_s)}
+\;=\;
+\frac{\tilde\nu_c}{\kappa\,(y_c + 0.03\,h_s)}
+\;=\; u_\tau ,
+$$
+
+so the pairs $(\tilde\nu_w,\,y_n{=}0)$ and $(\tilde\nu_c,\,y_n{=}y_c)$ give an identical $\Delta U^+$. What does *not* transfer is the damping factor. A wall flux is computed on the wall face itself, where the exponential must be $e^{0}=1$ — its undamped value. Feeding the first-cell distance there instead would scale the wall correction by $e^{-y_c/h_s}<1$ and systematically under-predict it: harmless on a wall-resolved mesh with $y_c \ll h_s$, but increasingly wrong as the first cell grows toward the roughness height.
+
+!!! warning "Calibration envelope"
+    The coefficients above were fitted at $\mathrm{Pr}=0.98$, $2.44$ and $6.033$ only, and the polynomial $a(\mathrm{Pr})$ changes sign at $\mathrm{Pr}=10.41$. Well outside that range the increment can turn negative and drive $\mathrm{Pr}_{ts}+\Delta\mathrm{Pr}_t$ toward zero. The model is also calibrated for the **fully rough** regime ($h_s^+>68$) on circular cross-sections with near-constant properties.
+
 ---
 
 ## Configuration
