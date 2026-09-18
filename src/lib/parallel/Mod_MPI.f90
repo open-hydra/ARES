@@ -25,7 +25,8 @@ module ARES_Mod_MPI
   public :: mpi_init_env, mpi_finalize_env
   public :: is_local_block
   public :: partition_blocks
-  public :: mpi_allreduce_sum_r8, mpi_allreduce_min_r8
+  public :: mpi_allreduce_sum_r8, mpi_allreduce_min_r8, mpi_allreduce_max_r8
+  public :: mpi_gather_r8
   public :: mpi_allreduce_sum_r8_array
   public :: mpi_reduce_sum_r8, mpi_reduce_sum_r8_array
   public :: mpi_allreduce_norm2
@@ -153,6 +154,36 @@ contains
     global_val = local_val
 #endif
   end subroutine mpi_allreduce_min_r8
+
+
+  !> MPI_ALLREDUCE with MPI_MAX for a scalar real(R8).
+  subroutine mpi_allreduce_max_r8(local_val, global_val)
+    real(R8), intent(in)  :: local_val
+    real(R8), intent(out) :: global_val
+#ifdef USE_MPI
+    integer :: ierr
+    call MPI_ALLREDUCE(local_val, global_val, 1, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+    call check_mpi_error(ierr)
+#else
+    global_val = local_val
+#endif
+  end subroutine mpi_allreduce_max_r8
+
+
+  !> Gather one real(R8) per rank onto root. `arr` must be at least mpi_size_
+  !> long on rank 0; only rank 0's copy is meaningful on return.
+  subroutine mpi_gather_r8(local_val, arr)
+    real(R8), intent(in)  :: local_val
+    real(R8), intent(out) :: arr(:)
+#ifdef USE_MPI
+    integer :: ierr
+    call MPI_GATHER(local_val, 1, MPI_DOUBLE_PRECISION, &
+                    arr, 1, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+    call check_mpi_error(ierr)
+#else
+    arr(1) = local_val
+#endif
+  end subroutine mpi_gather_r8
 
 
   !> MPI_ALLREDUCE with MPI_SUM for an array of real(R8).

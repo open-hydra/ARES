@@ -23,6 +23,7 @@ contains
     use ARES_IO_Wall,              only: Initialize_Wall_File
     use ARES_Lib_Ghost,            only: Fill_Ghost_Cell
     use ARES_Mod_MPI,              only: mpi_is_root, partition_blocks, mpi_abort_all
+    use ARES_Mod_Timers,           only: timer_run_begin
     use ARES_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index
     implicit none
     type(ARES_simulation_type), intent(inout) :: simulation
@@ -161,6 +162,9 @@ contains
 
     ! Calculate time at beginning of simulation
     call Cpu_Time ( obj_sim_param%cputime(1) )
+
+    ! Set-up is over: start the solver clock
+    call timer_run_begin()
 
   contains
 

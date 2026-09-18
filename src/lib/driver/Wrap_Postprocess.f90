@@ -25,6 +25,7 @@ contains
     use ARES_Mod_Multigrid,  only: Prolongation
     use ARES_Read_Ini,       only: Read_Inifile_Runtime
     use ARES_Mod_MPI,        only: mpi_is_root
+    use ARES_Mod_Timers,     only: timer_summary
     use IR_precision
     implicit none
     type(ARES_simulation_type), intent(inout) :: simulation
@@ -90,6 +91,9 @@ contains
         write(*,*)
         write(*,*) '  Time of operation was', sim_time/60, 'min'
       end if
+
+      ! Timing summary (collective — every rank contributes its accumulators)
+      call timer_summary()
 
       ! Write output solution (collective — all ranks participate in gather)
       call Write_Solution ( simulation%domain(1), simulation%IOfield(1), solfile )

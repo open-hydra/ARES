@@ -38,6 +38,9 @@ contains
     call reg%add( section, 'shell-diter', obj_io%shell_diter, '1', 'Shell update iter frequency', '> 0', .false. )
     call reg%add( section, 'ini-diter', obj_io%ini_diter, '10000', 'input.ini update iter frequency', '> 0', .false. )
 
+    ! Wall-clock timing report
+    call reg%add( section, 'timer-diter', obj_io%timer_diter, '0', 'Wall-clock timing report iter frequency (0 = off)', '>= 0', .false. )
+
   end subroutine Register_IO_Fields
 
 

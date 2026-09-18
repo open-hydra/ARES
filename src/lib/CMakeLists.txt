@@ -1,6 +1,10 @@
+# Relative to this directory, NOT ${CMAKE_SOURCE_DIR}/src/lib: when ARES is
+# built as a subproject (hydra) CMAKE_SOURCE_DIR is the superproject root, so
+# the absolute form swept in every sibling under its src/lib -- MOSE, FUSS,
+# GROOT, ARES's own src/app programs and FUSS's vendored TecIO examples.
 file(GLOB_RECURSE ARES_SRC
     CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/lib/*.f90
+    *.f90
 )
 
 add_library(ARESL ${ARES_SRC} ${FLINT_SRC})
@@ -11,9 +15,11 @@ link_FLINT_dependencies(ARESL)
 target_include_directories(ARESL INTERFACE $<BUILD_INTERFACE:${CMAKE_Fortran_MODULE_DIRECTORY}>)
 
 IF(USE_OPENMP)
-    SET_TARGET_PROPERTIES(ARESL PROPERTIES
-                          COMPILE_FLAGS "${OpenMP_Fortran_FLAGS}"
-                          LINK_FLAGS "${OpenMP_Fortran_FLAGS}")
+    # Use the imported target so compile *and* link flags propagate
+    # transitively to every consumer of ARESL (PUBLIC).
+    # The old SET_TARGET_PROPERTIES(LINK_FLAGS) approach is deprecated and
+    # its LINK_FLAGS are silently ignored for static libraries by CMake.
+    target_link_libraries(ARESL PUBLIC OpenMP::OpenMP_Fortran)
 ENDIF(USE_OPENMP)
 
 IF(USE_MPI)
