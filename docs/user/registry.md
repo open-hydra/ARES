@@ -76,6 +76,7 @@ Per-level iteration counts. The number of levels is set by the `levels` key; one
 | res-diter | 1 | > 0 | no | Residual-history write frequency |
 | shell-diter | 1 | > 0 | no | Console (shell) update frequency |
 | ini-diter | 10000 | > 0 | no | `input.ini` re-read frequency |
+| timer-diter | 0 | >= 0 | no | Wall-clock timing report frequency (0 ⇒ off) |
 
 ## ARES-Probes
 

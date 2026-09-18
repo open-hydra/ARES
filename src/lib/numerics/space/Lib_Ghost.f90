@@ -102,6 +102,9 @@ contains
     ! MPI: wait for P receives to complete.  What is timed here is the
     ! communication the local BC work above did not hide, plus the wait on
     ! slower neighbours.
+    ! It also covers the unpack that follows the wait, and the sends and
+    ! send-waits around it are not timed at all, so commfrac is "time spent in
+    ! the receive-and-unpack step", not pure message time.
     !$omp single
     call timer_comm_begin()
     call exchange_ghost_P_wait_unpack(domain)

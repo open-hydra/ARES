@@ -4,9 +4,25 @@
 !> The accumulators are reduced over the ranks and reported every `timer-diter`
 !> iterations (0 = off) and once at the end of the run.
 !>
-!> Times are reported as the **maximum** over the ranks, which is the critical
-!> path and therefore what sets the time to solution; the spread between the
-!> slowest and the mean rank is the load imbalance.
+!> Absolute times are reported as the **maximum** over the ranks, which is the
+!> critical path and therefore what sets the time to solution; the spread
+!> between the slowest and the mean rank is the load imbalance.
+!>
+!> The two wait fractions are the exception: `commfrac` and `syncfrac` are
+!> job aggregates, sum(wait over ranks)/sum(iteration time over ranks), not the
+!> critical-path rank's own fractions. On a badly imbalanced run they can differ
+!> noticeably from what the slowest rank experienced -- read them as "how much
+!> of the job's total core-time went into waiting", and use `imbalance` and
+!> `wspread` to judge whether a single rank is setting the pace.
+!>
+!> `tmax` is likewise max(sum over iterations), not sum(max over iterations): it
+!> is the slowest rank's own total, not a per-iteration critical path stitched
+!> across ranks. The two agree while the slowest rank stays the same one, which
+!> is the usual case for a static decomposition; a large `imbalance` together
+!> with a small `wspread` is the signal that rank identity is moving and the
+!> figure understates the true critical path. Tracking it exactly would need a
+!> reduction every iteration instead of one per report window, which would cost
+!> more than it measures.
 module ARES_Mod_Timers
 #ifdef USE_MPI
   use mpi
@@ -22,8 +38,8 @@ module ARES_Mod_Timers
     real(R8) :: tmin = 0.0_R8       !< iteration time on the fastest rank
     real(R8) :: tavg = 0.0_R8       !< iteration time, mean over ranks
     real(R8) :: imbalance = 0.0_R8  !< (tmax-tavg)/tavg, %
-    real(R8) :: commfrac = 0.0_R8   !< time blocked on the halo exchange, %
-    real(R8) :: syncfrac = 0.0_R8   !< time blocked on collectives, %
+    real(R8) :: commfrac = 0.0_R8   !< halo-exchange wait, % of job total (see above)
+    real(R8) :: syncfrac = 0.0_R8   !< collective wait, % of job total (see above)
     real(R8) :: wmax = 0.0_R8       !< compute time (iteration minus waits), max
     real(R8) :: wmin = 0.0_R8       !< compute time, min
     real(R8) :: wavg = 0.0_R8       !< compute time, mean
