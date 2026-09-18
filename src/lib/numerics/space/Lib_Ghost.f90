@@ -14,6 +14,7 @@ contains
                                        exchange_ghost_P_post_send, exchange_ghost_P_wait_unpack, &
                                        exchange_ghost_P_wait_send, &
                                        Ghost_Interrank, exchange_ghost_Pg, ghost_sched
+    use ARES_Mod_Timers, only: timer_comm_begin, timer_comm_end
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
     ! Local
@@ -98,9 +99,13 @@ contains
       Fm = domain % bc(i) % f
     enddo
 
-    ! MPI: wait for P receives to complete
+    ! MPI: wait for P receives to complete.  What is timed here is the
+    ! communication the local BC work above did not hide, plus the wait on
+    ! slower neighbours.
     !$omp single
+    call timer_comm_begin()
     call exchange_ghost_P_wait_unpack(domain)
+    call timer_comm_end()
     !$omp end single
 
     ! Process INTER-RANK type-1 entries (Bm local, Bs remote)
