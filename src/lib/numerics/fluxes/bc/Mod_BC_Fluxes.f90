@@ -79,7 +79,7 @@ contains
               if (model>0) &
                 call BC_Connection_Visc ( Im, Jm, Km, Fm, blk(Bm), bc(i) % Mg(1), bc(i) % Pg, &
                                           Sc, Sct, Prt, Prt_corr )
-            case (103) ! multi-Solver coupling
+            case (103,104) ! multi-Solver coupling (104 = with chimera)
               call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
               blk(Bm) % R(:,Im,Jm,Km) = blk(Bm) % R(:,Im,Jm,Km) + bc(i) % ext_flux
 

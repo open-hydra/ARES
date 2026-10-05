@@ -103,7 +103,7 @@ contains
       select case(ti)
       case(101, 103, 201, 301:302, 404:406)
         read( unitfile,*,iostat=ios )
-      case(102) ! chimera: donor counts of the two ghost rows, then one line per donor
+      case(102, 104) ! chimera, coupled chimera: donor counts of the two ghost rows, then one line per donor
         read( unitfile,*,iostat=ios ) ci, cii
         do c = 1, ci+cii
           read( unitfile,*,iostat=ios )
@@ -198,10 +198,12 @@ contains
           allocate ( bc(i) % Pg (nprim, 6) )
 
         ! ─────────────────────────────────────────────────────────────────────
-        ! Chimera overlap BC
+        ! Chimera overlap BC (102) and coupled multi-solver chimera (104)
         ! Second line: n1, n2 = number of donors of the 1st and 2nd ghost cell,
-        ! then n1+n2 lines: donor block, i, j, k, volume fraction
-        case(102)
+        ! then n1+n2 lines: donor block, i, j, k, volume fraction.
+        ! The 104 donors are FUSS cells: hydra-AF only uses them to find the
+        ! FUSS faces the 104 face is coupled with, nothing is blended from them
+        case(102, 104)
           if (level == 1) nchimera = nchimera + 1
           read( unitfile,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
           allocate(bc(i)%donorID(1:sum(bc(i)%ni),1:4))
@@ -220,7 +222,16 @@ contains
             bc(i)%volume_fraction(1:bc(i)%ni(1)) = bc(i)%volume_fraction(1:bc(i)%ni(1)) / vf1
             bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni)) = bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni)) / vf2
           endif
-          allocate ( bc(i) % Pg (nprim, 6) )
+          if (bc(i)%type == 102) then
+            allocate ( bc(i) % Pg (nprim, 6) )
+          else
+            ! 104: coupled wall as for 103 (solid T stencil, coupling flux, wall output),
+            ! smooth for the rough-wall model (k_rough = 0)
+            obj_io_bc%coupling_flag( bc(i)%b , bc(i)%f ) = .true.
+            allocate ( bc(i) % Pg (1, 6) )
+            allocate ( bc(i) % ext_flux (nprim) )
+            bc(i) % ext_flux = 0.0
+          endif
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Coupled multi-solver wall
@@ -313,9 +324,10 @@ contains
     close( unitfile )
 
     if (nzero_chim > 0) then
-      write(msg,'(I0,A,I0,A)') nzero_chim, ' chimera entries in the level-', level, &
+      write(msg,'(I0,A,I0,A)') nzero_chim, ' chimera (102/104) entries in the level-', level, &
         ' BC file have donor volume fractions summing to ~0 (no donors found by the BC '// &
-        'builder). Their ghost states would be garbage; fix the BC file before running.'
+        'builder). Their ghost states (102) or coupling partners (104) would be garbage; '// &
+        'fix the BC file before running.'
       call mpi_abort_all(trim(msg))
     endif
 

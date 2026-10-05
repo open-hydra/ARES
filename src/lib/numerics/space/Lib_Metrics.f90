@@ -1167,7 +1167,7 @@ contains
       logical :: ans
 
       select case (type)
-        case (103, 301, 302)  ! wall BCs
+        case (103, 104, 301, 302)  ! wall BCs
           ans = .true.
         case default
           ans = .false.
