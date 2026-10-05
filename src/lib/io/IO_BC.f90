@@ -199,13 +199,15 @@ contains
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Chimera overlap BC (102) and coupled multi-solver chimera (104)
-        ! Second line: n1, n2 = number of donors of the 1st and 2nd ghost cell,
+        ! Second line: n1, n2 = number of donors of the 1st and 2nd ghost cell
+        ! [, roughness_ks] (104 only, optional and read as for 103),
         ! then n1+n2 lines: donor block, i, j, k, volume fraction.
         ! The 104 donors are FUSS cells: hydra-AF only uses them to find the
         ! FUSS faces the 104 face is coupled with, nothing is blended from them
         case(102, 104)
           if (level == 1) nchimera = nchimera + 1
-          read( unitfile,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
+          read( unitfile,'(A)',iostat=ios ) line
+          read( line,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
           allocate(bc(i)%donorID(1:sum(bc(i)%ni),1:4))
           allocate(bc(i)%volume_fraction(1:sum(bc(i)%ni)))
           do s = 1, sum(bc(i)%ni)
@@ -226,7 +228,14 @@ contains
             allocate ( bc(i) % Pg (nprim, 6) )
           else
             ! 104: coupled wall as for 103 (solid T stencil, coupling flux, wall output),
-            ! smooth for the rough-wall model (k_rough = 0)
+            ! counted with the 103 walls and with their roughness
+            if (level == 1) ncoupled = ncoupled + 1
+            read( line,*,iostat=ios_ks ) idum(1:2), bc(i)%k_rough
+            if (ios_ks == 0) then
+              if (level == 1) ncoupled_ks = ncoupled_ks + 1
+            else
+              bc(i)%k_rough = 0.0_R8 ! smooth
+            endif
             obj_io_bc%coupling_flag( bc(i)%b , bc(i)%f ) = .true.
             allocate ( bc(i) % Pg (1, 6) )
             allocate ( bc(i) % ext_flux (nprim) )
@@ -350,7 +359,7 @@ contains
     if (ncoupled > 0) write(*,'(A,T35,I0)') '   Coupled wall', ncoupled
     if (ncoupled_ks > 0) write(*,'(A,T35,I0)') '   Coupled wall with roughness', ncoupled_ks
     if (has_tdep_bc) write(*,'(A)') '   Time-dependent BC detected'
-    ! Coupled walls without the trailing roughness in bc.txt enter the
+    ! Coupled walls (103, 104) without the trailing roughness in bc.txt enter the
     ! nearest-wall roughness map with ks = 0, i.e. as smooth walls.
     if (ncoupled_ks < ncoupled .and. obj_rans%rough) &
       write(*,'(A,I0,A)') '   [WARNING] ', ncoupled - ncoupled_ks, &
