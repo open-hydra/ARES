@@ -536,6 +536,37 @@ contains
   end subroutine Yn_Connection
 
 
+  subroutine Yn_Chimera ( nb, blk, bc )
+    implicit none
+    integer, intent(in)                  :: nb
+    type(ARES_block_type), intent(inout) :: blk(nb)
+    type(ARES_bc_type), intent(in)       :: bc
+    ! Local
+    integer  :: Ig, Jg, Kg, Bs, Is, Js, Ks, c
+    real(R8) :: yng, ksg
+
+    ! Ghost cell coordinates
+    Ig = bc % i - guide(bc % f,1)
+    Jg = bc % j - guide(bc % f,2)
+    Kg = bc % k - guide(bc % f,3)
+
+    ! First ghost row: donor values blended with the volume fractions, as the primitives
+    yng = 0d0
+    ksg = 0d0
+    do c = 1, bc % ni(1)
+      Bs = bc % donorID(c,1)
+      Is = bc % donorID(c,2)
+      Js = bc % donorID(c,3)
+      Ks = bc % donorID(c,4)
+      yng = yng + blk(Bs) % yn(Is,Js,Ks) * bc % volume_fraction(c)
+      ksg = ksg + blk(Bs) % ks(Is,Js,Ks) * bc % volume_fraction(c)
+    enddo
+    blk(bc % b) % yn(Ig,Jg,Kg) = yng
+    blk(bc % b) % ks(Ig,Jg,Kg) = ksg
+
+  end subroutine Yn_Chimera
+
+
   subroutine BC_Extrapolate_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg )
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
@@ -861,7 +892,7 @@ contains
   end subroutine BC_Symmetry_Metrics
 
 
-  subroutine BC_Connect_Metrics ( Im, Jm, Km, Fm, blkm, Is, Js, Ks, Fs, blks, d11s, d12s, d21s, d22s, Mg, dlg, volg )
+  subroutine BC_Connect_Metrics ( Im, Jm, Km, Fm, blkm, Is, Js, Ks, Fs, blks, d11s, d12s, d21s, d22s, Mg, dlg, volg, periodic )
     implicit none
     integer, intent(in)                  :: Im, Jm, Km, Fm, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s
     type(ARES_block_type), intent(in)    :: blks
@@ -869,11 +900,13 @@ contains
     type(ARES_tensor_3D_type), intent(out) :: Mg(2)
     type(ARES_vector_3D_type), intent(out) :: dlg(2)
     real(R8), intent(out)                  :: volg(2)
+    logical, intent(in)                    :: periodic
     ! Local
     integer      :: g, Is1, Js1, Ks1
-    integer      :: II, JJ, KK, III, JJJ, KKK      
+    integer      :: II, JJ, KK, III, JJJ, KKK
     integer      :: guidem(6,3), guides(6,3), guidem2(6,3), guides2(6,3)
     type(ARES_vector_3D_type), dimension(0:gc) :: N1, N2, N3, N4, N5, N6, N7, N8
+    type(ARES_vector_3D_type) :: T
     
     ! ---------------------------------------------------------------------------------------------
     ! Preliminary definitions
@@ -927,6 +960,35 @@ contains
         N8(0)%c = blkm%node(Im  ,Jm  ,Km  ) % c
     end select
 
+    T%c = 0._R8
+    if (periodic) then
+      Is1 = Is + gc*guides(Fs,1) - guides2(Fs,1)
+      Js1 = Js + gc*guides(Fs,2) - guides2(Fs,2)
+      Ks1 = Ks + gc*guides(Fs,3) - guides2(Fs,3)
+      select case(Fs)
+        case(1:2)
+          II=Is1
+          JJ=(2*Js1+d11s+d21s)/2
+          KK=(2*Ks1+d12s+d22s)/2
+        case(3:4)
+          II=(2*Is1+d11s+d21s)/2
+          JJ=Js1
+          KK=(2*Ks1+d12s+d22s)/2
+        case(5:6)
+          II=(2*Is1+d11s+d21s)/2
+          JJ=(2*Js1+d12s+d22s)/2
+          KK=Ks1
+      end select
+      select case(Fm)
+        case(1) ; T%c = N4(0)%c - blks%node(II,JJ,KK)%c
+        case(2) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+        case(3) ; T%c = N6(0)%c - blks%node(II,JJ,KK)%c
+        case(4) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+        case(5) ; T%c = N7(0)%c - blks%node(II,JJ,KK)%c
+        case(6) ; T%c = N8(0)%c - blks%node(II,JJ,KK)%c
+      end select
+    end if
+
     do g = 1, gc
 
       ! connected cell node index
@@ -950,17 +1012,17 @@ contains
           KK=Ks1
       end select
       if (Fm == 1) then
-          N4(g)%c = blks%node(ii,jj,kk)%c
+          N4(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 2) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 3) then
-          N6(g)%c = blks%node(ii,jj,kk)%c
+          N6(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 4) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 5) then
-          N7(g)%c = blks%node(ii,jj,kk)%c
+          N7(g)%c = blks%node(ii,jj,kk)%c + T%c
       elseif (Fm == 6) then
-          N8(g)%c = blks%node(ii,jj,kk)%c
+          N8(g)%c = blks%node(ii,jj,kk)%c + T%c
       endif
 
       ! update the remaining 3 indexes (only necessary in the corners, but for good measure)
@@ -980,17 +1042,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N6(g)%c = blks%node(iii,jjj,kkk)%c
+        N6(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N4(g)%c = blks%node(iii,jjj,kkk)%c
+        N4(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N4(g)%c = blks%node(iii,jjj,kkk)%c
+        N4(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! node i1,i2-1 update
@@ -1009,17 +1071,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N7(g)%c = blks%node(iii,jjj,kkk)%c
+        N7(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N7(g)%c = blks%node(iii,jjj,kkk)%c
+        N7(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N6(g)%c = blks%node(iii,jjj,kkk)%c
+        N6(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! node i1-1,i2-1 update
@@ -1038,17 +1100,17 @@ contains
           KKK=KK
       end select
       if (Fm == 1) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 2) then
-        N5(g)%c = blks%node(iii,jjj,kkk)%c
+        N5(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 3) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 4) then
-        N3(g)%c = blks%node(iii,jjj,kkk)%c
+        N3(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 5) then
-        N1(g)%c = blks%node(iii,jjj,kkk)%c
+        N1(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       elseif (Fm == 6) then
-        N2(g)%c = blks%node(iii,jjj,kkk)%c
+        N2(g)%c = blks%node(iii,jjj,kkk)%c + T%c
       endif
 
       ! compute metric variables

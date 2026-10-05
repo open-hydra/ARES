@@ -74,7 +74,7 @@ contains
           Fm = bc(i) % f
           select case ( bc(i) % type )
 
-            case (101,201) ! connection
+            case (101,102,201) ! connection & chimera (101=block connect, 102=chimera)
               call BC_Connection_Eul ( Im, Jm, Km, Fm, blk(Bm) )
               if (model>0) &
                 call BC_Connection_Visc ( Im, Jm, Km, Fm, blk(Bm), bc(i) % Mg(1), bc(i) % Pg, &

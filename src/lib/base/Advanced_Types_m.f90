@@ -28,9 +28,9 @@ module ARES_Advanced_Types_m
     type(ARES_vector_3D_type)  :: dlg(2)                                    ! Ghost cell average cell length
     real(R8)                   :: volg(2)                                   ! Ghost cell volume
     real(R8), allocatable      :: Pg(:,:)                                   ! Ghost cell primitive stencil
-    !integer                    :: ni(2)                                    ! BC chimera
-    !integer, allocatable       :: donorID(:,:)                             ! BC chimera
-    !real(R8), allocatable      :: volume_fraction(:)                       ! BC chimera
+    integer                    :: ni(2)                                     ! BC chimera
+    integer, allocatable       :: donorID(:,:)                              ! BC chimera
+    real(R8), allocatable      :: volume_fraction(:)                        ! BC chimera
     real(R8), allocatable      :: ext_flux(:)                               ! Multi-Solver Coupling
   end type bc_type
 
@@ -75,6 +75,7 @@ module ARES_Advanced_Types_m
     integer, dimension(:), allocatable               :: local_bc_idx
     integer                                          :: n_local_bs = 0
     integer, dimension(:), allocatable               :: local_bs_idx
+    integer                                          :: mg_level = 1     ! Multigrid level of this domain (selects exchange schedules)
   end type ARES_domain_type
 
 

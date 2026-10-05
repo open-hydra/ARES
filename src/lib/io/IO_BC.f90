@@ -7,7 +7,7 @@ module ARES_IO_BC
   public :: Print_BC_Summary
 
   ! BC type counters — populated by Read_BCfile, consumed by Print_BC_Summary
-  integer :: nconnect, nwall, nio, nsym, nper, ncoupled, ncoupled_ks, next
+  integer :: nconnect, nwall, nio, nsym, nper, nchimera, ncoupled, ncoupled_ks, next
   logical :: has_tdep_bc
 
 contains
@@ -103,6 +103,11 @@ contains
       select case(ti)
       case(101, 103, 201, 301:302, 404:406)
         read( unitfile,*,iostat=ios )
+      case(102) ! chimera: donor counts of the two ghost rows, then one line per donor
+        read( unitfile,*,iostat=ios ) ci, cii
+        do c = 1, ci+cii
+          read( unitfile,*,iostat=ios )
+        enddo
       end select
       n_proof = n_proof + 1
     enddo
@@ -124,6 +129,7 @@ contains
     use ARES_Advanced_Types_m
     use ARES_Config_Types_m, only: obj_io, obj_io_bc, obj_rans
     use ARES_Global_m
+    use ARES_Mod_MPI,        only: mpi_abort_all
     use IR_Precision
     implicit none
     type(ARES_bc_type), dimension(:), intent(inout) :: bc
@@ -132,6 +138,9 @@ contains
     ! Local
     integer :: cc, i, s
     integer :: unitfile, ios, cios, ip, ios_ks, idum(9)
+    integer :: nzero_chim
+    real(R8) :: vf1, vf2
+    character(len=256) :: msg
     character(len=32) :: p0file
     character(len=32) :: alpha_tok, beta_tok
     character(len=256) :: line
@@ -156,6 +165,7 @@ contains
       nio = 0
       nsym = 0
       nper = 0
+      nchimera = 0
       ncoupled = 0
       ncoupled_ks = 0
       next = 0
@@ -164,6 +174,7 @@ contains
 
     ! Counter for number of cells per face in each block
     n_bf = 0
+    nzero_chim = 0
 
     ! Read file
     do i = 1, size(bc)
@@ -184,6 +195,31 @@ contains
           if (level == 1) nconnect = nconnect + 1
           read( unitfile,*,iostat=ios ) &
             bc(i)%bs, bc(i)%is, bc(i)%js, bc(i)%ks, bc(i)%fs, bc(i)%d11, bc(i)%d12, bc(i)%d21, bc(i)%d22
+          allocate ( bc(i) % Pg (nprim, 6) )
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! Chimera overlap BC
+        ! Second line: n1, n2 = number of donors of the 1st and 2nd ghost cell,
+        ! then n1+n2 lines: donor block, i, j, k, volume fraction
+        case(102)
+          if (level == 1) nchimera = nchimera + 1
+          read( unitfile,*,iostat=ios ) (bc(i)%ni(cc),cc=1,2)
+          allocate(bc(i)%donorID(1:sum(bc(i)%ni),1:4))
+          allocate(bc(i)%volume_fraction(1:sum(bc(i)%ni)))
+          do s = 1, sum(bc(i)%ni)
+            read( unitfile,*,iostat=ios ) bc(i)%donorID(s,1:4), bc(i)%volume_fraction(s)
+          enddo
+          ! The ghost cells take the weighted mean of the donor primitives, so the
+          ! fractions of each row must sum to 1: ATLAS writes them normalized, the
+          ! division only removes round-off (a row without donors sums to 0)
+          vf1 = sum(bc(i)%volume_fraction(1:bc(i)%ni(1)))
+          vf2 = sum(bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni)))
+          if (vf1 < 0.5d0 .or. vf2 < 0.5d0) then
+            nzero_chim = nzero_chim + 1
+          else
+            bc(i)%volume_fraction(1:bc(i)%ni(1)) = bc(i)%volume_fraction(1:bc(i)%ni(1)) / vf1
+            bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni)) = bc(i)%volume_fraction(bc(i)%ni(1)+1:sum(bc(i)%ni)) / vf2
+          endif
           allocate ( bc(i) % Pg (nprim, 6) )
 
         ! ─────────────────────────────────────────────────────────────────────
@@ -276,6 +312,13 @@ contains
 
     close( unitfile )
 
+    if (nzero_chim > 0) then
+      write(msg,'(I0,A,I0,A)') nzero_chim, ' chimera entries in the level-', level, &
+        ' BC file have donor volume fractions summing to ~0 (no donors found by the BC '// &
+        'builder). Their ghost states would be garbage; fix the BC file before running.'
+      call mpi_abort_all(trim(msg))
+    endif
+
   end subroutine Read_BCfile
 
 
@@ -291,6 +334,7 @@ contains
     if (nsym > 0) write(*,'(A,T35,I0)') '   Symmetry', nsym
     if (nper > 0) write(*,'(A,T35,I0)') '   Periodicity', nper
     if (next > 0) write(*,'(A,T35,I0)') '   Extrapolation', next
+    if (nchimera > 0) write(*,'(A,T35,I0)') '   Chimera', nchimera
     if (ncoupled > 0) write(*,'(A,T35,I0)') '   Coupled wall', ncoupled
     if (ncoupled_ks > 0) write(*,'(A,T35,I0)') '   Coupled wall with roughness', ncoupled_ks
     if (has_tdep_bc) write(*,'(A)') '   Time-dependent BC detected'

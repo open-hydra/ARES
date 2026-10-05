@@ -13,7 +13,9 @@ contains
     use ARES_Mod_GhostExchange, only: exchange_ghost_P_post_recv, exchange_ghost_P_pack, &
                                        exchange_ghost_P_post_send, exchange_ghost_P_wait_unpack, &
                                        exchange_ghost_P_wait_send, &
-                                       Ghost_Interrank, exchange_ghost_Pg, ghost_sched
+                                       exchange_ghost_chimera_begin, exchange_ghost_chimera_end, &
+                                       Ghost_Interrank, exchange_ghost_Pg, ghost_sched, &
+                                       set_active_mg_level
     use ARES_Mod_Timers, only: timer_comm_begin, timer_comm_end
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
@@ -23,8 +25,12 @@ contains
 
 
     ! MPI: post persistent receives, pack buffer in parallel, then post sends
+    ! Chimera donor cells travel in their own non-blocking exchange, started
+    ! here so it overlaps with the local BC processing below.
     !$omp single
+    call set_active_mg_level(domain%mg_level)
     call exchange_ghost_P_post_recv(domain)
+    call exchange_ghost_chimera_begin(domain)
     !$omp end single
 
     ! Pack send buffer in parallel over face groups
@@ -65,6 +71,9 @@ contains
           call Ghost_Symmetry ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(0,404:406) ! inlet/outlet/extrapolation: zero-gradient
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
+        case(102)
+          ! Chimera: processed after the donor-cell MPI exchange completes (below)
+          continue
         case default
           call Ghost_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
       end select
@@ -99,7 +108,8 @@ contains
       Fm = domain % bc(i) % f
     enddo
 
-    ! MPI: wait for P receives to complete.  What is timed here is the
+    ! MPI: wait for P receives to complete; unpack chimera donor cells into
+    ! the kept-alive P arrays of remote donor blocks.  What is timed here is the
     ! communication the local BC work above did not hide, plus the wait on
     ! slower neighbours.
     ! It also covers the unpack that follows the wait, and the sends and
@@ -108,14 +118,37 @@ contains
     !$omp single
     call timer_comm_begin()
     call exchange_ghost_P_wait_unpack(domain)
+    call exchange_ghost_chimera_end(domain)
     call timer_comm_end()
     !$omp end single
+
+    ! Chimera ghost fill: all donor data (local and remote) is now current
+    !$omp do schedule (dynamic) private(ii, i)
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 102) cycle
+      call Ghost_Chimera ( domain % nb, domain % blk, domain % bc(i) )
+    enddo
+
+    ! Chimera Pg(:,3:6): reads the ghost columns written just above, so it
+    ! must stay a separate loop (implicit barrier in between)
+    !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm)
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 102) cycle
+      Bm = domain % bc(i) % b
+      Im = domain % bc(i) % i
+      Jm = domain % bc(i) % j
+      Km = domain % bc(i) % k
+      Fm = domain % bc(i) % f
+      call Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
+    enddo
 
     ! Process INTER-RANK type-1 entries (Bm local, Bs remote)
     !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm, Bs)
     do ii = 1, domain % n_local_bc
       i  = domain % local_bc_idx(ii)
-      if (domain % bc(i) % type /= 101) cycle
+      if (domain % bc(i) % type /= 101 .and. domain % bc(i) % type /= 201) cycle
       Bs = domain % bc(i) % bs
       if (is_local_block(Bs)) cycle  ! already processed above
       Bm = domain % bc(i) % b
@@ -255,6 +288,53 @@ contains
   end subroutine Ghost_ZG_Extrapolate
 
 
+  subroutine Ghost_Chimera ( nb, Blk, bc )
+    implicit none
+    integer, intent(in)                  :: nb
+    type(ARES_block_type), intent(inout) :: Blk(nb)
+    type(ARES_bc_type), intent(inout)    :: bc
+    ! Local
+    integer  :: Bm, Im, Jm, Km, Fm, Ig, Jg, Kg, Bs, Is, Js, Ks, c, c1, c2, g
+    real(R8) :: primg(nprim)
+
+    ! Preliminary assignments
+    Bm = bc % b
+    Im = bc % i
+    Jm = bc % j
+    Km = bc % k
+    Fm = bc % f
+
+    ! Ghost cells filled with the primitives { p vel h rho*r } of the donor cells,
+    ! blended with the volume fractions: no conversion to conservative variables.
+    ! Donors ni(1) for the first ghost row, ni(2) for the second.
+    do g = 1, 2
+      if (g == 1) then
+        c1 = 1
+        c2 = bc % ni(1)
+      else
+        c1 = bc % ni(1) + 1
+        c2 = sum ( bc % ni )
+      endif
+
+      primg = 0.d0
+      do c = c1, c2
+        Bs = bc % donorID(c,1)
+        Is = bc % donorID(c,2)
+        Js = bc % donorID(c,3)
+        Ks = bc % donorID(c,4)
+        primg = primg + blk(Bs) % P (:,Is,Js,Ks) * bc % volume_fraction(c)
+      enddo
+
+      Ig = Im - guide(Fm,1)*g
+      Jg = Jm - guide(Fm,2)*g
+      Kg = Km - guide(Fm,3)*g
+      blk(Bm) % P (:,Ig,Jg,Kg) = primg
+      bc % Pg (:,g) = primg
+    enddo
+
+  end subroutine Ghost_Chimera
+
+
   subroutine Ghost_Extrapolate ( Im, Jm, Km, Fm, blk )
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
@@ -353,6 +433,88 @@ contains
     Pg (:,6) = blks % P (:,i4,j4,k4)
 
   end subroutine Fill_BC_Ghost_Connection
+
+
+  subroutine Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, blk, Pg )
+    implicit none
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(ARES_block_type), intent(inout) :: blk
+    real(R8), intent(inout)              :: Pg(nprim,6)
+    ! Local
+    integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
+    integer :: dim(3), Ig, Jg, Kg
+
+    dim = blk % dim
+    Ig = Im - guide(Fm,1)
+    Jg = Jm - guide(Fm,2)
+    Kg = Km - guide(Fm,3)
+
+    select case (Fm)
+      case(1:2)
+        if ( Jm == 1 )      blk % P (:,Ig, Jm-1, Km) = blk % P (:,Ig, Jm, Km)
+        if ( Jm == dim(2) ) blk % P (:,Ig, Jm+1, Km) = blk % P (:,Ig, Jm, Km)
+        if ( Km == 1 )      blk % P (:,Ig, Jm, Km-1) = blk % P (:,Ig, Jm, Km)
+        if ( Km == dim(3) ) blk % P (:,Ig, Jm, Km+1) = blk % P (:,Ig, Jm, Km)
+      case(3:4)
+        if ( Im == 1 )      blk % P (:,Im-1, Jg, Km) = blk % P (:,Im, Jg, Km)
+        if ( Im == dim(1) ) blk % P (:,Im+1, Jg, Km) = blk % P (:,Im, Jg, Km)
+        if ( Km == 1 )      blk % P (:,Im, Jg, Km-1) = blk % P (:,Im, Jg, Km)
+        if ( Km == dim(3) ) blk % P (:,Im, Jg, Km+1) = blk % P (:,Im, Jg, Km)
+      case(5:6)
+        if ( Im == 1 )      blk % P (:,Im-1, Jm, Kg) = blk % P (:,Im, Jm, Kg)
+        if ( Im == dim(1) ) blk % P (:,Im+1, Jm, Kg) = blk % P (:,Im, Jm, Kg)
+        if ( Jm == 1 )      blk % P (:,Im, Jm-1, Kg) = blk % P (:,Im, Jm, Kg)
+        if ( Jm == dim(2) ) blk % P (:,Im, Jm+1, Kg) = blk % P (:,Im, Jm, Kg)
+    end select
+
+    select case(Fm)
+      case(1:2)
+        i1 = Im
+        j1 = Jm - 1
+        k1 = Km
+        i2 = Im
+        j2 = Jm + 1
+        k2 = Km
+        i3 = Im
+        j3 = Jm
+        k3 = Km - 1
+        i4 = Im
+        j4 = Jm
+        k4 = Km + 1
+      case(3:4)
+        i1 = Im - 1
+        j1 = Jm
+        k1 = Km
+        i2 = Im + 1
+        j2 = Jm
+        k2 = Km
+        i3 = Im
+        j3 = Jm
+        k3 = Km - 1
+        i4 = Im
+        j4 = Jm
+        k4 = Km + 1
+      case(5:6)
+        i1 = Im - 1
+        j1 = Jm
+        k1 = Km
+        i2 = Im + 1
+        j2 = Jm
+        k2 = Km
+        i3 = Im
+        j3 = Jm - 1
+        k3 = Km
+        i4 = Im
+        j4 = Jm + 1
+        k4 = Km
+    end select
+
+    Pg (:,3) = blk % P (:,i1,j1,k1)
+    Pg (:,4) = blk % P (:,i2,j2,k2)
+    Pg (:,5) = blk % P (:,i3,j3,k3)
+    Pg (:,6) = blk % P (:,i4,j4,k4)
+
+  end subroutine Fill_BC_Ghost_Chimera
 
 
   subroutine Ghost_Wall_Extrapolation ( domain )

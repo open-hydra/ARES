@@ -139,6 +139,18 @@ contains
     !  - manifold (501): bc%bs can be remote
     allocate(needs_remote_P(domain%nb))
     needs_remote_P = .false.
+    do i = 1, domain%nbound
+      select case (domain%bc(i)%type)
+        case (102) ! chimera: only the donors of local receivers are read
+          if (.not. is_local_block(domain%bc(i)%b)) cycle
+          if (allocated(domain%bc(i)%donorID)) then
+            do c = 1, size(domain%bc(i)%donorID, 1)
+              b = domain%bc(i)%donorID(c, 1)
+              if (.not. is_local_block(b)) needs_remote_P(b) = .true.
+            end do
+          end if
+      end select
+    end do
 
     do b = 1, domain%nb
       if (is_local_block(b)) cycle

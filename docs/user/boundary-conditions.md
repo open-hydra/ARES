@@ -239,6 +239,7 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 |:----:|----------------|---------|-----------|
 | `0`   | `null`          | Interior / no BC | — |
 | `101` | `connection`    | Abutting inter-block interface | — |
+| `102` | `chimera`       | Overset interface: the two ghost cells take the volume-fraction mean of the donor-cell primitives | `n1 n2`, then `n1+n2` lines `bD iD jD kD vol_frac` |
 | `103` | —               | Multi-solver (HYDRA) coupling: symmetry wall + external flux | — |
 | `200` | `axisymmetric`  | Axisymmetric-axis treatment | — |
 | `201` | `periodic`      | Periodic face pair (dispatched as a connection) | — |
