@@ -240,7 +240,8 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 | `0`   | `null`          | Interior / no BC | — |
 | `101` | `connection`    | Abutting inter-block interface | — |
 | `102` | `chimera`       | Overset interface: the two ghost cells take the volume-fraction mean of the donor-cell primitives | `n1 n2`, then `n1+n2` lines `bD iD jD kD vol_frac` |
-| `103` | —               | Multi-solver (HYDRA) coupling: symmetry wall + external flux | — |
+| `103` | —               | Multi-solver (HYDRA) coupling: symmetry wall + external flux | `bS iS jS kS fS d11 d12 d21 d22 [ks]` |
+| `104` | —               | Multi-solver (HYDRA-AF) coupling on a non-conforming interface: as `103`, with the partner cells found from the donors | `n1 n2 [ks]`, then `n1+n2` lines `bD iD jD kD vol_frac` (FUSS donors) |
 | `200` | `axisymmetric`  | Axisymmetric-axis treatment | — |
 | `201` | `periodic`      | Periodic face pair (dispatched as a connection) | — |
 | `300` | `symmetry` / `wall` (no data) | Symmetry plane / inviscid slip wall | — |
