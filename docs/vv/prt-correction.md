@@ -115,10 +115,10 @@ Prt-correction   = .true.        ; <-- the feature under test
 type = 2Daxi                     ! axisymmetric pipe
 
 [ICB-Block1]
-p   = 18.0e5
-h   = 1.1e5
-u   = 12.0
-mit = 1.0e-10
+p          = 18.0e5
+h          = 1.1e5
+u          = 12.0
+rhoNuTilde = 1.0e-10
 ```
 
 The wall is a **heated rough wall**: a prescribed heat flux plus a sand-grain roughness height.

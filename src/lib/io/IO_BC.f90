@@ -242,6 +242,9 @@ contains
         ! ─────────────────────────────────────────────────────────────────────
         ! Inlet, mass-flux g + T (static)
         ! Second line: T, g, alpha, beta, rel_fac, massf, turb
+        ! turb = the nrans turbulence values of the boundary, read by position as the specific
+        ! ones ATLAS BCB writes (nuTilde, k, omega, Rij): the inlet weights them with the density
+        ! of the boundary state (see Lib_BC_Fluxes_Inflow)
         case(404)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : np+nrans) )
@@ -252,7 +255,7 @@ contains
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Supersonic inlet, M + T (static) + p (static)
-        ! Second line: mach, T, p, alpha, beta, rel_fac, massf, turb
+        ! Second line: mach, T, p, alpha, beta, rel_fac, massf, turb (specific, as for BC 404)
         case(405)
           if (level == 1) nio = nio + 1
           allocate( bc(i) % ci(1 : np+nrans) )

@@ -76,6 +76,8 @@ contains
     Flux(np) = Fmass
     Flux(nu:nw) = Fmass * Face_Vel + p3 * Area * Normal
     Flux(nh) = Fmass * ( 0.5d0 * sum( Face_Vel**2 ) + entalpy )
+    ! specific inputs (nuTilde, k, omega, Rij of ATLAS BCB) times the mass flux: the transported
+    ! variables are density-weighted (rhoNuTilde, rhoK, rhoOmega, rho*Rij)
     if (model==2) Flux(nt:nprim) = BC_RANS * Fmass
 
     Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
@@ -172,6 +174,7 @@ contains
     Sup_Prim(nu) = BC_Mach_local * Sup_Sound * cos(alpha_eff) * cos(beta_eff)
     Sup_Prim(nv) = BC_Mach_local * Sup_Sound * sin(alpha_eff) * cos(beta_eff)
     Sup_Prim(nw) = BC_Mach_local * Sup_Sound * sin(beta_eff)
+    ! specific inputs (nuTilde, k, omega, Rij of ATLAS BCB) times the inlet density
     if (model==2) Sup_Prim(nt:nprim) = Sup_rho * BC_RANS
 
     ! stencil cell 1 is the ghost cell (odd faces) or the interior cell (even faces)

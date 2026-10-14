@@ -83,12 +83,15 @@ contains
       ! count; a fixed string omits the RANS residual(s) and makes the binary
       ! writer declare fewer variable names than the data written.
       Dvarnames = '"rho" "rhou" "rhov" "rhow" "rhoe"'
+      ! The residuals carry the names of the variables they belong to: the turbulence ones are
+      ! the density-weighted variables ARES advances (rhoNuTilde = rho*nu_tilde, rhoK, rhoOmega),
+      ! as in the solution file (see IO_Solution)
       if (nrans==1) then
-        Dvarnames = trim(Dvarnames)//' "nut"'
+        Dvarnames = trim(Dvarnames)//' "rhoNuTilde"'
       elseif (nrans==2) then
-        Dvarnames = trim(Dvarnames)//' "kappa" "omega"'
+        Dvarnames = trim(Dvarnames)//' "rhoK" "rhoOmega"'
       elseif (nrans==7) then
-        Dvarnames = trim(Dvarnames)//' "ruu" "rvv" "rww" "ruv" "ruw" "rvw" "omega"'
+        Dvarnames = trim(Dvarnames)//' "ruu" "rvv" "rww" "ruv" "ruw" "rvw" "rhoOmega"'
       endif
       Dvarnames = trim(Dvarnames)//' "dt"'
 

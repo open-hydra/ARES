@@ -29,10 +29,10 @@ F_WALL  = os.path.join(HERE, "OUTPUT", "wall.tec")
 F_CF    = os.path.join(HERE, "reference", "cf.dat")
 F_MUT   = os.path.join(HERE, "reference", "mut.dat")
 
-# RSM field layout: Reynolds stresses replace k; mut (mit) still present.
+# RSM field layout: the Reynolds stresses replace rhoK; the eddy viscosity mut is still present.
 CELL_VARS = ["p", "u", "v", "w", "h",
-             "ruu", "rvv", "rww", "ruv", "ruw", "rvw", "omega",
-             "T", "rho", "sound", "mil", "kl", "mit"]
+             "ruu", "rvv", "rww", "ruv", "ruw", "rvw", "rhoOmega",
+             "T", "rho", "sound", "mil", "kl", "mut"]
 
 
 def save_figures(outdir=None):

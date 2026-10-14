@@ -147,12 +147,17 @@ contains
     ! IO Variables specification
     obj_io%Ovarnames=' '
     obj_io%ORANSname=' '
+    ! The turbulence variables are the density-weighted ones ARES solves for, under the names of
+    ! the density-weighted keys of ATLAS (those of the NASA Turbulence Modeling Resource), as in
+    ! the initial condition written by ICB: rhoNuTilde = rho*nu_tilde (the Spalart-Allmaras
+    ! variable, not the eddy viscosity, which is the auxiliary variable mut below),
+    ! rhoK = rho*k, rhoOmega = rho*omega
     if ( nrans == 1 ) then
-      obj_io%ORANSname=' "mi_tilde"'
+      obj_io%ORANSname=' "rhoNuTilde"'
     elseif ( nrans == 2 ) then
-      obj_io%ORANSname=' "kappa" "omega"'
+      obj_io%ORANSname=' "rhoK" "rhoOmega"'
     elseif ( nrans == 7 ) then
-      obj_io%ORANSname=" ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' omega"
+      obj_io%ORANSname=" ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' rhoOmega"
     end if
     obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "p" "u" "v" "w" "h"'
     obj_io%Ovarnames = trim(obj_io%Ovarnames)//obj_io%ORANSname
@@ -181,7 +186,7 @@ contains
       obj_io%Onvar = obj_io%Onvar + 2
     endif
     if (obj_io%write_transport .and. (nrans>0)) then
-      obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "mit"'
+      obj_io%Ovarnames = trim(obj_io%Ovarnames)//' "mut"'   ! eddy viscosity
       obj_io%Onvar = obj_io%Onvar + 1
     endif
 

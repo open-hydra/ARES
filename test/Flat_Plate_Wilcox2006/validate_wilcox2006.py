@@ -6,7 +6,7 @@ Validation of the ARES turbulent flat-plate test case Flat_Plate_Wilcox2006
 
 Quantities reproduced from PLOT.lay:
   1) cf(x)                 vs reference/cf.dat
-  2) mut/mu(y) at x~0.97   vs reference/mut.dat   (mut/mu = kappa/omega*rho/mu)
+  2) mut/mu(y) at x~0.97   vs reference/mut.dat   (mut/mu = rhoK/rhoOmega*rho/mu)
 
 See _fp_turb_common.py for the Reynolds-consistency handling: cf is compared
 in Re_x space; the x~0.97 profile only collapses if the run is at Re = 5e6.
@@ -27,8 +27,8 @@ F_WALL  = os.path.join(HERE, "OUTPUT", "wall.tec")
 F_CF    = os.path.join(HERE, "reference", "cf.dat")
 F_MUT   = os.path.join(HERE, "reference", "mut.dat")
 
-CELL_VARS = ["p", "u", "v", "w", "h", "kappa", "omega",
-             "T", "rho", "sound", "mil", "kl", "mit"]
+CELL_VARS = ["p", "u", "v", "w", "h", "rhoK", "rhoOmega",
+             "T", "rho", "sound", "mil", "kl", "mut"]
 
 
 def validate_profile():
@@ -40,8 +40,8 @@ def validate_profile():
         print("  field.tec not found - skipping profile."); return
 
     _, _, _, xN, yN, cv = C.read_field_tec(F_FIELD, CELL_VARS)
-    x_sta, yn, p = C.wall_profile(xN, yN, cv, ["u", "mil", "mit"], C.X_STATION)
-    mut_mu = p["mit"] / p["mil"]
+    x_sta, yn, p = C.wall_profile(xN, yN, cv, ["u", "mil", "mut"], C.X_STATION)
+    mut_mu = p["mut"] / p["mil"]
 
     zmut = C.pick_zone(C.read_tecplot_zones(F_MUT))
     ymut, mutref = zmut[1][:, 1], zmut[1][:, 2]

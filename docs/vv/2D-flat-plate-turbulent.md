@@ -17,7 +17,7 @@ Running the same geometry through all four models exercises the one-equation, bo
 
 ## Problem definition
 
-A zero-pressure-gradient turbulent boundary layer over a flat plate, with `simulation-type = turbulent` and a `[ARES-RANS]` block selecting the model. The working fluid is air from a real-fluid $(p,h)$ table; the inflow carries the freestream turbulence values needed by the model — `kappa`/`omega` for the two-equation models, `rhoRij`/`omega` for the RSM, `mit` for SA.
+A zero-pressure-gradient turbulent boundary layer over a flat plate, with `simulation-type = turbulent` and a `[ARES-RANS]` block selecting the model. The working fluid is air from a real-fluid $(p,h)$ table; the inflow carries the freestream turbulence values needed by the model — the specific `k`/`omega` for the two-equation models, `Rij`/`omega` for the RSM, `nuTilde` for SA (the matching `[ICB-Block1]` values are density-weighted: `rhoK`/`rhoOmega`, `rhoRij`/`rhoOmega`, `rhoNuTilde`).
 
 The lower boundary is split into an upstream **symmetry** segment (ahead of the leading edge) and a downstream **adiabatic no-slip wall** (the plate), using the patch mechanism:
 
@@ -85,10 +85,10 @@ $$
 The turbulent `field.tec` carries the real-fluid primitive set plus the model and derived quantities:
 
 ```
-x y z (nodal) | p u v w h kappa omega T rho sound mil kl mit (cell-centred)
+x y z (nodal) | p u v w h rhoK rhoOmega T rho sound mil kl mut (cell-centred)
 ```
 
-where `kappa` = $k$, `omega` = $\omega$, `mil` = $\mu_\ell$, `kl` = $k_\ell$, `mit` = $\mu_t$. Wall output (`wall.tec`) provides the skin friction used for $c_f$.
+where `rhoK` = $\rho k$, `rhoOmega` = $\rho\omega$ (the density-weighted variables the solver transports), `mil` = $\mu_\ell$, `kl` = $k_\ell$, `mut` = $\mu_t$ (the eddy viscosity). The validation scripts divide `rhoK` and `rhoOmega` by `rho` before comparing with the reference profiles. Wall output (`wall.tec`) provides the skin friction used for $c_f$.
 
 ---
 
@@ -152,9 +152,9 @@ Each of the four models produces its own `reference/cf.png`. They are shown toge
 
 ### Turbulence profiles (SST)
 
-![SST k+ and omega+ wall-normal profiles vs NASA CFL3D](img/fp_kappa.png){ width="820" }
+![SST k+ and omega+ wall-normal profiles vs NASA CFL3D](img/fp_kw.png){ width="820" }
 
-*`test/Flat_Plate_SST/reference/kappa.png`.* Wall-normal profiles of the non-dimensional turbulence kinetic energy $k^+=k/a_\infty^2$ (left) and specific dissipation rate $\omega^+=\omega\mu_\infty/(\rho_\infty a_\infty^2)$ (right) at the NASA station $x\approx0.97$ m. These profiles only collapse onto the reference because the constant-property tables put the run at the TMR Reynolds number $\mathrm{Re}=5\times10^6$ (Step 1 above).
+*`test/Flat_Plate_SST/reference/kw.png`.* Wall-normal profiles of the non-dimensional turbulence kinetic energy $k^+=k/a_\infty^2$ (left) and specific dissipation rate $\omega^+=\omega\mu_\infty/(\rho_\infty a_\infty^2)$ (right) at the NASA station $x\approx0.97$ m. These profiles only collapse onto the reference because the constant-property tables put the run at the TMR Reynolds number $\mathrm{Re}=5\times10^6$ (Step 1 above).
 
 ### Eddy-viscosity ratio (Wilcox 2006)
 
