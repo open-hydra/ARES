@@ -147,14 +147,24 @@ ks   = 1.0e-4        ; equivalent sand-grain roughness height [m]
 type  = inlet
 g     = 59.29        ; mass flux [kg/m²s]
 T     = 555.0        ; static temperature [K]
-kappa = 2.25e-3      ; freestream k       (two-equation models)
+k     = 2.25e-3      ; freestream k       (two-equation models)
 omega = 6250.0       ; freestream omega
 ```
 
 Two optional groups apply to every inlet:
 
 - **Flow direction** — `alpha` (in-plane angle), `beta` (out-of-plane angle); with no angles the inflow is face-normal.
-- **Turbulence inflow** — `mit` for the SA models, `kappa` + `omega` for the two-equation models, `rhoRij` + `omega` for the RSM. `rf` is a relaxation factor (default 1).
+- **Turbulence inflow** — `nuTilde` for the SA models, `k` + `omega` for the two-equation models, `Rij` + `omega` for the RSM. `rf` is a relaxation factor (default 1).
+
+!!! info "Boundary turbulence values are specific"
+    `nuTilde` ($\tilde\nu$, m²/s), `k` (m²/s²), `omega` (1/s) and `Rij` ($R_{11} = R_{22} = R_{33}$,
+    m²/s²; the shear stresses are set to $10^{-8}$) are the **specific** quantities of the NASA
+    [Turbulence Modeling Resource](https://tmbwg.github.io/turbmodels/): ARES multiplies each by the
+    density of the boundary state it builds, since the variables it transports are the
+    density-weighted ones. The [`[ICB-*]` keys](initial-conditions.md#turbulence) are the opposite —
+    `rhoNuTilde`, `rhoK`, `rhoOmega`, `rhoRij`, already weighted — and a boundary section carrying one
+    of those is refused by ATLAS with a hint, as are the retired `mit` and `kappa`; `mut`/`nut` name
+    the eddy viscosity, which is never an input.
 
 ### Outlets
 
@@ -248,11 +258,11 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 | `301` | `wall` (`q`)    | No-slip wall, prescribed heat flux `qw` (`0` = adiabatic) | `q, ks, eps` |
 | `302` | `wall` (`T`)    | No-slip wall, prescribed temperature `Tw` (isothermal) | `T, ks, eps` |
 | `400` | `extrapolation` | Zeroth-order extrapolation (supersonic outflow / far-field) | — |
-| `404` | `inlet` (`g`,`T`) | Subsonic inlet: mass flux + static temperature | `T, g, α, β, rel` |
-| `405` | `inlet` (`mach`,…) | Supersonic inlet: Mach + static `T` + static `p` | `M, T, p, α, β, rel` |
+| `404` | `inlet` (`g`,`T`) | Subsonic inlet: mass flux + static temperature | `T, g, α, β, rel[, turb]` |
+| `405` | `inlet` (`mach`,…) | Supersonic inlet: Mach + static `T` + static `p` | `M, T, p, α, β, rel[, turb]` |
 | `406` | `outlet` (`p`)  | Subsonic outlet: back pressure `pAmb` | `p, rel` |
 
-where `α`, `β` are the in-plane / out-of-plane inflow angles (`normal` = face-normal) and `rel` a relaxation factor. The inlet/outlet routines fall back to a symmetry wall if the local state would make the BC ill-posed (e.g. reversed flow).
+where `α`, `β` are the in-plane / out-of-plane inflow angles (`normal` = face-normal) and `rel` a relaxation factor. On an inlet, `turb` is the trailing group of as many values as the model transports (1, 2 or 7), read by position as the **specific** quantities `nuTilde`, `k`, `omega`, `Rij` — see [Inlets](#inlets) above. The inlet/outlet routines fall back to a symmetry wall if the local state would make the BC ill-posed (e.g. reversed flow).
 
 ### Example — mass-flux inlet (type 404)
 

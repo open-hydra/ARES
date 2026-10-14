@@ -51,6 +51,8 @@ contains
       stop
     end if
 
+    call Check_Turbulence_Names ( IOfield )
+
     do b = 1, nblocks
       write(*,'(A9,I2,A3,3I5)') ' - Block ', b, ' = ', domain%blk(b)%dim
 
@@ -72,6 +74,66 @@ contains
     enddo
 
   end subroutine Setup_Data_Structure
+
+
+  subroutine Check_Turbulence_Names ( IOfield )
+    !! The turbulence bands of the initial condition are read by position as the
+    !! density-weighted variables ARES advances, named rhoNuTilde (= rho*nu_tilde), rhoK,
+    !! rhoOmega: the names of the density-weighted keys of ATLAS, which ICB writes and ARES
+    !! writes back. The earlier names of the same variables (mi_t, mi_tilde, and kappa with its
+    !! omega) are accepted; any other name, e.g. the specific nuTilde or k, or the eddy viscosity
+    !! mut, stops the run instead of being read as density-weighted. For the Reynolds-stress model
+    !! the bands are ru'u' rv'v' rw'w' ru'v' ru'w' rv'w' rhoOmega. The names are known for an
+    !! ASCII file only (ORION does not return those of a .szplt file).
+    use ARES_Global_m
+    use Lib_ORION_data
+    use ARES_Config_Types_m, only: obj_io
+    use strings, only: lowercase
+
+    implicit none
+    type(ORION_data), intent(in) :: IOfield
+    ! Local
+    character(len=32) :: name(7), expected
+    character(len=32), parameter :: stress(6) = [character(len=32) :: "ru'u'", "rv'v'", "rw'w'", "ru'v'", "ru'w'", "rv'w'"]
+    integer :: off, d
+
+    if ( nrans /= 1 .and. nrans /= 2 .and. nrans /= 7 ) return
+    if ( .not. allocated(IOfield%varnames) ) return
+    off = size(IOfield%varnames) - size(IOfield%block(1)%vars, 1)
+    if ( off < 0 ) return
+    name = ''
+    do d = 1, nrans
+      name(d) = lowercase(adjustl(IOfield%varnames(off + nt + d - 1)))
+    end do
+    do d = 1, nrans
+      select case ( nrans*10 + d )
+      case ( 11 )
+        expected = 'rhoNuTilde'
+        if ( any(name(1) == [character(len=32) :: 'rhonutilde', 'mi_t', 'mi_tilde']) ) cycle
+      case ( 21 )
+        expected = 'rhoK'
+        if ( any(name(1) == [character(len=32) :: 'rhok', 'kappa']) ) cycle
+      case ( 22 )
+        expected = 'rhoOmega'
+        ! an earlier file names it omega, next to kappa: next to rhoK, omega is the specific one
+        if ( name(2) == 'rhoomega' .or. ( name(2) == 'omega' .and. name(1) == 'kappa' ) ) cycle
+      case ( 71:76 )
+        expected = stress(d)
+        if ( name(d) == stress(d) ) cycle
+      case ( 77 )
+        expected = 'rhoOmega'
+        ! an earlier file names it omega, next to the stresses
+        if ( name(7) == 'rhoomega' .or. name(7) == 'omega' ) cycle
+      end select
+      write(*,'(A,I0,A)') '[ERROR] '//trim(obj_io%nameinit)//': variable ', off + nt + d - 1, ' is named '''// &
+        trim(adjustl(IOfield%varnames(off + nt + d - 1)))//''', where ARES reads the density-weighted '// &
+        trim(expected)//' (the turbulence variables of an initial condition are density-weighted: ATLAS ICB'// &
+        ' writes rhoNuTilde, rhoK, rhoOmega, and the Reynolds stresses with their rhoOmega, from the'// &
+        ' density-weighted keys of a real-fluid zone)'
+      stop 1
+    end do
+
+  end subroutine Check_Turbulence_Names
 
 
   subroutine Allocate_Block( blk, nijk )

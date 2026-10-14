@@ -18,12 +18,12 @@ The initial field is described by one `[ICB-Block<b>]` section per block. ATLAS 
 
 ```ini
 [ICB-Block1]
-phase = air          ; optional — restricts the block to a named phase (blank = all)
-p     = 1.0e5        ; static pressure [Pa]
-T     = 555.0        ; static temperature [K]   (give T or h — see below)
-u     = 100.0        ; x-velocity [m/s]
-kappa = 2.25e-3      ; freestream k       (two-equation models)
-omega = 6250.0       ; freestream omega
+phase    = air       ; optional — restricts the block to a named phase (blank = all)
+p        = 1.0e5     ; static pressure [Pa]
+T        = 555.0     ; static temperature [K]   (give T or h — see below)
+u        = 100.0     ; x-velocity [m/s]
+rhoK     = 2.25e-3   ; freestream rho*k       (two-equation models)
+rhoOmega = 6250.0    ; freestream rho*omega
 ```
 
 The optional `phase =` key restricts a block to a named phase; `type =` defaults to `homogeneous` (a uniform block). The remaining keys set the **thermodynamic state**, the **velocity**, and the **turbulence** start values.
@@ -48,13 +48,23 @@ Give the Cartesian components directly, or a speed magnitude with flow angles:
 
 ### Turbulence
 
-The transported variables of the active model:
+The transported variables of the active model, under the names of the NASA
+[Turbulence Modeling Resource](https://tmbwg.github.io/turbmodels/) with a `rho` prefix — they are
+**density-weighted**, exactly as ARES advances them and as they are stored in the IC file:
 
 | Key(s) | Model |
 |--------|-------|
-| `mit` | Spalart–Allmaras (all SA variants) — modified eddy viscosity |
-| `kappa`, `omega` | SST / Wilcox 2006 — $k$, $\omega$ |
-| `rhoRij`, `omega` | SSG-LRR (RSM) — Reynolds stresses + $\omega$ |
+| `rhoNuTilde` | Spalart–Allmaras (all SA variants) — $\rho\tilde\nu$ (the SA working variable, *not* the eddy viscosity) |
+| `rhoK`, `rhoOmega` | SST / Wilcox 2006 — $\rho k$, $\rho\omega$ |
+| `rhoRij`, `rhoOmega` | SSG-LRR (RSM) — the Reynolds stresses $\rho R_{ij}$ and $\rho\omega$ |
+
+!!! info "Why density-weighted here and specific at a boundary"
+    A real-fluid `[ICB-*]` block takes the density-weighted keys **only**: the $(p,h)$ table carries
+    no density, so ATLAS cannot turn a specific value into the weighted one the solver transports.
+    The [inlet keys](boundary-conditions.md#inlets) are the opposite — `nuTilde`, `k`, `omega` and
+    `Rij` are all *specific*, and ARES weights them with the density of the boundary state. The retired names `mit`
+    and `kappa` are refused by ATLAS with a hint; `mut` and `nut` name the **eddy viscosity**, which
+    is an output, never an input.
 
 ---
 
@@ -162,9 +172,14 @@ When a turbulence model is active, the IC file must also carry the model's trans
 
 | Model | Extra variables | Description |
 |-------|-----------------|-------------|
-| Spalart–Allmaras (all SA variants) | $\tilde\nu$ | Modified eddy viscosity |
-| SST / Wilcox 2006 ($k$–$\omega$) | $k$, $\omega$ | Turbulent kinetic energy, specific dissipation rate |
-| SSG-LRR (RSM) | $R_{ij}$, $\omega$ | Reynolds-stress components and $\omega$ |
+| Spalart–Allmaras (all SA variants) | `rhoNuTilde` = $\rho\tilde\nu$ | Density times the SA working variable |
+| SST / Wilcox 2006 ($k$–$\omega$) | `rhoK` = $\rho k$, `rhoOmega` = $\rho\omega$ | Density times the turbulent kinetic energy and the specific dissipation rate |
+| SSG-LRR (RSM) | `ru'u' rv'v' rw'w' ru'v' ru'w' rv'w'` = $\rho R_{ij}$, `rhoOmega` | Density times the Reynolds-stress components and $\omega$ |
+
+The band names are those ATLAS ICB writes and ARES writes back in `OUTPUT/field.*`, so an IC file, a
+restart and a solution file are interchangeable. A file whose turbulence bands carry any other name
+is refused at start-up (the names of earlier files — `mi_t`, `mi_tilde`, `kappa` with its `omega` —
+are still accepted), which stops a *specific* field from being read as a density-weighted one.
 
 ---
 

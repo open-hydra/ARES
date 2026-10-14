@@ -34,8 +34,8 @@ F_MUT   = os.path.join(HERE, "reference", "mut.dat")
 F_KW    = os.path.join(HERE, "reference", "kw.dat")
 
 # field.tec cell variables (after x,y,z nodal)
-CELL_VARS = ["p", "u", "v", "w", "h", "kappa", "omega",
-             "T", "rho", "sound", "mil", "kl", "mit"]
+CELL_VARS = ["p", "u", "v", "w", "h", "rhoK", "rhoOmega",
+             "T", "rho", "sound", "mil", "kl", "mut"]
 
 
 def validate_profiles():
@@ -48,14 +48,14 @@ def validate_profiles():
 
     _, _, _, xN, yN, cv = C.read_field_tec(F_FIELD, CELL_VARS)
     x_sta, yn, p = C.wall_profile(xN, yN, cv,
-                                  ["u", "rho", "mil", "mit", "kappa", "omega", "sound"],
+                                  ["u", "rho", "mil", "mut", "rhoK", "rhoOmega", "sound"],
                                   C.X_STATION)
     # free-stream edge (outermost cell of the column)
     rho_inf, mu_inf, a_inf = p["rho"][-1], p["mil"][-1], p["sound"][-1]
 
-    # ARES profiles (kappa, omega in field are conserved: rho*k, rho*omega)
-    k_spec = p["kappa"] / p["rho"]
-    om_spec = p["omega"] / p["rho"]
+    # ARES profiles (the field bands are the density-weighted rhoK = rho*k, rhoOmega = rho*omega)
+    k_spec = p["rhoK"] / p["rho"]
+    om_spec = p["rhoOmega"] / p["rho"]
     k_nd  = k_spec / a_inf**2
     om_nd = om_spec * mu_inf / (rho_inf * a_inf**2)
 
@@ -76,7 +76,7 @@ def validate_profiles():
     # ----- plots -----
     ymax = 0.04
     if have_kw:
-        fig2, (a1, a2) = plt.subplots(1, 2, figsize=(11, 5.5), num="kappa")
+        fig2, (a1, a2) = plt.subplots(1, 2, figsize=(11, 5.5), num="kw")
         a1.plot(k_nd, yn, "o", ms=5, mfc="none", color="C2", label="ARES")
         a1.plot(kkw, ykw, "-", color="k", label=f"NASA {zkw[0].split(',')[0]}")
         a1.set_xlabel(r"$k^+ = k/a_\infty^2$"); a1.set_ylabel(r"$y$ [m]")

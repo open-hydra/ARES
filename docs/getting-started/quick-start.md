@@ -98,7 +98,11 @@ NP    = 200       ; pressure grid points
 NH    = 200       ; enthalpy grid points
 ```
 
-The inflow carries freestream turbulence values (`kappa` = $k$, `omega` = $\omega$) in the `[ICB-Block1]` block, as required by the two-equation model.
+The two-equation model needs freestream turbulence values: the `[ICB-Block1]` block carries them
+density-weighted (`rhoK` = $\rho k$, `rhoOmega` = $\rho\omega$ — what the solver transports), the
+`[inflow]` block as the specific `k` and `omega`, which ARES weights with the inlet density. See
+[Initial Conditions](../user/initial-conditions.md#turbulence) and
+[Boundary Conditions](../user/boundary-conditions.md#inlets).
 
 ---
 
@@ -172,7 +176,7 @@ ARES | Iter =     3000 | Global iter =     3000 | Pressure residual = 0.259158E-
 
 | File | Content |
 |------|---------|
-| `OUTPUT/field.tec` | Full 2-D field ($p$, $u$, $v$, $h$, $T$, $k$, $\omega$, $\mu_t$, …) at convergence |
+| `OUTPUT/field.tec` | Full 2-D field (`p`, `u`, `v`, `h`, `T`, `rhoK` = $\rho k$, `rhoOmega` = $\rho\omega$, `mut` = $\mu_t$, …) at convergence |
 | `OUTPUT/wall.tec` | Wall quantities (skin friction, $y^+$) |
 | `OUTPUT/residual-history.dat` | Convergence history |
 

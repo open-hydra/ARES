@@ -157,7 +157,7 @@ Controlled by `sol-format` in `[ARES-IO]`:
 By default ARES writes primitive variables ($p$, $u$, $v$, $w$, $T$). Extra groups are enabled via `sol-variables` in `[ARES-IO]`:
 
 - `thermo` — speed of sound, $\gamma$, gas constant, density
-- `transport` — laminar viscosity $\mu_\ell$, conductivity $k_\ell$, turbulent viscosity $\mu_t$
+- `transport` — laminar viscosity $\mu_\ell$ (`mil`), conductivity $k_\ell$ (`kl`) and, with a turbulence model, the eddy viscosity $\mu_t$ (`mut`)
 
 Wall output is controlled by `wall-variables`: $y^+$ is always written first; `mech` adds the wall shear components and pressure (`tauX tauY tauZ pw`), `thermal` adds wall temperature and heat flux (`Tw qw`). The sand-grain roughness of the wall cell (`hs`) is always written as the last wall variable (zero on smooth walls).
 
