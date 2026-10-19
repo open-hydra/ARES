@@ -26,40 +26,40 @@ contains
     obj_rans%rough = .false.
     obj_rans%RSM = .false.
 
-    if (trim(obj_rans%rans_name) == 'SAcomp') then
+    if (trim(obj_rans%model) == 'SAcomp') then
       obj_rans%SAcomp = .true.
     endif
 
-    if (index(trim(obj_rans%rans_name), '-R') > 0) then
-      if (index(trim(obj_rans%rans_name), '-RC') > 0) then
+    if (index(trim(obj_rans%model), '-R') > 0) then
+      if (index(trim(obj_rans%model), '-RC') > 0) then
         obj_rans%SpalartShur = .true.
       else
         obj_rans%SAR = .true.
       end if
     end if
 
-    if (index(trim(obj_rans%rans_name), '-QCR2000') > 0) then
+    if (index(trim(obj_rans%model), '-QCR2000') > 0) then
       obj_rans%QCR2000 = .true.
     end if
 
-    if (index(trim(obj_rans%rans_name) , '-rough' ) > 0 ) then
+    if (index(trim(obj_rans%model) , '-rough' ) > 0 ) then
       obj_rans%rough = .true.
       ! Roughness wall BC is currently only implemented for Spalart-Allmaras.
       ! For k-omega models (SST, Wilcox2006, SSGLRR), the omega wall BC ignores ks.
-      if ( index(trim(obj_rans%rans_name), 'SA') == 0 ) then
+      if ( index(trim(obj_rans%model), 'SA') == 0 ) then
         write(*,'(A)') '[WARNING] Roughness (-rough) is only implemented for Spalart-Allmaras models.'
         write(*,'(A)') '          k-omega wall BC for omega will use the smooth-wall formula.'
       end if
     end if 
 
-    if (index(trim(obj_rans%rans_name), '-blowcorr') > 0) then
+    if (index(trim(obj_rans%model), '-blowcorr') > 0) then
       obj_rans%blowing_corr = .true.
     end if
 
     ! The turbulent Prandtl correction is a roughness-based correction derived for
     ! Spalart-Allmaras: it is only meaningful with a SA model and active roughness.
     if ( obj_rans%Prt_correction ) then
-      if ( index(trim(obj_rans%rans_name), 'SA') == 0 .or. .not. obj_rans%rough ) then
+      if ( index(trim(obj_rans%model), 'SA') == 0 .or. .not. obj_rans%rough ) then
         write(*,'(A)') '[ERROR] Prt-correction requires a Spalart-Allmaras model with roughness (-rough) enabled.'
         stop
       end if
@@ -71,25 +71,38 @@ contains
     end if
 
     ! The asymptotic omega wall treatment is specific to the SST closure.
-    if ( obj_rans%sst_asymptotic .and. index(trim(obj_rans%rans_name), 'SST') == 0 ) then
+    if ( obj_rans%sst_asymptotic .and. index(trim(obj_rans%model), 'SST') == 0 ) then
       write(*,'(A)') '[WARNING] sst-asymptotic is only available for the SST model: option disabled.'
       obj_rans%sst_asymptotic = .false.
     end if
 
-    obj_rans%description = 'RANS model: '//trim(obj_rans%rans_name)
+    ! Omega wall condition (k-omega models): omega_wall = C * mi_l / dist**2.
+    ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, meant for meshes
+    !                 that do not resolve the viscous sublayer.
+    ! 'asymptotic' -> C =  6/beta_1 =  80 : exact y->0 limit of the omega equation,
+    !                 the consistent choice on a wall-resolved (y+ < 1) mesh.
+    select case ( trim(obj_rans%omega_wall_bc) )
+    case ( 'practical' )
+      obj_rans%omega_wall_coef = 8d2
+    case ( 'asymptotic' )
+      obj_rans%omega_wall_coef = 8d1
+    case default
+      error stop ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
+    end select
+
+    obj_rans%description = 'RANS model: '//trim(obj_rans%model)
 
     ! Setting RANS or NS model
-    ! 'none' is treated as laminar Navier-Stokes (viscous, no turbulence model),
-    ! consistent with MOSE; the inviscid case is handled by the final else branch.
-    if ( index ( trim(obj_rans%rans_name), 'laminar' ) > 0 .or. &
-         index ( trim(obj_rans%rans_name), 'none' )    > 0 ) then
+    ! 'none' is laminar Navier-Stokes (viscous, no turbulence model), as in MOSE:
+    ! Assign_Setup sets it for equations = navier-stokes without a model and for euler.
+    if ( index ( trim(obj_rans%model), 'none' ) > 0 ) then
       nRANS = 0
       Eddy_Viscosity => null()
       RANS_Diffusive_Flux => null()
       Stress_Vector => Stress_Vector_Std
       RANS_Enforce_Realizability => null()
 
-    elseif ( index ( trim(obj_rans%rans_name), 'SA' ) > 0 ) then
+    elseif ( index ( trim(obj_rans%model), 'SA' ) > 0 ) then
       nRANS = 1
       Eddy_Viscosity => Spalart_Eddy_Viscosity
       RANS_Diffusive_Flux => Spalart_RANS_Diffusive_Flux
@@ -104,7 +117,7 @@ contains
       RANS_Extrapolate_Wall => Spalart_Extrapolate_Wall
       RANS_Enforce_Realizability => Spalart_Enforce_Realizability
 
-    elseif ( index ( trim(obj_rans%rans_name), 'Wilcox2006' ) > 0 ) then
+    elseif ( index ( trim(obj_rans%model), 'Wilcox2006' ) > 0 ) then
       nRANS = 2
       Eddy_Viscosity => Wilcox2006_Eddy_Viscosity
       RANS_Diffusive_Flux => Wilcox2006_RANS_Diffusive_Flux
@@ -123,7 +136,7 @@ contains
       RANS_Extrapolate_Wall => Wilcox2006_Extrapolate_Wall
       RANS_Enforce_Realizability => Wilcox2006_Enforce_Realizability
     
-    elseif ( index ( trim(obj_rans%rans_name), 'SST' ) > 0 ) then
+    elseif ( index ( trim(obj_rans%model), 'SST' ) > 0 ) then
       nRANS = 2
       Eddy_Viscosity => SST_Eddy_Viscosity
       RANS_Diffusive_Flux => SST_RANS_Diffusive_Flux
@@ -142,11 +155,11 @@ contains
       RANS_Extrapolate_Wall => SST_Extrapolate_Wall
       RANS_Enforce_Realizability => SST_Enforce_Realizability
 
-    elseif ( index ( trim(obj_rans%rans_name), 'SSGLRR' ) > 0 ) then
+    elseif ( index ( trim(obj_rans%model), 'SSGLRR' ) > 0 ) then
       nRANS = 7
       obj_rans%RSM = .true.
       Eddy_Viscosity => SSGLRR_Eddy_Viscosity
-      if ( index ( trim(obj_rans%rans_name), '-SD' ) > 0 ) then
+      if ( index ( trim(obj_rans%model), '-SD' ) > 0 ) then
         RANS_Diffusive_Flux => SSGLRR_SD_RANS_Diffusive_Flux
       else
         RANS_Diffusive_Flux => SSGLRR_RANS_Diffusive_Flux
@@ -162,7 +175,7 @@ contains
       Eddy_Viscosity => null()
       RANS_Diffusive_Flux => null()
       Stress_Vector => null()
-      obj_rans%rans_name = '  Inviscid flow'
+      obj_rans%model = '  Inviscid flow'
 
     endif
 

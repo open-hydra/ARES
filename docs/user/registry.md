@@ -13,13 +13,12 @@ This page is the reference for every `[ARES-*]` parameter. It mirrors the output
 | res-threshold | 1e-10 | > 0 | no | Residual convergence threshold |
 | time-threshold | 1e30 | > 0 | no | Maximum simulation time |
 | iter-threshold | 1000000000 | > 0 | no | Maximum number of iterations |
-| simulation-type | euler | euler , laminar , turbulent | **yes** | Flow regime (euler = inviscid; laminar / turbulent = Navier–Stokes) |
 
 ## ARES-Numerics
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| time-scheme | euler | euler, RK2, RK3 | no | Time integration solver |
+| time-scheme | euler | euler, RK2, RK3 | **yes** | Time integration solver |
 | cfl | 0.5 | > 0 | **yes** | CFL number |
 | vnn | 0.3 | > 0 | no | Viscous (von Neumann) stability number |
 | cfl-rise-threshold | 0 | >= 0 | no | Iterations over which CFL is ramped up |
@@ -30,7 +29,7 @@ This page is the reference for every `[ARES-*]` parameter. It mirrors the output
 | preconditioning-Uref | -1.0 |  | no | Reference velocity for preconditioning (< 0 ⇒ use sound speed) |
 | preconditioning-eps-min | -1.0 |  | no | Minimum cut-off $\varepsilon$ for preconditioning (< 0 ⇒ default 0.10) |
 | space-reconstruction | none | MUSCL, first-order, none | **yes** | Space reconstruction method |
-| flux-limiter | none | vanalbada, minmod, superbee, vanleer, MC, LIMO3, none | no | Flux limiter for reconstruction |
+| flux-limiter | none | vanalbada, minmod, superbee, vanleer, mc, MC, LIMO3, none | no | Flux limiter for reconstruction (`mc` and `MC` are the same limiter) |
 | riemann-solver | HLLC | Rusanov, PLLF, HLLE, HLLC, HLLC Prec, HLLC Rotated | no | Riemann (numerical flux) solver |
 | riemann-options-Minf | 0.0 | >= 0 | no | Reference Mach number for the Riemann solver |
 
@@ -48,25 +47,42 @@ Per-level iteration counts. The number of levels is set by the `levels` key; one
 | level2-iter | 0 | >= 0 | no | Iterations on multigrid level 2 |
 | … | 0 | >= 0 | no | (one entry per level) |
 
-## ARES-RANS
+## ARES-Physics
+
+The keys of `[MOSE-Physics]` that apply to a single real fluid.
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| turbulence-model | *(none)* | SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, Wilcox2006, SSGLRR, none | no | RANS turbulence model |
-| Prt | 0.90 | > 0 | no | Turbulent Prandtl number |
-| Sct | 0.90 | > 0 | no | Turbulent Schmidt number |
-| Sc | 0.7 | > 0 | no | Laminar Schmidt number |
-| k-coupling | .false. | logical | no | Couple turbulent kinetic energy into the mean-flow energy equation |
-| Prt-correction | .false. | logical | no | Turbulent-Prandtl correction for wall roughness |
+| equations | *(none)* | euler , navier-stokes | **yes** | Gas dynamics equations |
+| turbulence | none | SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, Wilcox2006, SSGLRR, none | no | RANS turbulence model |
+| schmidt | 0.0 | >= 0 | no | Laminar Schmidt number (no effect: ARES solves a single species) |
 
 !!! note
-    `turbulence-model` is only consulted when `simulation-type = turbulent`. For `euler` and `laminar` runs the `[ARES-RANS]` section is ignored.
+    `navier-stokes` with `turbulence = none` is a laminar run. `euler` takes no turbulence model: naming one stops the run at set-up.
+
+## ARES-Turbulence
+
+The first four keys are those of `[MOSE-Turbulence]`; the others exist in ARES only. They are read for every run and used only when `turbulence` names a model.
+
+| Parameter | Default | Allowed | Required | Description |
+|-----------|---------|---------|----------|-------------|
+| Prt | 0.90 | > 0 | no | Turbulent Prandtl number |
+| Sct | 0.90 | > 0 | no | Turbulent Schmidt number |
+| point-implicit | .false. | logical | no | Point-implicit (Patankar) treatment of the turbulence destruction source terms (steady runs only) |
+| omega-wall-bc | practical | practical, asymptotic | no | Omega wall condition of the k-omega models (SST, Wilcox2006): Menter practical $60\nu/(\beta_1 y^2)$, or asymptotic $6\nu/(\beta_1 y^2)$, the exact $y \to 0$ limit, for wall-resolved meshes |
+| k-coupling | .false. | logical | no | Couple turbulent kinetic energy into the mean-flow energy equation |
+| Prt-correction | .false. | logical | no | Turbulent-Prandtl correction for wall roughness (SA with `-rough`) |
+| sst-asymptotic | .false. | logical | no | Impose the asymptotic solution $\omega = 6\nu/(\beta_1 d^2)$ on the near-wall cells (SST only) |
+| sst-asymptotic-cells | 1 | >= 1 | no | Number of cells off viscous walls where the asymptotic $\omega$ is imposed |
+
+!!! note "Defaults that differ from MOSE"
+    `Prt` defaults to 0.90 in ARES and to 0.85 in MOSE; `point-implicit` to `.false.` in ARES and to `.true.` in MOSE.
 
 ## ARES-IO
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
-| ini-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw | no | Initial-condition (`INPUT/ic.*`) format |
+| ic-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw | no | Initial-condition (`INPUT/ic.*`) format |
 | sol-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw | no | Solution (`OUTPUT/field.*`) format |
 | sol-diter | 1000000000 | > 0 | no | Solution output frequency (iterations) |
 | sol-dtime | 1e30 | > 0 | no | Solution output frequency (physical time) |

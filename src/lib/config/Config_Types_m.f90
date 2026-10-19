@@ -17,7 +17,8 @@ module ARES_Config_Types_m
     real(R8)  :: res_threshold    ! Residuo min. per arresto esecuzione
     real(R8)  :: time_threshold   ! Tempo max per arresto esecuzione 
     integer   :: iter_threshold            ! Numero max iterate per arresto esecuzione
-    character(len=clen) :: simulation_type ! Type of simulation (euler, laminar, turbulent) 
+    character(len=clen) :: simulation_type ! Gas dynamics equations (euler, navier-stokes)
+    real(R8)  :: Sc               ! Laminar (molecular) Schmidt number (unused: ARES solves a single species)
     ! Useful variables
     integer         :: iter_general     ! Number of iteration - including all MG levels
     integer         :: iter_from_call
@@ -230,18 +231,19 @@ module ARES_Config_Types_m
     character(len=llen)   :: error_message
     character(len=llen)   :: description
     ! USER-DEFINED INPUTS
-    real(R8) :: Sc     ! Schmidt laminare
     real(R8) :: Sct    ! Schmidt turbolento
     real(R8) :: Prt    ! Prandtl turbolento
-    character(len=llen) :: rans_name
+    character(len=llen) :: model
     logical :: SAcomp, SpalartShur, SAR, rough
     logical :: QCR2000, blowing_corr, k_energy_coupling
     logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
+    character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
     logical :: Prt_correction   ! Turbulent Prandtl correction for wall roughness
     logical :: sst_asymptotic       ! Impose the SST asymptotic omega solution on the near-wall cells
     integer :: sst_asymptotic_cells ! Number of cells off the wall where the asymptotic omega is imposed
     ! Useful variables
     logical :: RSM, SD
+    real(R8) :: omega_wall_coef  ! coefficient C in omega_wall = C*mi_l/dist**2 (set by Setup_RANS_Model)
   end type rans_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

@@ -4,8 +4,8 @@
 
 The turbulent flat plate is the standard RANS validation case. ARES is run with each of its turbulence models on the same flow and compared against the **[NASA Turbulence Modeling Resource](https://turbmodels.larc.nasa.gov/) (TMR)** flat-plate reference data.
 
-| Case directory | `turbulence-model` | Verification script | Reference data |
-|----------------|--------------------|---------------------|----------------|
+| Case directory | `turbulence` | Verification script | Reference data |
+|----------------|--------------|---------------------|----------------|
 | `Flat_Plate_SA` | `SA` | `validate_sa.py` (reads `OUTPUT/1d.dat`) | `cf.dat` |
 | `Flat_Plate_SST` | `SST` | `validate_sst.py` | `cf.dat`, `kw.dat`, `mut.dat` |
 | `Flat_Plate_Wilcox2006` | `Wilcox2006` | `validate_wilcox2006.py` | `cf.dat`, `mut.dat` |
@@ -17,16 +17,16 @@ Running the same geometry through all four models exercises the one-equation, bo
 
 ## Problem definition
 
-A zero-pressure-gradient turbulent boundary layer over a flat plate, with `simulation-type = turbulent` and a `[ARES-RANS]` block selecting the model. The working fluid is air from a real-fluid $(p,h)$ table; the inflow carries the freestream turbulence values needed by the model — the specific `k`/`omega` for the two-equation models, `Rij`/`omega` for the RSM, `nuTilde` for SA (the matching `[ICB-Block1]` values are density-weighted: `rhoK`/`rhoOmega`, `rhoRij`/`rhoOmega`, `rhoNuTilde`).
+A zero-pressure-gradient turbulent boundary layer over a flat plate, with `equations = navier-stokes` and the model selected by `turbulence` in `[ARES-Physics]`. The working fluid is air from a real-fluid $(p,h)$ table; the inflow carries the freestream turbulence values needed by the model — the specific `k`/`omega` for the two-equation models, `Rij`/`omega` for the RSM, `nuTilde` for SA (the matching `[ICB-Block1]` values are density-weighted: `rhoK`/`rhoOmega`, `rhoRij`/`rhoOmega`, `rhoNuTilde`).
 
 The lower boundary is split into an upstream **symmetry** segment (ahead of the leading edge) and a downstream **adiabatic no-slip wall** (the plate), using the patch mechanism:
 
 ```ini
-[ARES-Parameters]
-simulation-type = turbulent
+[ARES-Physics]
+equations  = navier-stokes
+turbulence = SST           ; or SA / Wilcox2006 / SSGLRR
 
-[ARES-RANS]
-turbulence-model = SST     ; or SA / Wilcox2006 / SSGLRR
+[ARES-Turbulence]
 Prt = 0.85
 
 [wall]

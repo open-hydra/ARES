@@ -118,7 +118,7 @@ A model binds these procedure pointers in `Mod_RANS`:
 | `Stress_Vector` | Viscous + Reynolds stress on a face |
 | `RANS_Set_Wall_Values` | Wall boundary conditions |
 
-Add the model name to the `turbulence-model` allowed list in `Register_Physics` so it is validated and documented.
+Add the model name to the `turbulence` allowed list in `Register_Physics` so it is validated and documented.
 
 ---
 

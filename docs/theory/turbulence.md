@@ -1,9 +1,9 @@
 # Turbulence Modelling
 
-ARES provides Reynolds-Averaged Navier–Stokes (RANS) closures for turbulent flows, selected at run time by `turbulence-model` in `[ARES-RANS]` (active only when `simulation-type = turbulent`). The families range from a one-equation eddy-viscosity model to a full seven-equation Reynolds-stress model. All models are bound to procedure pointers at setup, so switching model requires no recompilation.
+ARES provides Reynolds-Averaged Navier–Stokes (RANS) closures for turbulent flows, selected at run time by `turbulence` in `[ARES-Physics]` (with `equations = navier-stokes`; `none`, the default, is a laminar run), with the options of the model in `[ARES-Turbulence]`: the same keys and sections as MOSE. The families range from a one-equation eddy-viscosity model to a full seven-equation Reynolds-stress model. All models are bound to procedure pointers at setup, so switching model requires no recompilation.
 
-| `turbulence-model` | Type | Notes |
-|--------------------|------|-------|
+| `turbulence` | Type | Notes |
+|--------------|------|-------|
 | `SA` | 1-equation eddy viscosity | Baseline Spalart–Allmaras |
 | `SA-R` | 1-equation | + rotation correction |
 | `SA-RC` | 1-equation | + Spalart–Shur rotation/curvature correction |
@@ -219,7 +219,13 @@ k_\text{wall} = 0,\qquad
 \omega_\text{wall} = \frac{60\,\nu}{\beta_1\,y^2} = \frac{800\,\nu}{y^2}\quad(\beta_1=0.075)
 $$
 
-the Menter approximate smooth-wall condition for the first cell at distance $y$.
+the Menter approximate smooth-wall condition for the first cell at distance $y$. This is the default, `omega-wall-bc = practical` in `[ARES-Turbulence]`. On a wall-resolved mesh ($y^+ < 1$), `omega-wall-bc = asymptotic` uses instead the exact $y\to0$ limit of the $\omega$ equation,
+
+$$
+\omega_\text{wall} = \frac{6\,\nu}{\beta_1\,y^2} = \frac{80\,\nu}{y^2},
+$$
+
+as in MOSE. The key sets the wall condition of the Wilcox 2006 model as well. Separately, `sst-asymptotic = .true.` (SST only, ARES only) imposes the same asymptotic value on the first `sst-asymptotic-cells` cells off each viscous wall, removing them from the time integration of the $\omega$ equation.
 
 ### Energy coupling *(optional)*
 
@@ -312,7 +318,7 @@ which reintroduces stress anisotropy. In ARES it is layered on top of SA (`SA-QC
 
 ### Procedure-pointer architecture
 
-All models are accessed through **procedure pointers** in `Mod_RANS`, bound at setup by the `turbulence-model` key:
+All models are accessed through **procedure pointers** in `Mod_RANS`, bound at setup by the `turbulence` key:
 
 | Pointer | Purpose |
 |---------|---------|
@@ -330,7 +336,7 @@ The `-blowcorr` suffix activates a correction (`RANS_Set_Blowing_Wall`) that mod
 
 ### Turbulent transport numbers and corrections
 
-`[ARES-RANS]` also sets the turbulent Prandtl ($\mathrm{Pr}_t$, default 0.90) and Schmidt ($\mathrm{Sc}_t$) numbers used in the [effective conductivity](thermo.md#transport-properties), the optional turbulent-kinetic-energy coupling into the energy equation (`k-coupling`), and a wall-roughness Prandtl correction (`Prt-correction`, requires an `-rough` SA model) that adjusts $\mathrm{Pr}_t$ near rough walls.
+`[ARES-Turbulence]` also sets the turbulent Prandtl ($\mathrm{Pr}_t$, default 0.90) and Schmidt ($\mathrm{Sc}_t$) numbers used in the [effective conductivity](thermo.md#transport-properties), the optional turbulent-kinetic-energy coupling into the energy equation (`k-coupling`), and a wall-roughness Prandtl correction (`Prt-correction`, requires an `-rough` SA model) that adjusts $\mathrm{Pr}_t$ near rough walls.
 
 ---
 

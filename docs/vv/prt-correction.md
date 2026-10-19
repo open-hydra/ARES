@@ -94,8 +94,9 @@ so the pairs $(\tilde\nu_w,\,y_n{=}0)$ and $(\tilde\nu_c,\,y_n{=}y_c)$ give an i
 ## Configuration
 
 ```ini
-[ARES-Parameters]
-simulation-type = turbulent
+[ARES-Physics]
+equations  = navier-stokes
+turbulence = SA-rough
 
 [ARES-Numerics]
 cfl                     = 0.2
@@ -106,8 +107,7 @@ riemann-solver          = HLLC Prec
 preconditioning-Uref    = 120.0
 preconditioning-eps-min = 0.1
 
-[ARES-RANS]
-turbulence-model = SA-rough
+[ARES-Turbulence]
 Prt              = 0.9
 Prt-correction   = .true.        ; <-- the feature under test
 

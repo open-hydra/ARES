@@ -20,10 +20,21 @@ contains
     use ARES_Lib_Preconditioning
     implicit none
 
-    ! Setting simulation type
-    if (obj_sim_param%simulation_type=='euler') model = 0
-    if (obj_sim_param%simulation_type=='laminar') model = 1
-    if (obj_sim_param%simulation_type=='turbulent') model = 2
+    ! Setting simulation type, as in MOSE: navier-stokes is laminar without a turbulence model
+    if (obj_sim_param%simulation_type=='euler') then
+      model = 0
+      if (obj_rans%model /= 'none' .and. obj_rans%model /= '') &
+        obj_rans%error_message = '[ERROR] turbulence = '//trim(obj_rans%model)// &
+          ' needs equations = navier-stokes in [ARES-Physics]: the euler equations are inviscid.'
+      obj_rans%model = 'none'
+    elseif (obj_sim_param%simulation_type=='navier-stokes') then
+      if (obj_rans%model == 'none' .or. obj_rans%model == '') then
+        model = 1
+        obj_rans%model = 'none'
+      else
+        model = 2
+      end if
+    endif
 
     ! Auto-enable preconditioning when integration variables are preconditioned
     if ( trim(obj_time_scheme%integration_variables) == 'prec' ) then
@@ -79,7 +90,6 @@ contains
     call Assign_Integration_Variables()
 
     ! Assign RANS model
-    if (model==1) obj_rans%rans_name = 'laminar'
     call Setup_RANS_Model()
 
     ! Point-implicit treatment of the turbulence source terms is a steady-state
@@ -87,7 +97,7 @@ contains
     if ( nRANS > 0 .and. .not. obj_rans%RSM .and. obj_rans%point_implicit .and. &
          ( obj_time_scheme%time_accurate .or. obj_sim_param%HYDRA_time_accurate ) ) then
       obj_rans%error_message = '[ERROR] Time-accurate simulations are not compatible with the point-implicit ' // &
-        'treatment of the turbulence source terms. Set point-implicit = .false. in the RANS section.'
+        'treatment of the turbulence source terms. Set point-implicit = .false. in [ARES-Turbulence].'
     end if
 
     ! Assign Rotating frame
@@ -105,9 +115,7 @@ contains
     ! Simulation type
     if (obj_sim_param%simulation_type == 'euler') then
       obj_sim_param%description = 'Euler'
-    else if (obj_sim_param%simulation_type == 'laminar') then
-      obj_sim_param%description = 'Navier-Stokes'
-    else if (obj_sim_param%simulation_type == 'turbulent') then
+    else if (obj_sim_param%simulation_type == 'navier-stokes') then
       obj_sim_param%description = 'Navier-Stokes'
     end if
     ! Time scheme

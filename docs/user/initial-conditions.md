@@ -129,7 +129,7 @@ ATLAS writes the IC file ARES actually loads. It stores both the **node coordina
 | Tecplot Binary | `.szplt` | Compact and fast; requires TecIO (`--use-tecio`) |
 | VTK structured | `.vts`, `.vtm` | Open standard; good for large datasets |
 
-The format is selected with `ini-format` in `[ARES-IO]` (`tecplot ascii`, `tecplot binary`, `vtk ascii`, `vtk raw`) and must match the file ATLAS actually wrote:
+The format is selected with `ic-format` in `[ARES-IO]` (`tecplot ascii`, `tecplot binary`, `vtk ascii`, `vtk raw`) and must match the file ATLAS actually wrote:
 
 ```
 INPUT/ic.tec          ← Tecplot ASCII (default)

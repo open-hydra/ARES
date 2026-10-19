@@ -1,7 +1,7 @@
 module ARES_Backend_INI
   implicit none
   private
-  public :: Load_Ini, Scan_Ini
+  public :: Load_Ini, Scan_Ini, Obsolete_Keys
 
 contains
 
@@ -75,7 +75,7 @@ contains
     !obj_rot%n_stationary = 0
     !i = 0
     !do
-    !  call fini%get(section_name=trim(codename)//'-rotating-frame',option_name='stationary-face-'//trim(str(.true.,i+1)), val=wholestring, error=error)
+    !  call fini%get(section_name=trim(codename)//'-Rotating-Frame',option_name='stationary-face-'//trim(str(.true.,i+1)), val=wholestring, error=error)
     !  if (error /= 0) exit
     !  obj_rot%n_stationary = obj_rot%n_stationary + 1
     !enddo
@@ -83,5 +83,34 @@ contains
     !if (obj_rot%n_stationary > 0) allocate(obj_rot%stationary_face_str(obj_rot%n_stationary))
     
   end subroutine Scan_Ini
+
+
+  !> Keys of the input layout ARES had before it took the one of MOSE. The registry no longer
+  !  reads them, so they would be ignored without a word (a turbulent case would run laminar):
+  !  Check_Input stops on the message returned here, empty when there is none.
+  function Obsolete_Keys(fini) result(out)
+    use Finer, only: file_ini
+    use ARES_Global_m
+    implicit none
+    type(file_ini), intent(in) :: fini
+    character(len=hlen) :: out
+    ! Local
+    character(len=:), allocatable :: s, item
+
+    out = ''
+    s = trim(codename)
+    item = new_line('a')//'      - '
+    if (fini%index(section_name=s//'-Parameters', option_name='simulation-type') > 0) &
+      out = trim(out)//item//'simulation-type of ['//s//'-Parameters] is now equations = euler or navier-stokes in ['// &
+            s//'-Physics] (laminar: navier-stokes, turbulent: navier-stokes with turbulence = <model>)'
+    if (fini%has_section(section_name=s//'-RANS')) &
+      out = trim(out)//item//'['//s//'-RANS] is gone: turbulence-model is now turbulence in ['//s//'-Physics], Sc is schmidt in ['// &
+            s//'-Physics], the other keys are in ['//s//'-Turbulence]'
+    if (fini%index(section_name=s//'-IO', option_name='ini-format') > 0) &
+      out = trim(out)//item//'ini-format of ['//s//'-IO] is now ic-format'
+    if (len_trim(out) > 0) &
+      out = '[ERROR] input.ini uses keys of the earlier ARES layout, ARES now reads the same keys as MOSE:'//trim(out)
+
+  end function Obsolete_Keys
 
 end module ARES_Backend_INI

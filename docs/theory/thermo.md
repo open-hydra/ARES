@@ -84,7 +84,7 @@ $$
 \kappa = k_\ell + \frac{\mu_t\,c_p}{\mathrm{Pr}_t},
 $$
 
-with the turbulent Prandtl number $\mathrm{Pr}_t$ taken from `[ARES-RANS]` (default 0.90). An optional [wall-roughness Prandtl correction](turbulence.md) (`Prt-correction`) modifies $\mathrm{Pr}_t$ near rough walls.
+with the turbulent Prandtl number $\mathrm{Pr}_t$ taken from `[ARES-Turbulence]` (default 0.90). An optional [wall-roughness Prandtl correction](turbulence.md) (`Prt-correction`) modifies $\mathrm{Pr}_t$ near rough walls.
 
 ---
 

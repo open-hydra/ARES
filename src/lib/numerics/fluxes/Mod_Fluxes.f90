@@ -10,7 +10,7 @@ contains
     subroutine Fluxes ( domain )
       use ARES_Advanced_Types_m
       use ARES_Mod_MPI, only: is_local_block
-      use ARES_Config_Types_m, only: obj_riemann, obj_rans
+      use ARES_Config_Types_m, only: obj_riemann, obj_rans, obj_sim_param
 
       implicit none
       type(ARES_domain_type), intent(inout) :: domain
@@ -19,7 +19,7 @@ contains
       real(R8) :: Sc, Sct, Prt
       logical :: Prt_corr
 
-      Sc  = obj_rans%Sc
+      Sc  = obj_sim_param%Sc
       Sct = obj_rans%Sct
       Prt = obj_rans%Prt
       Prt_corr = obj_rans%Prt_correction

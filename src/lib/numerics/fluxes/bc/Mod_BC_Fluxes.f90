@@ -25,7 +25,7 @@ contains
 
   subroutine BC_Fluxes_core ( bc, blk, n_bf, nb, nbc, nblk )
     use ARES_Advanced_Types_m
-    use ARES_Config_Types_m, only: obj_rans, obj_space_scheme, obj_riemann
+    use ARES_Config_Types_m, only: obj_rans, obj_sim_param, obj_space_scheme, obj_riemann
     use ARES_Global_m, only: model, np, nrans
     use ARES_Mod_MPI, only: is_local_block
     use ARES_Lib_BC_Fluxes_Connection
@@ -50,7 +50,7 @@ contains
     real(R8) :: Sc, Sct, Prt
     logical  :: Prt_corr
 
-    Sc  = obj_rans%Sc
+    Sc  = obj_sim_param%Sc
     Sct = obj_rans%Sct
     Prt = obj_rans%Prt
     Prt_corr = obj_rans%Prt_correction
