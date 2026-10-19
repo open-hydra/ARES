@@ -266,10 +266,16 @@ contains
 
     subroutine Check_Input()
       use ARES_Input_Registry
+      use ARES_Backend_INI, only: Obsolete_Keys
+      use Finer,            only: file_ini
       implicit none
       character(len=hlen) :: out
+      type(file_ini) :: fini
 
-      out = Validate_Registry()
+      ! Keys of the earlier layout first: they also explain a missing required key (equations)
+      call fini%load(filename='input.ini')
+      out = Obsolete_Keys(fini)
+      if (len_trim(out) == 0) out = Validate_Registry()
       if (index(out,'ERROR')>0) then
         write(*,'(A,T35,A)') '   Input file', 'FAIL'
         write(*,'(4X,A)') trim(out)
@@ -402,9 +408,11 @@ contains
       if (model==1) then
         write(*,'(A,T35,A)') '   Viscous model', 'Laminar'
       elseif (model==2) then
-        write(*,'(A,T35,A)') '   Viscous model', 'Turbulent, '//trim(obj_rans%rans_name)
+        write(*,'(A,T35,A)') '   Viscous model', 'Turbulent, '//trim(obj_rans%model)
         if (obj_rans%point_implicit) &
           write(*,'(A,T35,A)') '   Point-implicit', 'ON (Patankar destruction source terms)'
+        if (nRANS == 2 .and. trim(obj_rans%omega_wall_bc) == 'asymptotic') &
+          write(*,'(A,T35,A)') '   Omega wall condition', 'asymptotic (6*nu/(beta1*y^2))'
         if (obj_rans%Prt_correction) &
           write(*,'(A,T35,A)') '   Prt correction', 'ON (rough-wall turbulent Prandtl)'
         if (obj_rans%sst_asymptotic) &

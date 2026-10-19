@@ -13,8 +13,11 @@ Parameters not listed take their **default** value. Example:
 
 ```ini
 [ARES-Parameters]
-simulation-type = turbulent
 iter-threshold  = 700000
+
+[ARES-Physics]
+equations  = navier-stokes
+turbulence = SST
 
 [ARES-Numerics]
 cfl                   = 0.6
@@ -23,9 +26,6 @@ integration-variables = prim
 space-reconstruction  = MUSCL
 flux-limiter          = vanleer
 riemann-solver        = HLLC
-
-[ARES-RANS]
-turbulence-model = SST
 ```
 
 !!! warning "Defaults are silent"
@@ -39,15 +39,30 @@ These are read by ARES and validated against the registry.
 
 | Section | Description | Reference |
 |---------|-------------|-----------|
-| `[ARES-Parameters]` | Simulation type, convergence thresholds, restart | [→](registry.md#ares-parameters) |
+| `[ARES-Parameters]` | Convergence thresholds, restart | [→](registry.md#ares-parameters) |
+| `[ARES-Physics]` | Equations and turbulence model | [→](registry.md#ares-physics) |
+| `[ARES-Turbulence]` | Options of the turbulence model: turbulent Prandtl/Schmidt numbers, omega wall condition, ... | [→](registry.md#ares-turbulence) |
 | `[ARES-Numerics]` | Time/space discretization, Riemann solver, CFL, IRS, preconditioning | [→](registry.md#ares-numerics) |
 | `[ARES-IO]` | Output formats, frequencies, and variables | [→](registry.md#ares-io) |
-| `[ARES-RANS]` | Turbulence model and turbulent transport numbers | [→](registry.md#ares-rans) |
 | `[ARES-Probes]` | Point probes for time-history recording | [→](registry.md#ares-probes) |
 | `[ARES-Multigrid]` | Per-level multigrid iteration counts | [→](registry.md#ares-multigrid) |
 
-!!! note "`simulation-type`, not `equations`"
-    The flow regime is selected with a single key, `simulation-type` = `euler` · `laminar` · `turbulent`, in `[ARES-Parameters]`. There is no separate "equations" key: `euler` solves the inviscid system, while `laminar` and `turbulent` solve Navier–Stokes (the latter activating the model named in `[ARES-RANS]`).
+!!! note "Same layout as MOSE"
+    The flow regime is set in `[ARES-Physics]` with the keys of `[MOSE-Physics]`: `equations` = `euler` · `navier-stokes`, and `turbulence` = the RANS model (default `none`). `navier-stokes` with `turbulence = none` is a laminar run; `euler` takes no turbulence model. The options of the model are in `[ARES-Turbulence]`, as in `[MOSE-Turbulence]`.
+
+!!! warning "Input files of earlier ARES versions"
+    `simulation-type` in `[ARES-Parameters]`, the `[ARES-RANS]` section and `ini-format` in `[ARES-IO]` are no longer read. ARES stops at set-up if it finds them, and says where each key went:
+
+    | Earlier key | Now |
+    |-------------|-----|
+    | `[ARES-Parameters]` `simulation-type = euler` | `[ARES-Physics]` `equations = euler` |
+    | `[ARES-Parameters]` `simulation-type = laminar` | `[ARES-Physics]` `equations = navier-stokes` |
+    | `[ARES-Parameters]` `simulation-type = turbulent` + `[ARES-RANS]` `turbulence-model = <model>` | `[ARES-Physics]` `equations = navier-stokes`, `turbulence = <model>` |
+    | `[ARES-RANS]` `Sc` | `[ARES-Physics]` `schmidt` |
+    | `[ARES-RANS]` `Prt`, `Sct`, `point-implicit`, `k-coupling`, `Prt-correction`, `sst-asymptotic`, `sst-asymptotic-cells` | `[ARES-Turbulence]`, same names |
+    | `[ARES-IO]` `ini-format` | `[ARES-IO]` `ic-format` |
+
+    `time-scheme` in `[ARES-Numerics]` is now required: an input without it stops at set-up.
 
 ---
 

@@ -265,7 +265,9 @@ contains
     real(kind=8), intent(in)                     :: ks                    ! : roughness of nearest wall
     
     rkw_wall(1) = 0d0 ! Solid surface condition on k
-    rkw_wall(2) = 8d2 * mil_wall / ( dist**2 ) ! approximate BC for smooth surface (Menter kw-SST)
+    ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
+    ! (800 = Menter practical, 80 = asymptotic y->0 limit). See Setup_RANS_Model.
+    rkw_wall(2) = obj_rans%omega_wall_coef * mil_wall / ( dist**2 )
 
   end subroutine SST_Set_Wall_Values
 

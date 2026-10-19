@@ -77,7 +77,7 @@ The limiter $\phi(a,b)$ is selected by `flux-limiter`. All are expressed via the
 | `minmod` | Most diffusive TVD limiter; strictly monotone |
 | `vanleer` | Smooth, differentiable; good dissipation/accuracy balance |
 | `vanalbada` | Smooth; less dissipative than van Leer near extrema |
-| `MC` | Monotonized-central; steepest gradients inside the TVD region |
+| `MC` (or `mc`, as in MOSE) | Monotonized-central; steepest gradients inside the TVD region |
 | `superbee` | Sharpest TVD limiter; excellent at steep gradients |
 | `LIMO3` | Third-order limiter (Čada–Torrilhon) — third-order accurate in smooth regions while remaining non-oscillatory |
 | `none` | No limiting (unlimited reconstruction) |

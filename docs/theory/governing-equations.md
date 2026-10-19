@@ -1,6 +1,6 @@
 # Governing Equations
 
-ARES solves the compressible Navier–Stokes equations for a **single real fluid** in conservative form on structured multi-block grids. Both the inviscid (Euler) and viscous (Navier–Stokes) limits are supported, selected by `simulation-type`.
+ARES solves the compressible Navier–Stokes equations for a **single real fluid** in conservative form on structured multi-block grids. Both the inviscid (Euler) and viscous (Navier–Stokes) limits are supported, selected by `equations` in `[ARES-Physics]`.
 
 The governing system is
 
@@ -110,7 +110,7 @@ $$
 \kappa = k_\ell + \frac{\mu_t\,c_p}{\mathrm{Pr}_t}
 $$
 
-The molecular conductivity $k_\ell(p,h)$ and $c_p(p,h)$ come from the real-fluid table; $\mathrm{Pr}_t$ is the turbulent Prandtl number from `[ARES-RANS]`.
+The molecular conductivity $k_\ell(p,h)$ and $c_p(p,h)$ come from the real-fluid table; $\mathrm{Pr}_t$ is the turbulent Prandtl number from `[ARES-Turbulence]`.
 
 ### Diffusive flux vector
 

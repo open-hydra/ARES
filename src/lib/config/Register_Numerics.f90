@@ -27,7 +27,7 @@ contains
     obj_time_scheme%description     = 'none'
 
     ! Solver-type
-    call reg%add( trim(section), 'time-scheme', obj_time_scheme%solver_type, 'euler', 'Time integration solver', 'euler, RK2, RK3', .false. )
+    call reg%add( trim(section), 'time-scheme', obj_time_scheme%solver_type, 'euler', 'Time integration solver', 'euler, RK2, RK3', .true. )
 
     ! Stability coefficients and related options
     call reg%add( trim(section), 'cfl', obj_time_scheme%cfl, '0.5', 'CFL number', '> 0', .true. )
@@ -65,7 +65,7 @@ contains
     obj_space_scheme%warning_message = 'none'
     obj_space_scheme%error_message   = 'none'
     call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, 'none', 'Space reconstruction method', 'MUSCL, first-order, none', .true. )
-    call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, 'none', 'Flux limiter for space reconstruction', 'vanalbada, minmod, superbee, vanleer, MC, LIMO3, none', .false. )
+    call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, 'none', 'Flux limiter for space reconstruction', 'vanalbada, minmod, superbee, vanleer, mc, MC, LIMO3, none', .false. )
 
 
     ! Riemann solver ---------------------------------------

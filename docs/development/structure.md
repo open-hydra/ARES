@@ -150,7 +150,7 @@ The convective flux at each interface is built in stages from a 4-point stencil:
 
 ## RANS Turbulence Models
 
-`Assign_Setup` calls `Setup_RANS_Model` (`Mod_RANS.f90`), which matches the **base name** of `turbulence-model` and binds the implementation to procedure pointers:
+`Assign_Setup` calls `Setup_RANS_Model` (`Mod_RANS.f90`), which matches the **base name** of `turbulence` (`obj_rans%model`) and binds the implementation to procedure pointers:
 
 | Base name | Library | Description |
 |-----------|---------|-------------|
@@ -172,7 +172,7 @@ The selection is suffix-based: modifiers are detected with `index()` on the mode
 | `SAcomp` | SA compressibility correction (Paciorri–Sabetta) |
 | `SSGLRR-SD` | SSG-LRR with simple-diffusion model |
 
-The separate `Prt-correction` key (in `[ARES-RANS]`) requires an SA model with `-rough` active, and is calibrated for `Prt = 0.9`.
+The separate `Prt-correction` key (in `[ARES-Turbulence]`) requires an SA model with `-rough` active, and is calibrated for `Prt = 0.9`.
 
 ---
 

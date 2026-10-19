@@ -102,7 +102,7 @@ Convergence you cannot see is convergence you cannot diagnose.
 - `shell-diter` — console refresh. Large values on long batch runs, small while watching.
 - `sol-diter` / `sol-dtime` — field output by iteration or by physical time. Both default to effectively never, so a run left alone writes only at the end.
 - `sol-overwrite = false` — write **numbered snapshots** instead of overwriting. This is the key to use when a run diverges and you need to see *where* it went wrong: without it the only surviving field is the corrupted one.
-- `sol-variables`, `wall-variables` — which variable groups end up in the output; `ini-format` / `sol-format` — ASCII or binary, Tecplot or VTK. ASCII is portable and slow, binary the opposite.
+- `sol-variables`, `wall-variables` — which variable groups end up in the output; `ic-format` / `sol-format` — ASCII or binary, Tecplot or VTK. ASCII is portable and slow, binary the opposite.
 - `[ARES-Probes]` — point histories by index or coordinates, with their own `diter`/`dtime`. The cheapest way to watch a single location converge without dumping fields.
 
 ---

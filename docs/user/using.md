@@ -40,6 +40,9 @@ my_case/
     ├── field.*               ← solution fields (when sol-overwrite = true)
     ├── field1.*, field2.*    ← solution snapshots (when sol-overwrite = false)
     ├── wall.*                ← wall quantities (viscous cases only)
+    ├── diagnostic.*          ← cell residuals and local time step (steady runs only)
+    ├── field-level<N>.*      ← solution on multigrid level N > 1
+    ├── field-prolongated.*   ← level-N solution prolongated to the finest grid
     ├── residual-history.dat  ← residual norm vs. iteration
     └── <probe>.txt           ← time-history at probe locations
 ```
@@ -139,7 +142,20 @@ After a run, the `OUTPUT/` directory contains:
 | `field.*` | Solution fields ($p$, $u$, $v$, $w$, $T$, $\rho$, $h$, …) |
 | `residual-history.dat` | Iteration-by-iteration residual norms |
 | `wall.*` | Wall quantities (skin friction, heat flux) — viscous cases only |
+| `diagnostic.*` | Cell residuals of every transported variable and the local time step `dt` — steady runs only |
 | `<probe>.txt` | Time-history at the probe named `<probe>` |
+
+### Multigrid output
+
+With `levels > 1` in `[ARES-Multigrid]` the run starts on the coarsest level, and the files above belong to the finest one (level 1). While a coarse level $N$ is running, each solution output (`sol-diter`, `sol-dtime`, and the switch to the next finer level) writes:
+
+| File | Description |
+|------|-------------|
+| `field-level<N>.*` | Solution on the grid of level $N$ |
+| `field-prolongated.*` | The level-$N$ solution prolongated to the finest grid |
+| `wall-prolongated.*` | Wall quantities of the prolongated solution — viscous cases only |
+
+If the run ends on a coarse level (a threshold of `[ARES-Parameters]` is reached before level 1), the final files carry the level as well, `field-level<N>.*`, `wall-level<N>.*` and `diagnostic-level<N>.*`, and do not overwrite those of the finest level.
 
 ### I/O formats
 

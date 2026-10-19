@@ -62,8 +62,9 @@ $$
 ## Configuration
 
 ```ini
-[ARES-Parameters]
-simulation-type = turbulent
+[ARES-Physics]
+equations  = navier-stokes
+turbulence = SA
 
 [ARES-Numerics]
 cfl                     = 0.3
@@ -74,8 +75,7 @@ riemann-solver          = HLLC Prec
 preconditioning-Uref    = 600.0
 preconditioning-eps-min = 0.1
 
-[ARES-RANS]
-turbulence-model = SA
+[ARES-Turbulence]
 Prt = 0.9
 
 [GPB-Phase1]
