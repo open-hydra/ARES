@@ -52,7 +52,7 @@ contains
       case ('vanalbada')
         rlimiter => rlimiter_VANALBADA
         marker = 'Van Albada'
-      case ('MC', 'mc')   ! mc: the MOSE spelling
+      case ('MC', 'mc')
         rlimiter => rlimiter_MC
         marker = 'MC'
       case ('LIMO3')
