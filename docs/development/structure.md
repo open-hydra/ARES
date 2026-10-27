@@ -171,6 +171,7 @@ The selection is suffix-based: modifiers are detected with `index()` on the mode
 | `-blowcorr` | Wall-blowing correction of the $k$–$\omega$ wall BC (SST / Wilcox2006) |
 | `SAcomp` | SA compressibility correction (Paciorri–Sabetta) |
 | `SSGLRR-SD` | SSG-LRR with simple-diffusion model |
+| `SSGLRR-w2019` | SSG-LRR with the length-scale correction of the $\omega$ equation (`LSC`) |
 
 The separate `Prt-correction` key (in `[ARES-Turbulence]`) requires an SA model with `-rough` active, and is calibrated for `Prt = 0.9`.
 

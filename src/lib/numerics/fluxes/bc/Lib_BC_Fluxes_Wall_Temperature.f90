@@ -84,8 +84,8 @@ contains
     ! Transformation
     Gradient = matmul ( Gradient, M )
 
-    ! Stress vector
-    Stress = Stress_Vector ( Gradient(nu:nw,:), Normal, mil, mit, Prim(nt:) )
+    ! Stress vector (turbulent variables at the wall face: Rij = 0 and k = 0)
+    Stress = Stress_Vector ( Gradient(nu:nw,:), Normal, mil, mit, Prim_Wall(nt:) )
     cp = ph2vars(pressure, entalpy, hT_tab ) 
     if ( obj_rans%Prt_correction ) then
       ! Evaluated at the wall face (y=0). The rough-wall value mitilde_w = vk*u_tau*rho*0.03*hs

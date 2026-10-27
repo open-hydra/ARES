@@ -243,6 +243,7 @@ module ARES_Config_Types_m
     integer :: sst_asymptotic_cells ! Number of cells off the wall where the asymptotic omega is imposed
     ! Useful variables
     logical :: RSM, SD
+    logical :: LSC               ! SSG/LRR-w2019 length-scale correction of the omega equation
     real(R8) :: omega_wall_coef  ! coefficient C in omega_wall = C*mi_l/dist**2 (set by Setup_RANS_Model)
   end type rans_t
   !! ------------------------------------------------------

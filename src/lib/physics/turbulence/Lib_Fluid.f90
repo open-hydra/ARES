@@ -121,8 +121,8 @@ contains
     W(1,3) =  0.5d0*omega(2)
     W(3,1) = -0.5d0*omega(2)
 
-    W(2,3) =  0.5d0*omega(1)
-    W(3,2) = -0.5d0*omega(1)
+    W(2,3) = -0.5d0*omega(1)
+    W(3,2) =  0.5d0*omega(1)
   end function
 
 

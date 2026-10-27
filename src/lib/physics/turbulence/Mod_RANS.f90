@@ -25,6 +25,7 @@ contains
     obj_rans%blowing_corr = .false.
     obj_rans%rough = .false.
     obj_rans%RSM = .false.
+    obj_rans%LSC = .false.
 
     if (trim(obj_rans%model) == 'SAcomp') then
       obj_rans%SAcomp = .true.
@@ -76,7 +77,7 @@ contains
       obj_rans%sst_asymptotic = .false.
     end if
 
-    ! Omega wall condition (k-omega models): omega_wall = C * mi_l / dist**2.
+    ! Omega wall condition (k-omega models and SSGLRR): omega_wall = C * mi_l / dist**2.
     ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, meant for meshes
     !                 that do not resolve the viscous sublayer.
     ! 'asymptotic' -> C =  6/beta_1 =  80 : exact y->0 limit of the omega equation,
@@ -158,6 +159,8 @@ contains
     elseif ( index ( trim(obj_rans%model), 'SSGLRR' ) > 0 ) then
       nRANS = 7
       obj_rans%RSM = .true.
+      ! w2019: length-scale correction of the omega destruction (default is w2012)
+      obj_rans%LSC = index ( trim(obj_rans%model), '-w2019' ) > 0
       Eddy_Viscosity => SSGLRR_Eddy_Viscosity
       if ( index ( trim(obj_rans%model), '-SD' ) > 0 ) then
         RANS_Diffusive_Flux => SSGLRR_SD_RANS_Diffusive_Flux

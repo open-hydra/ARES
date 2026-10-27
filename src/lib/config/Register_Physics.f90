@@ -26,7 +26,7 @@ contains
     ! Same keys as [MOSE-Physics]: the equations and the turbulence model
     section = trim(codename)//'-Physics'
     call reg%add(section, 'equations', obj_sim_param%simulation_type, '', 'Gas dynamics equations', 'euler , navier-stokes', .true.)
-    call reg%add(section, 'turbulence', obj_rans%model, 'none', 'RANS turbulence model', 'SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, Wilcox2006, SSGLRR, none', .false.)
+    call reg%add(section, 'turbulence', obj_rans%model, 'none', 'RANS turbulence model', 'SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none', .false.)
     ! Laminar (molecular) transport closure
     call reg%add(section, 'schmidt', obj_sim_param%Sc, '0.0', 'Laminar Schmidt number (unused: ARES solves a single species)', '>= 0', .false.)
 
@@ -39,7 +39,7 @@ contains
     call reg%add(section, 'Prt', obj_rans%Prt, '0.90', 'Turbulent Prandtl number', '> 0', .false.)
     call reg%add(section, 'Sct', obj_rans%Sct, '0.90', 'Turbulent Schmidt number', '> 0', .false.)
     call reg%add(section, 'point-implicit', obj_rans%point_implicit, '.false.', 'Point-implicit (Patankar) treatment of turbulence destruction source terms', 'logical', .false.)
-    call reg%add(section, 'omega-wall-bc', obj_rans%omega_wall_bc, 'practical', 'Omega wall condition for k-omega models: Menter practical (60*nu/(beta1*y^2)) or asymptotic (6*nu/(beta1*y^2), exact y->0 limit, for wall-resolved meshes)', 'practical, asymptotic', .false.)
+    call reg%add(section, 'omega-wall-bc', obj_rans%omega_wall_bc, 'practical', 'Omega wall condition for k-omega models and SSGLRR: Menter practical or asymptotic', 'practical, asymptotic', .false.)
     call reg%add(section, 'k-coupling', obj_rans%k_energy_coupling, '.false.', 'Turbulent kinetic energy coupling', 'logical', .false.)
     call reg%add(section, 'Prt-correction', obj_rans%Prt_correction, '.false.', 'Turbulent Prandtl correction for wall roughness', 'logical', .false.)
     call reg%add(section, 'sst-asymptotic', obj_rans%sst_asymptotic, '.false.', 'Impose the asymptotic solution omega = 6*nu/(beta_1*d^2) on the near-wall cells (SST only)', 'logical', .false.)

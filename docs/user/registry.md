@@ -54,7 +54,7 @@ The keys of `[MOSE-Physics]` that apply to a single real fluid.
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | equations | *(none)* | euler , navier-stokes | **yes** | Gas dynamics equations |
-| turbulence | none | SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, Wilcox2006, SSGLRR, none | no | RANS turbulence model |
+| turbulence | none | SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none | no | RANS turbulence model |
 | schmidt | 0.0 | >= 0 | no | Laminar Schmidt number (no effect: ARES solves a single species) |
 
 !!! note
@@ -69,7 +69,7 @@ The first four keys are those of `[MOSE-Turbulence]`; the others exist in ARES o
 | Prt | 0.90 | > 0 | no | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 | no | Turbulent Schmidt number |
 | point-implicit | .false. | logical | no | Point-implicit (Patankar) treatment of the turbulence destruction source terms (steady runs only) |
-| omega-wall-bc | practical | practical, asymptotic | no | Omega wall condition of the k-omega models (SST, Wilcox2006): Menter practical $60\nu/(\beta_1 y^2)$, or asymptotic $6\nu/(\beta_1 y^2)$, the exact $y \to 0$ limit, for wall-resolved meshes |
+| omega-wall-bc | practical | practical, asymptotic | no | Omega wall condition of the k-omega models (SST, Wilcox2006) and of SSGLRR: Menter practical $60\nu/(\beta_1 y^2)$, or asymptotic $6\nu/(\beta_1 y^2)$, the exact $y \to 0$ limit, for wall-resolved meshes |
 | k-coupling | .false. | logical | no | Couple turbulent kinetic energy into the mean-flow energy equation |
 | Prt-correction | .false. | logical | no | Turbulent-Prandtl correction for wall roughness (SA with `-rough`) |
 | sst-asymptotic | .false. | logical | no | Impose the asymptotic solution $\omega = 6\nu/(\beta_1 d^2)$ on the near-wall cells (SST only) |

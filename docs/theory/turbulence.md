@@ -13,7 +13,7 @@ ARES provides Reynolds-Averaged Navier–Stokes (RANS) closures for turbulent fl
 | `SA-rough-QCR2000` | 1-eq + algebraic | roughness + QCR2000 |
 | `SST` | 2-equation $k$–$\omega$ | Menter Shear-Stress Transport (2003) |
 | `Wilcox2006` | 2-equation $k$–$\omega$ | Wilcox 2006 revision |
-| `SSGLRR` | 7-equation RSM | Speziale–Sarkar–Gatski / Launder–Reece–Rodi ($\omega$-2019) |
+| `SSGLRR` | 7-equation RSM | Speziale–Sarkar–Gatski / Launder–Reece–Rodi (w2012; `-SD`, `-w2019` variants) |
 | `none` | — | Laminar (no model) |
 
 Any of the `-blowcorr` suffix (wall-transpiration correction) and the `Prt-correction` key can be combined with the eligible base models (see [General RANS Architecture](#general-rans-architecture)).
@@ -225,7 +225,7 @@ $$
 \omega_\text{wall} = \frac{6\,\nu}{\beta_1\,y^2} = \frac{80\,\nu}{y^2},
 $$
 
-as in MOSE. The key sets the wall condition of the Wilcox 2006 model as well. Separately, `sst-asymptotic = .true.` (SST only, ARES only) imposes the same asymptotic value on the first `sst-asymptotic-cells` cells off each viscous wall, removing them from the time integration of the $\omega$ equation.
+as in MOSE. The key sets the wall condition of the Wilcox 2006 and SSG-LRR models as well. Separately, `sst-asymptotic = .true.` (SST only, ARES only) imposes the same asymptotic value on the first `sst-asymptotic-cells` cells off each viscous wall, removing them from the time integration of the $\omega$ equation.
 
 ### Energy coupling *(optional)*
 
@@ -289,7 +289,7 @@ The $\omega$-production uses the $\gamma\,(\omega/k)\,P_k$ form.
 
 ## SSG-LRR Reynolds-Stress Model
 
-The SSG-LRR-$\omega$ model (NASA RSM-SSGLRR-$\omega$2019) transports the six independent Reynolds stresses $R_{ij}$ plus $\omega$ — seven equations total — removing the Boussinesq assumption entirely. The transport of $R_{ij}$ balances production $P_{ij}$, the pressure–strain redistribution $\Pi_{ij}$, dissipation, and diffusion:
+The SSG-LRR-$\omega$ model (NASA TMR SSGLRR-RSM-w2012) transports the six independent Reynolds stresses $R_{ij}$ plus $\omega$ — seven equations total — removing the Boussinesq assumption entirely. The transport of $R_{ij}$ balances production $P_{ij}$, the pressure–strain redistribution $\Pi_{ij}$, dissipation, and diffusion:
 
 $$
 \frac{\partial(\rho R_{ij})}{\partial t} + \nabla\!\cdot\!(\rho\mathbf u R_{ij})
@@ -297,6 +297,25 @@ $$
 $$
 
 The pressure–strain model blends the Speziale–Sarkar–Gatski (SSG) closure away from walls with the Launder–Reece–Rodi (LRR) closure near walls, using the same $\omega$-based length scale and an $F_1$-type blending as SST. The blended LRR/$\omega$ coefficients ($C_1=1.8$, $C_2^{\text{LRR}}=0.52$, …) and SSG/$\varepsilon$ coefficients ($C_1=1.7$, $C_1^\ast=0.9$, $C_2=1.05$, …) follow the NASA TMR reference. RSM closures capture stress anisotropy, secondary flows, and strong streamline curvature that eddy-viscosity models miss, at the cost of seven transported fields and stiffer convergence.
+
+| Model | TMR name | Difference |
+|-------|----------|------------|
+| `SSGLRR` | SSGLRR-RSM-w2012 | Generalized gradient diffusion, $D\,\rho R_{kl}/(C_\mu\omega)\,\partial R_{ij}/\partial x_l$ |
+| `SSGLRR-SD` | SSGLRR-RSM-w2012-SD | Simple diffusion, $(D/C_\mu)\,\mu_t\,\partial R_{ij}/\partial x_k$ |
+| `SSGLRR-w2019` | SSGLRR-RSM-w2019 | w2012 + length-scale correction of the $\omega$ equation |
+| `SSGLRR-w2019-SD` | SSGLRR-RSM-w2019-SD | w2012-SD + length-scale correction |
+
+The w2019 length-scale correction (Eisfeld & Rumsey, 2020) multiplies the $\omega$ destruction $\beta_\omega\rho\omega^2$ by $1-F^{(LSC)}$:
+
+$$
+F^{(LSC)} = \tfrac12\left\{1+\tanh\left[A(\chi-\chi_T)\right]\right\},\qquad
+\chi = \max\left[\left(\frac{\mathcal L_t}{\ell_{log}}-1\right)\left(\frac{\mathcal L_t}{\ell_{log}}\right)^2,\,0\right],\qquad
+\frac{\mathcal L_t}{\ell_{log}} = \frac{\sqrt{k}}{C_\mu^{1/4}\,\kappa\,\omega\,d}
+$$
+
+with $A=31$, $\chi_T=1$, $\kappa=0.41$. It vanishes in the log layer ($\mathcal L_t=\ell_{log}$) and is active only near stagnation and reattachment points, where it removes the non-physical "backbending" of the original model.
+
+At walls $R_{ij}=0$ and $\omega$ follows `omega-wall-bc` (the default `practical` value is the TMR one). On symmetry planes, which must be $x$-, $y$- or $z$-planes, the shear stresses with one index normal to the plane vanish (e.g. $R_{12}=R_{13}=0$ on an $x$-plane) and the other components have zero gradient; the momentum flux through the wall and symmetry faces uses these face values.
 
 ---
 
