@@ -12,6 +12,7 @@ ARES provides Reynolds-Averaged Navier–Stokes (RANS) closures for turbulent fl
 | `SA-rough` | 1-equation | + sand-grain wall roughness |
 | `SA-rough-QCR2000` | 1-eq + algebraic | roughness + QCR2000 |
 | `SST` | 2-equation $k$–$\omega$ | Menter Shear-Stress Transport (2003) |
+| `SST-RC` | 2-equation $k$–$\omega$ | + Spalart–Shur rotation/curvature correction (Smirnov–Menter) |
 | `Wilcox2006` | 2-equation $k$–$\omega$ | Wilcox 2006 revision |
 | `SSGLRR` | 7-equation RSM | Speziale–Sarkar–Gatski / Launder–Reece–Rodi (w2012; `-SD`, `-w2019` variants) |
 | `none` | — | Laminar (no model) |
@@ -97,7 +98,9 @@ $$
 ### SA Variants
 
 - **SA-R (rotation).** Adds $c_\text{rot}\,\min\!\bigl(0,\,\lVert S\rVert-\Omega\bigr)$ to the production ($c_\text{rot}=2$), sensitising the model to system rotation.
-- **SA-RC (rotation/curvature).** The Spalart–Shur correction multiplies the production by a factor $f_{r1}(r^\ast,\tilde r)$ built from the strain/vorticity ratio $r^\ast=S/\Omega$ and the material derivative of $S_{ij}$, bounded to $[0,\,1.25]$ — the recommended choice for strongly curved and swirling flows.
+- **SA-RC (rotation/curvature).** The Spalart–Shur correction multiplies the production by a factor $f_{r1}(r^\ast,\tilde r)$, built from the strain/vorticity ratio $r^\ast=S/\Omega$ and from the material derivative of $S_{ij}$. It is the recommended choice for strongly curved and swirling flows. For SA-RC, $f_{r1}$ is not bounded and can be negative (NASA TMR, SA-RC); SST-RC bounds its own to $[0,\,1.25]$.
+
+    ARES computes the factor $2r^\ast/(1 + r^\ast)$ of $f_{r1}$ as $2S/(S + \Omega)$: where the vorticity vanishes it takes its limit, 2. Where strain and vorticity are both below $10^{-30}\ \mathrm{s^{-1}}$, in a fluid at rest or a uniform flow, $r^\ast$ is not defined: the velocity gradient there is the $10^{-40}$ that ARES adds to the velocity differences, times the metric of the cell. ARES then takes the value of simple shear, 1, with $\tilde r = 0$. The correction does not act there, and the production is that of SA.
 - **SAcomp (compressibility).** Paciorri–Sabetta correction scaling the production with the turbulent-stress ratio $S_\tau = \omega\,\tilde\nu f_{v1}/a^2$, for high-speed shear layers.
 - **SA-rough (roughness).** Equivalent sand-grain roughness via the Aupoix–Spalart (“Boeing”) extension — see [Rough walls](#rough-walls-sa-rough) below.
 - **SA-QCR2000.** Replaces the Boussinesq stress with the [Quadratic Constitutive Relation](#quadratic-constitutive-relation-qcr2000) to capture stress anisotropy in corner and secondary flows.
@@ -152,7 +155,28 @@ Roughness is implemented for the Spalart–Allmaras family only; with a $k$–$\
 
 ## Menter SST $k$–$\omega$ — Two-Equation Model
 
-The Shear-Stress Transport model blends a $k$–$\omega$ formulation near walls with a $k$–$\varepsilon$-like behaviour in the freestream, through the blending function $F_1$. ARES implements the **Menter 2003** form.
+The Shear-Stress Transport model blends a $k$–$\omega$ formulation near walls with a $k$–$\varepsilon$-like behaviour in the freestream, through the blending function $F_1$.
+
+ARES implements the **SST-2003** version of the model (Menter, Kuntz & Langtry [2]; the original model is Menter 1994 [7]) as specified by the NASA Turbulence Modeling Resource [8]:
+
+- eddy viscosity built from the strain invariant $S$;
+- production limiter $10\,\beta^\ast\rho\,\omega k$ in both equations;
+- the 2003 constants.
+
+Two options select the remaining details, and together they span TMR's naming of the variants:
+
+| `sst-production` | Production $P$ | `k-energy-coupling = false` (default) | `k-energy-coupling = true` |
+|---|---|---|---|
+| `incompressible` (default) | $\mu_t S^2$ | SST-2003m | SST-2003s |
+| `compressible` | $\tau_{ij}\,\partial u_i/\partial x_j$ (exact) | SST-2003e | SST-2003 |
+
+The suffix records the approximations [8]:
+
+- Without the [energy coupling](#energy-coupling-k-energy-coupling), the $-\tfrac23\rho k\,\delta_{ij}$ part of $\tau_{ij}$ is left out of the momentum and energy equations ("m", "e").
+- "m" and "s" approximate the production by $\mu_t S^2$. TMR describes this as exact for incompressible flow and "typically considered a very good approximation, except perhaps for very high Mach number flows".
+- With `compressible`, the limiter acts on the deviatoric part of $P$ only, as in OpenFOAM, whereas TMR's SST-2003 limits all of it ([below](#compressible-production-sst-production)).
+
+`turbulence = SST-RC` adds the [rotation/curvature correction](#rotationcurvature-correction-sst-rc).
 
 ### Transport equations
 
@@ -175,7 +199,52 @@ $$
 P_k = \min\!\bigl(\mu_t S^2,\;10\,\beta^\ast\rho\omega k\bigr)
 $$
 
-which prevents unbounded growth of $k$ in stagnation regions ($S=\sqrt{2S_{ij}S_{ij}}$).
+which prevents unbounded growth of $k$ in stagnation regions ($S=\sqrt{2S_{ij}S_{ij}}$). The $\omega$ production, $\gamma\rho P_k/\mu_t$, uses the limited $P_k$, as corrected on the TMR page [8]; the 2003 paper has the unlimited value there.
+
+### Compressible production (`sst-production`)
+
+The production above is the SST-2003m form $\mu_t S^2$, which drops the dilatation terms of $P = \tau_{ij}\,\partial u_i/\partial x_j$. With `sst-production = compressible` (default `incompressible`) ARES keeps them, with $\tau_{ij} = \mu_t\bigl(2S_{ij} - \tfrac23\,\nabla\!\cdot\!\mathbf u\,\delta_{ij}\bigr) - \tfrac23\,\rho k\,\delta_{ij}$:
+
+$$
+P_k = \min\!\Bigl(\mu_t\bigl[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf u)^2\bigr],\;10\,\beta^\ast\rho\,\omega\,k\Bigr)
+      - \tfrac23\,\rho k\,\nabla\!\cdot\!\mathbf u,
+$$
+
+$$
+P_\omega = \frac{\gamma\,\rho}{\mu_t}\,\min\!\Bigl(\mu_t\bigl[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf u)^2\bigr],\;10\,\beta^\ast\rho\,\omega\,k\Bigr)
+      - \tfrac23\,\gamma\,\rho\,\omega\,\nabla\!\cdot\!\mathbf u.
+$$
+
+This is the exact SST-2003 production. TMR calls it SST-2003e, since the $-\tfrac23\rho k$ term still stays out of the momentum and energy equations; with the [energy coupling](#energy-coupling-k-energy-coupling) it is SST-2003. The dilatation terms are arranged as in OpenFOAM's `kOmegaSST` [9]:
+
+- the deviatoric part, $\mu_t[S^2 - \tfrac23(\nabla\!\cdot\!\mathbf u)^2] = 2\mu_t S^{d}_{ij}S^{d}_{ij} \ge 0$, stays under the limiter;
+- the dilatation terms are added outside it. TMR's SST-2003 limits the whole of $P$ instead.
+
+In attached, nearly incompressible boundary layers the two forms coincide. Through a compression ($\nabla\!\cdot\!\mathbf u<0$: shock feet, reattachment) the dilatation terms amplify $k$ more than $\omega$ ($\gamma<1$), so $\mu_t$ grows.
+
+### Rotation/curvature correction (SST-RC)
+
+`turbulence = SST-RC` sensitizes the model to streamline curvature and system rotation. It uses the Spalart–Shur correction as adapted to SST by Smirnov and Menter [10]: TMR SST-RC [8], here on SST-2003, so SST-2003RC. The production $P$ of both equations is multiplied by
+
+$$
+f_{r1} = \max\!\bigl[\min(f_\text{rot},\,1.25),\,0\bigr], \qquad
+f_\text{rot} = (1 + c_{r1})\,\frac{2\,r^\ast}{1 + r^\ast}
+  \bigl[1 - c_{r3}\arctan(c_{r2}\,\tilde r)\bigr] - c_{r1},
+$$
+
+$$
+r^\ast = \frac{S}{\Omega}, \qquad
+\tilde r = \frac{2\,\Omega_{ik}\,S_{jk}}{\Omega\,D^3}\,\frac{DS_{ij}}{Dt}, \qquad
+D^2 = \max(S^2,\;0.09\,\omega^2),
+$$
+
+with $c_{r1} = 1$, $c_{r2} = 2$, $c_{r3} = 1$, $S = \sqrt{2S_{ij}S_{ij}}$ and $\Omega = \sqrt{2\Omega_{ij}\Omega_{ij}}$. $f_{r1}$ multiplies $P$ before the production limiter, so it reaches the $\omega$ equation through the limited $P$. In simple shear $r^\ast = 1$ and $\tilde r = 0$, so $f_{r1} = 1$ and the model reduces to SST.
+
+Implementation notes:
+
+- The factor $2r^\ast/(1 + r^\ast)$ and the numerator of $\tilde r$ are shared with SA-RC (`Lib_SpalartShur`), and so is their value where strain and vorticity vanish ([SA variants](#sa-variants)). In a fluid at rest or a uniform flow, $f_{r1} = 1$.
+- Where only the vorticity vanishes, the factor takes its limit 2 and $\tilde r = 0$, so $f_{r1} = 1.25$. The production there is negligible.
+- $DS_{ij}/Dt$ is its steady convective part, $\mathbf u\!\cdot\!\nabla S_{ij}$.
 
 ### Eddy viscosity
 
@@ -227,13 +296,33 @@ $$
 
 as in MOSE. The key sets the wall condition of the Wilcox 2006 and SSG-LRR models as well. Separately, `sst-asymptotic = .true.` (SST only, ARES only) imposes the same asymptotic value on the first `sst-asymptotic-cells` cells off each viscous wall, removing them from the time integration of the $\omega$ equation.
 
-### Energy coupling *(optional)*
+### Energy coupling (`k-energy-coupling`)
 
-When `k-coupling = .true.`, the turbulence kinetic energy is added to the total energy and its production/destruction feeds back into the mean-flow energy equation. It is disabled by default.
+The compressible RANS equations [11] carry the turbulent kinetic energy in two places:
+
+- the total energy, $E = e + \tfrac12 u_iu_i + k$;
+- the Boussinesq Reynolds stress, $\tau_{ij} = 2\mu_t\bigl(S_{ij} - \tfrac13\nabla\!\cdot\!\mathbf u\,\delta_{ij}\bigr) - \tfrac23\rho k\,\delta_{ij}$.
+
+By default ARES drops both, as in the TMR "m"/"e" variants: its energy is that of the mean flow, $E_m = e + \tfrac12 u_iu_i$, and the $-\tfrac23\rho k$ term is not in the stress. With `k-energy-coupling = true` (two-equation models: SST and Wilcox 2006) ARES keeps both:
+
+- The stress of the momentum and energy equations includes $-\tfrac23\rho k\,\delta_{ij}$ (`Stress_Vector_2eq`), so it also enters the work term $\nabla\!\cdot\!(\boldsymbol\tau\cdot\mathbf u)$ of the energy equation.
+- The mean-flow energy gives up what the turbulence receives:
+
+$$
+\frac{\partial(\rho E_m)}{\partial t} + \dots = \dots - \bigl(P_k - \beta^\ast\rho\,\omega\,k\bigr).
+$$
+
+The sink is the same source as in the $k$ equation, including its point-implicit factor when `point-implicit = .true.`. So $E_m + k$ is conserved.
+
+This is the total-energy form of TMR [11] and Wilcox [3], written for $E_m$. Subtracting the $k$ equation from the equation for $E = E_m + k$ leaves exactly this sink, and the diffusion of $k$ cancels between the two equations. The thermodynamic state follows from the mean-flow energy in either case: $k$ is not part of the internal energy.
+
+TMR notes that the $k$ terms are sometimes dropped "for non-supersonic speed flows". They matter where $k$ is not small against the kinetic energy of the mean flow.
 
 ---
 
 ## Wilcox 2006 $k$–$\omega$ — Two-Equation Model
+
+The Wilcox (2006) model [3, 12] uses the exact production $P = \tau_{ij}\,\partial u_i/\partial x_j$ and the TMR $k$-equation limiter (below). In TMR's naming this is Wilcox2006-klim, in its "e" form (Wilcox2006-klim-e) unless [`k-energy-coupling`](#energy-coupling-k-energy-coupling) is on [8].
 
 ### Model constants
 
@@ -277,13 +366,13 @@ $$
 
 ### Production limiter
 
-More permissive than SST:
+More permissive than SST, and in the $k$ equation only, as in TMR's Wilcox2006-klim:
 
 $$
-P_k = \min\!\bigl(\mu_t S^2,\;20\,\beta^\ast\rho\omega k\bigr)
+P_k = \min\!\bigl(\tau_{ij}\,\partial u_i/\partial x_j,\;20\,\beta^\ast\rho\omega k\bigr)
 $$
 
-The $\omega$-production uses the $\gamma\,(\omega/k)\,P_k$ form.
+The $\omega$ production uses the unlimited $P$: $\gamma\,(\omega/k)\,P$.
 
 ---
 
@@ -355,7 +444,7 @@ The `-blowcorr` suffix activates a correction (`RANS_Set_Blowing_Wall`) that mod
 
 ### Turbulent transport numbers and corrections
 
-`[ARES-Turbulence]` also sets the turbulent Prandtl ($\mathrm{Pr}_t$, default 0.90) and Schmidt ($\mathrm{Sc}_t$) numbers used in the [effective conductivity](thermo.md#transport-properties), the optional turbulent-kinetic-energy coupling into the energy equation (`k-coupling`), and a wall-roughness Prandtl correction (`Prt-correction`, requires an `-rough` SA model) that adjusts $\mathrm{Pr}_t$ near rough walls.
+`[ARES-Turbulence]` also sets the turbulent Prandtl ($\mathrm{Pr}_t$, default 0.90) and Schmidt ($\mathrm{Sc}_t$) numbers used in the [effective conductivity](thermo.md#transport-properties), the optional turbulent-kinetic-energy coupling into the energy equation (`k-energy-coupling`), and a wall-roughness Prandtl correction (`Prt-correction`, requires an `-rough` SA model) that adjusts $\mathrm{Pr}_t$ near rough walls.
 
 ---
 
@@ -367,3 +456,9 @@ The `-blowcorr` suffix activates a correction (`RANS_Set_Blowing_Wall`) that mod
 4. P. R. Spalart, M. L. Shur, "On the sensitization of turbulence models to rotation and curvature," *Aerosp. Sci. Technol.* 1 (1997).
 5. C. G. Speziale, S. Sarkar, T. B. Gatski, "Modelling the pressure–strain correlation of turbulence," *J. Fluid Mech.* 227 (1991).
 6. S. R. Allmaras, F. T. Johnson, P. R. Spalart, "Modifications and clarifications for the implementation of the Spalart–Allmaras turbulence model," ICCFD7-1902, 2012. *(QCR2000)*
+7. F. R. Menter, "Two-equation eddy-viscosity turbulence models for engineering applications," *AIAA J.* 32(8), pp. 1598–1605, 1994, doi:10.2514/3.12149.
+8. NASA Langley Turbulence Modeling Resource, "The Menter Shear Stress Transport turbulence model," <https://tmbwg.github.io/turbmodels/sst.html> (formerly turbmodels.larc.nasa.gov/sst.html): definitions and naming of the SST variants (SST-2003, SST-2003m/s/e, SST-RC) and of Wilcox2006-klim.
+9. OpenFOAM Foundation, OpenFOAM-10, `kOmegaSST` model (`src/MomentumTransportModels/momentumTransportModels/Base/kOmegaSST/kOmegaSSTBase.C`).
+10. P. E. Smirnov, F. R. Menter, "Sensitization of the SST turbulence model to rotation and curvature by applying the Spalart–Shur correction term," *J. Turbomach.* 131(4), 041010, 2009, doi:10.1115/1.3070573.
+11. NASA Langley Turbulence Modeling Resource, "Implementing turbulence models into the compressible RANS equations," <https://tmbwg.github.io/turbmodels/implementrans.html>.
+12. D. C. Wilcox, "Formulation of the k-ω turbulence model revisited," *AIAA J.* 46(11), pp. 2823–2838, 2008, doi:10.2514/1.36541.

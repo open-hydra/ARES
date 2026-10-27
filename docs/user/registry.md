@@ -54,7 +54,7 @@ The keys of `[MOSE-Physics]` that apply to a single real fluid.
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | equations | *(none)* | euler , navier-stokes | **yes** | Gas dynamics equations |
-| turbulence | none | SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none | no | RANS turbulence model |
+| turbulence | none | SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, SST-RC, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none | no | RANS turbulence model |
 | schmidt | 0.0 | >= 0 | no | Laminar Schmidt number (no effect: ARES solves a single species) |
 
 !!! note
@@ -62,7 +62,7 @@ The keys of `[MOSE-Physics]` that apply to a single real fluid.
 
 ## ARES-Turbulence
 
-The first four keys are those of `[MOSE-Turbulence]`; the others exist in ARES only. They are read for every run and used only when `turbulence` names a model.
+These keys are read for every run and used only when `turbulence` names a model.
 
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
@@ -70,7 +70,8 @@ The first four keys are those of `[MOSE-Turbulence]`; the others exist in ARES o
 | Sct | 0.90 | > 0 | no | Turbulent Schmidt number |
 | point-implicit | .false. | logical | no | Point-implicit (Patankar) treatment of the turbulence destruction source terms (steady runs only) |
 | omega-wall-bc | practical | practical, asymptotic | no | Omega wall condition of the k-omega models (SST, Wilcox2006) and of SSGLRR: Menter practical $60\nu/(\beta_1 y^2)$, or asymptotic $6\nu/(\beta_1 y^2)$, the exact $y \to 0$ limit, for wall-resolved meshes |
-| k-coupling | .false. | logical | no | Couple turbulent kinetic energy into the mean-flow energy equation |
+| sst-production | incompressible | incompressible, compressible | no | SST production (NASA TMR naming): incompressible ($P = \mu_t S^2$, SST-2003m) or compressible ($P = \tau_{ij}\,\partial u_i/\partial x_j$, SST-2003e, as OpenFOAM kOmegaSST: adds $-\tfrac23\mu_t(\nabla\cdot\mathbf u)^2 - \tfrac23\rho k\,\nabla\cdot\mathbf u$, and $-\tfrac23\gamma\rho\omega\,\nabla\cdot\mathbf u$ to the $\omega$ equation) |
+| k-energy-coupling | .false. | logical | no | Two-equation models (SST, Wilcox2006): $k$ in the total energy, the full compressible RANS form of NASA TMR: $-\tfrac23\rho k\,\delta_{ij}$ in the stress tensor of the momentum and energy equations, and the $k$-equation source (production − dissipation) taken from the mean-flow energy. `.false.` = TMR m/e variants |
 | Prt-correction | .false. | logical | no | Turbulent-Prandtl correction for wall roughness (SA with `-rough`) |
 | sst-asymptotic | .false. | logical | no | Impose the asymptotic solution $\omega = 6\nu/(\beta_1 d^2)$ on the near-wall cells (SST only) |
 | sst-asymptotic-cells | 1 | >= 1 | no | Number of cells off viscous walls where the asymptotic $\omega$ is imposed |

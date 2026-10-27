@@ -1,4 +1,38 @@
-!> @brief Module for Kappa-Omega SST (2003) model. see https://turbmodels.larc.nasa.gov/sst.html.
+!> @brief Menter k-omega SST model in its SST-2003 form (Menter, Kuntz & Langtry 2003), as specified
+!> by the NASA Turbulence Modeling Resource (TMR): https://tmbwg.github.io/turbmodels/sst.html
+!> (formerly https://turbmodels.larc.nasa.gov/sst.html).
+!>
+!> Production term, by option. TMR naming; ARES keeps -2/3 rho k delta_ij out of the stress
+!> tensor of the momentum and energy equations (Stress_Vector_Std), hence the m/e suffixes:
+!>   sst-production = incompressible (default)  P = mu_t S^2, S^2 = 2 S_ij S_ij   -> SST-2003m
+!>   sst-production = compressible              P = tau_ij du_i/dx_j (exact)     -> SST-2003e
+!>     with the dilatation terms arranged as in OpenFOAM's kOmegaSST (OpenFOAM-10,
+!>     kOmegaSSTBase.C): the limiter acts on the deviatoric part mu_t (S^2 - 2/3 divU^2), and
+!>     -2/3 rho k divU (k equation) and -2/3 gamma rho omega divU (omega equation) are added
+!>     outside it.
+!> In both forms P is limited to 10 beta* rho omega k and the omega production is
+!> (gamma rho / mu_t) times the limited P (SST-2003 with the TMR correction of the paper's typo).
+!> k-energy-coupling = .true. puts k in the total energy (the full compressible RANS form of the
+!> TMR "Implementing Turbulence Models into the Compressible RANS Equations" page): -2/3 rho k
+!> delta_ij enters the stress of the momentum and energy equations (Stress_Vector_2eq) and the
+!> k-equation source is removed from the mean-flow energy. TMR names then drop the m/e suffix:
+!> SST-2003s (incompressible production) and SST-2003 (compressible production).
+!> turbulence = SST-RC multiplies P by the Spalart-Shur rotation/curvature function fr1 of
+!> Smirnov & Menter (2009), TMR SST-RC (here on SST-2003: SST-2003RC).
+!>
+!> References
+!>   Menter, F. R., "Two-Equation Eddy-Viscosity Turbulence Models for Engineering Applications",
+!>     AIAA J. 32(8), 1994, pp. 1598-1605, doi:10.2514/3.12149 (SST).
+!>   Menter, F. R., Kuntz, M., Langtry, R., "Ten Years of Industrial Experience with the SST
+!>     Turbulence Model", Turbulence, Heat and Mass Transfer 4, Begell House, 2003, pp. 625-632
+!>     (SST-2003).
+!>   Smirnov, P. E., Menter, F. R., "Sensitization of the SST Turbulence Model to Rotation and
+!>     Curvature by Applying the Spalart-Shur Correction Term", J. Turbomach. 131(4), 2009,
+!>     041010, doi:10.1115/1.3070573 (SST-RC).
+!>   NASA TMR, "Implementing Turbulence Models into the Compressible RANS Equations",
+!>     https://tmbwg.github.io/turbmodels/implementrans.html (k-energy-coupling).
+!>   Wilcox, D. C., Turbulence Modeling for CFD, 3rd ed., DCW Industries, 2006, ch. 5
+!>     (compressible two-equation models, k in the total energy).
 module ARES_Lib_SST
   use iso_fortran_env, only: I4 => int32, R8 => real64
 
@@ -37,7 +71,7 @@ contains
     SpalartShur       = obj_rans%SpalartShur
     k_energy_coupling = obj_rans%k_energy_coupling
 
-    if ( obj_rans%SpalartShur ) then
+    if ( SpalartShur ) then
       call compute_velocity_gradient ( domain )
       call compute_rc_terms ( domain )
     end if
@@ -56,14 +90,15 @@ contains
                      domain % blk(b) % dtlocal,      &
                      domain % blk(b) % dim,          &
                      SpalartShur, k_energy_coupling, &
-                     obj_rans%point_implicit )
-    
+                     obj_rans%point_implicit, obj_rans%sst_compressible )
+
     end do
 
   end subroutine SST_Source_Terms
 
 
-  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit )
+  subroutine SST_Blk ( Prim, Res, M, Volume, WDist, gradv, rc1, rc2, dt, n, SpalartShur, k_energy_coupling, point_implicit, &
+                       compressible )
     use ARES_Base_Types_m
     use ARES_Global_m
     use FLINT_Lib_Thermodynamic
@@ -72,7 +107,7 @@ contains
 
     implicit none
     integer, intent(in) :: n(3)
-    logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit
+    logical, intent(in) :: SpalartShur, k_energy_coupling, point_implicit, compressible
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
@@ -84,11 +119,12 @@ contains
     ! Local
     integer :: i, j, k, ii, jj
     real(kind=8) :: rho, mil, kap, ome, dist, Gradvel(3,3), Divel, Sij(3,3), S, Wij(3,3), diag, mi_t, F(2)
-    real(kind=8) :: vort(3), O, rstar, D, rtilde, frot, fr1
+    real(kind=8) :: vort(3), O, D, rtilde, frot, fr1
     real(kind=8) :: Tij(3,3), Prod(2), Grad(2,3), dkDotdw, Diff, beta, gamma, Diss(2), Source(2), fk, fw
 
     !$omp do collapse (3) private ( rho, mil, kap, ome, dist, Gradvel, Divel, Sij, S, Wij, diag, mi_t, F ), &
-    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj )
+    !$omp private ( Tij, Prod, Grad, dkDotdw, Diff, beta, gamma, Diss, Source, fk, fw, i, j, k, ii, jj ), &
+    !$omp private ( vort, O, D, rtilde, frot, fr1 )
     
     do k = 1, n(3)
     do j = 1, n(2)
@@ -102,7 +138,7 @@ contains
       dist = WDist(i,j,k)
 
       ! Velocity gradient computation
-      if ( obj_rans%SpalartShur ) then
+      if ( SpalartShur ) then
         Gradvel = gradv(i,j,k) % c
       else
         Gradvel(:,1) = ( Prim(nu:nw,i+1,j,k) - Prim(nu:nw,i-1,j,k) ) * 0.5d0
@@ -136,33 +172,33 @@ contains
       O = Sqrt ( 2d0 * sum ( Wij**2 ) )
       mi_t = rho*kap*alpha_1 / Max ( alpha_1*ome, S*F(2) )
 
-      ! Turbulent stress tensor
-      ! Tij = 2d0 * mi_t * Sij
-      ! diag = 2d0/3d0*mi_t*Divel + 2d0/3d0*rho*kap
-      ! Tij(1,1) = Tij(1,1) - diag
-      ! Tij(2,2) = Tij(2,2) - diag
-      ! Tij(3,3) = Tij(3,3) - diag
+      ! Production (see the module header for the variants and references)
+      Prod(1) = mi_t * S**2 ! SST-2003m (TMR), sst-production = incompressible
+      ! sst-production = compressible (SST-2003e, OpenFOAM kOmegaSST arrangement), deviatoric part:
+      ! mu_t*(S^2 - 2/3 divU^2) = 2 mu_t S_dev:S_dev >= 0
+      if ( compressible ) Prod(1) = Prod(1) - 2d0/3d0 * mi_t * Divel**2
 
-      ! Production term
-      ! Prod(1) = 0d0
-      ! do ii = 1, 3
-      ! do jj = 1, 3
-      !   Prod(1) = Prod(1) + Tij(ii,jj)*Gradvel(ii,jj)
-      ! end do
-      ! end do
-      Prod(1) = mi_t * S**2 ! SST-2003m
-
-      if ( obj_rans%SpalartShur ) then
-        rstar = rc1(i,j,k)
+      ! Rotation/curvature correction, Smirnov & Menter (2009), TMR SST-RC
+      if ( SpalartShur ) then
+        ! rc1 is 2 r*/(1 + r*) (compute_rc_terms); where the vorticity vanishes rc2 is zero, and so is rtilde
         D = sqrt( max ( S**2, 0.09d0*ome**2) )
-        rtilde = rc2(i,j,k) / ( O*D**3 )
-        frot = (1.d0 + cr1)*(2.d0*rstar/(1.d0 + rstar))*(1.d0 - cr3*atan(cr2*rtilde)) - cr1
+        rtilde = 0d0
+        if ( O > 0d0 ) rtilde = rc2(i,j,k) / ( O*D**3 )
+        frot = (1.d0 + cr1)*rc1(i,j,k)*(1.d0 - cr3*atan(cr2*rtilde)) - cr1
         fr1 = max ( min(frot, 1.25d0), 0d0 )
         Prod(1) = fr1*Prod(1)
       end if
 
-      Prod(1) = Min( Prod(1), 10d0*beta_star*rho*ome*kap ) ! k-eqn production limiter
+      ! SST-2003 production limiter (10 beta*, Menter et al. 2003); the omega production uses the
+      ! limited value, as corrected on the TMR page (the 2003 paper has the unlimited one)
+      Prod(1) = Min( Prod(1), 10d0*beta_star*rho*ome*kap )
       Prod(2) = ( gamma*rho / mi_t ) * Prod(1)
+
+      ! Compressible form, dilatation part (-2/3 rho k delta_ij in tau_ij), outside the limiter
+      if ( compressible ) then
+        Prod(1) = Prod(1) - 2d0/3d0 * rho * kap * Divel
+        Prod(2) = Prod(2) - 2d0/3d0 * gamma * rho * ome * Divel
+      end if
 
       ! Cross Diffusion term
       dkDotdw = Dot_Product ( Grad(1,:), Grad(2,:) )
@@ -188,7 +224,9 @@ contains
 
       Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
       Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
-      if (obj_rans%k_energy_coupling) Res(nh,i,j,k) = Res(nh,i,j,k) + Source(1) * Volume(i,j,k)
+      ! With k in the total energy (k_energy_coupling) the mean-flow energy gives up the source of k with the same
+      ! point-implicit factor as the k row, so that E_m + k has the fluxes alone
+      if ( k_energy_coupling ) Res(nh,i,j,k) = Res(nh,i,j,k) + Source(1) * Volume(i,j,k) * fk
 
     enddo ; enddo ; enddo ! (i, j, k) loop
 

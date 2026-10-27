@@ -28,7 +28,7 @@ contains
       enddo
       if ( check < 3 ) then
         write(*,'(A90)') ' [ERROR] in Check_Multigrid, block: '//trim(str(.true.,b))
-        stop
+        stop 1
       endif
     enddo
 

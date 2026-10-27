@@ -48,7 +48,7 @@ contains
     if ( size(IOfield%block(1)%vars, 1) < nprim ) then
       write(*,'(A)')         '[ERROR] Number of variables in IOfield does not match ARES expectation.'
       write(*,'(A,I0,A,I0)') '        Expected: ', nprim, ', Found: ', size(IOfield%block(1)%vars, 1)
-      stop
+      stop 1
     end if
 
     call Check_Turbulence_Names ( IOfield )

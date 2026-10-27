@@ -62,7 +62,7 @@ contains
     if ( obj_rans%Prt_correction ) then
       if ( index(trim(obj_rans%model), 'SA') == 0 .or. .not. obj_rans%rough ) then
         write(*,'(A)') '[ERROR] Prt-correction requires a Spalart-Allmaras model with roughness (-rough) enabled.'
-        stop
+        stop 1
       end if
       ! The correlation was calibrated for the standard turbulent Prandtl number Prt = 0.9.
       if ( abs(obj_rans%Prt - 0.9d0) > 1.0d-6 ) then
@@ -89,6 +89,19 @@ contains
       obj_rans%omega_wall_coef = 8d1
     case default
       error stop ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
+    end select
+
+    ! SST production term.
+    ! 'incompressible' -> P = mu_t*S^2 (SST-2003).
+    ! 'compressible'   -> P = tau_ij*du_i/dx_j with tau_ij = mu_t*(2 S_ij - 2/3 divU delta_ij)
+    !                     - 2/3 rho k delta_ij: the dilatation terms matter across shocks.
+    select case ( trim(obj_rans%sst_production) )
+    case ( 'incompressible' )
+      obj_rans%sst_compressible = .false.
+    case ( 'compressible' )
+      obj_rans%sst_compressible = .true.
+    case default
+      error stop ( 'Error: sst-production must be "incompressible" or "compressible".' )
     end select
 
     obj_rans%description = 'RANS model: '//trim(obj_rans%model)

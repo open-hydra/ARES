@@ -157,6 +157,7 @@ The convective flux at each interface is built in stages from a 4-point stencil:
 | `laminar`, `none` | — | Viscous Navier–Stokes, no model ($n_{RANS}=0$) |
 | `SA` (and `SAcomp`) | `Lib_Spalart` (+ `Lib_SpalartShur`, `Lib_QCR2000`) | Spalart–Allmaras, 1 equation |
 | `SST` | `Lib_SST` | Menter $k$–$\omega$ SST (2003), 2 equations |
+| `SST-RC` | `Lib_SST`, `Lib_SpalartShur` | SST + rotation–curvature correction (Smirnov–Menter) |
 | `Wilcox2006` | `Lib_Wilcox2006` | Wilcox $k$–$\omega$ (2006), 2 equations |
 | `SSGLRR` | `Lib_SSGLRR` | Speziale–Sarkar–Gatski / Launder–Reece–Rodi RSM, 7 equations |
 
