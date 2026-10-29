@@ -11,8 +11,10 @@ Before building ARES make sure your system provides the following tools and comp
 
 - **CMake** – 3.23 or newer.
 - **Fortran compiler** – either the GNU toolchain (`gfortran`) or Intel/oneAPI (`ifort`/`ifx`).
-- **C / C++ compiler** – required only for optional components (TecIO, Cantera) and for the LTO-aware archiver wrappers used by GCC.
+- **C / C++ compiler** – required only for optional components (TecIO, Cantera).
 - **OpenMP / MPI** – needed for optional parallelization support.
+
+**ifx 2024.1 and IPO.** ifx 2024.1 (tested: 2024.1.0, build 20240308) compiles a loop of the ghost metrics wrongly at `-O2` and `-O3` without interprocedural optimization: a minimal program in standard Fortran gives wrong values at `-O2` and `-O3`, also at the default level with no `-O` option, and the right ones at `-O0`, `-O1` and with `-ipo`. `BC_Extrapolate_Metrics` of ARES has that loop: ARES built so can stop at set-up on a negative volume, or run with wrong ghost metrics. CMake therefore refuses ifx 2024.1 at `-O2` or above without IPO, with a message: a RELEASE build with `-DUSE_IPO=OFF` (`--no-ipo`), or whose toolchain cannot do IPO, and the TESTING build. The RELEASE build with IPO (the default) and the DEBUG build (`-O0`) are accepted. Other versions of ifx have not been tested. The check runs only when ARES is built on its own: a project that embeds ARES (Hydra) sets its own flags.
 
 ### Git submodules
 
@@ -68,6 +70,7 @@ Options accepted by `build`:
 * `--use-tecio` – enable TecIO support (requires a C++ compiler).
 * `--use-sundials` – build and link the bundled SUNDIALS library (requires a C compiler).
 * `--use-cantera` – build and link Cantera (requires a C++ compiler).
+* `--no-ipo` – disable interprocedural (link-time) optimization in the RELEASE build.
 * `--include-orion=PATH` – use an external ORION tree instead of the submodule.
 * `--include-flint=PATH` – same for FLINT.
 * `--include-oslo=PATH` – same for OSLO.
@@ -75,8 +78,8 @@ Options accepted by `build`:
 
 After a successful build, a `CMakePresets.json` file is written in the source root so that subsequent compilations can reuse the configuration.
 
-!!! note "LTO-aware archiver (GCC)"
-    With GNU compilers and slim LTO enabled, plain `ar` cannot index LTO IR symbols in static archives. ARES automatically overrides the archiver with the `gcc-ar` / `gcc-ranlib` wrappers; no user action is needed.
+!!! note "Interprocedural optimization (IPO)"
+    `USE_IPO` (on by default) adds `-ipo` to the RELEASE build of the Intel compilers. The flag is probed with a link step, since `-ipo` objects hold IR, not machine code; the link line gets `-ipo` too, and the static libraries are built with the `llvm-ar` / `llvm-ranlib` of oneAPI: in `<bin>/compiler` from oneAPI 2024 on, in `<bin>/../bin-llvm` up to oneAPI 2023, `<bin>` being the directory of `ifx` with its symbolic links resolved. `-DIPO_AR=... -DIPO_RANLIB=...` give the tools of any other layout. If the probe or the lookup fails, the build falls back to a plain RELEASE with a warning: `-ipo` leaves the compile and the link flags, and every other RELEASE flag stays. GNU's `-flto` is not offered. A build directory configured before keeps the flags it cached then: configure a new one (`./install.sh build` does).
 
 **`compile` command** — re-runs CMake using the previously generated preset and rebuilds without clearing the build directory. Useful during development when only the source has changed.
 
@@ -122,6 +125,20 @@ cmake --build build
 or with the `compile` command of the install script.
 
 ## Optional components
+
+### MPI
+
+`-DUSE_MPI=ON` (`--use-mpi`) builds ARES with MPI through the Fortran wrapper of the MPI library that CMake finds (`mpif90`, `mpiifx`). With GNU Fortran 10 or later the build compiles `Mod_MPI.f90` with `-fallow-argument-mismatch`: it calls the same MPI routine with buffers of different types and ranks.
+
+**gfortran with Intel MPI.** The `mpif90` of Intel MPI 2021.12 puts on the include path the `mpi` module built for ifx, which gfortran cannot read ("Reading module .../include/mpi/mpi.mod ... Unexpected EOF"). Give CMake the modules built for gfortran:
+
+```bash
+cmake .. -DCMAKE_Fortran_COMPILER=gfortran -DUSE_MPI=ON \
+    "-DMPI_Fortran_COMPILER_INCLUDE_DIRS=$I_MPI_ROOT/include/mpi/gfortran/11.1.0;$I_MPI_ROOT/include"
+```
+
+The recipe was tested with gfortran 13.2.1: where `gfortran` is an older version, name the newer compiler, for example
+`-DCMAKE_Fortran_COMPILER=gfortran-13`.
 
 ### TecIO
 

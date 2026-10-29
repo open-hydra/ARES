@@ -17,13 +17,14 @@ contains
     implicit none
     type(ARES_domain_type), intent(inout), target :: domain
 
-    call BC_Fluxes_core ( domain%bc, domain%blk, domain%n_bf, &
-                          domain%nb, size(domain%bc), size(domain%blk) )
+    call BC_Fluxes_core ( domain%bc, domain%blk, domain%local_bf_first, domain%local_bf_count, &
+                          domain%local_bf_idx, domain%nb, size(domain%bc), size(domain%blk), &
+                          size(domain%local_bf_idx) )
 
   end subroutine BC_Fluxes
 
 
-  subroutine BC_Fluxes_core ( bc, blk, n_bf, nb, nbc, nblk )
+  subroutine BC_Fluxes_core ( bc, blk, bf_first, bf_count, bf_idx, nb, nbc, nblk, nidx )
     use ARES_Advanced_Types_m
     use ARES_Config_Types_m, only: obj_rans, obj_sim_param, obj_space_scheme, obj_riemann
     use ARES_Global_m, only: model, np, nrans
@@ -37,12 +38,12 @@ contains
     use ARES_Lib_BC_Fluxes_Wall_Heat
     use ARES_Lib_BC_Fluxes_Wall_Temperature
     implicit none
-    integer,               intent(in)    :: nb, nbc, nblk
+    integer,               intent(in)    :: nb, nbc, nblk, nidx
     type(ARES_bc_type),    intent(inout) :: bc(nbc)
     type(ARES_block_type), intent(inout) :: blk(nblk)
-    integer,               intent(in)    :: n_bf(nb,6)
+    integer,               intent(in)    :: bf_first(nb,6), bf_count(nb,6), bf_idx(nidx)
     ! Local
-    integer  :: f, lower, upper, i, b
+    integer  :: f, lower, upper, i, ii, b
     integer  :: error
     integer  :: Bm, Im, Jm, Km, Fm, Bs, Fs
     real(R8) :: T0, g, pstat
@@ -55,19 +56,23 @@ contains
     Prt = obj_rans%Prt
     Prt_corr = obj_rans%Prt_correction
 
-    ! BC fluxes are computed in order of block and face type.
-    upper = 0
-
+    ! BC fluxes are computed block by block and, within a block, face by face, over the
+    ! records of the blocks this rank owns only (lists built once by build_local_bc_index):
+    ! no rank scans the records of the whole domain. The records of one face of one block
+    ! write distinct target cells (the periodic BC also writes the partner cell on the
+    ! opposite face, one per record), so one worksharing loop over them is race-free; its
+    ! implicit barrier keeps the face contributions of a corner cell summed in the order 1..6.
     blocks: do b = 1, nb
+      if (.not. is_local_block(b)) cycle blocks
       faces: do f = 1, 6
 
-        lower = upper + 1                   ! Update lower bound
-        upper = upper + n_bf(b,f)           ! Upper bound: add number of cells on face f of block b
+        lower = bf_first(b,f)
+        upper = lower + bf_count(b,f) - 1
 
-        !$omp do schedule ( dynamic ) private(i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, T0, g, pstat, r_fc)
-        do i = lower, upper
+        !$omp do schedule ( dynamic ) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, T0, g, pstat, r_fc)
+        do ii = lower, upper
+          i  = bf_idx(ii)
           Bm = bc(i) % b
-          if (.not. is_local_block(Bm)) cycle
           Im = bc(i) % i
           Jm = bc(i) % j
           Km = bc(i) % k

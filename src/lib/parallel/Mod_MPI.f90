@@ -186,14 +186,19 @@ contains
   end subroutine mpi_gather_r8
 
 
-  !> MPI_ALLREDUCE with MPI_SUM for an array of real(R8).
-  !> Works in-place: local_arr is overwritten with the global result.
+  !> MPI_ALLREDUCE with MPI_SUM for an array of real(R8): arr is overwritten with the global result.
+  !> The send buffer is a copy of arr, not MPI_IN_PLACE.
+  !> With gfortran the MPI sentinels in COMMON blocks (MPI_IN_PLACE, MPI_BOTTOM, MPI_STATUS_IGNORE,
+  !> MPI_STATUSES_IGNORE, MPI_ERRCODES_IGNORE, MPI_ARGV_NULL, MPI_ARGVS_NULL) are not recognised while
+  !> -fno-underscoring is set (cmake/SetFortranFlags.cmake): do not use them.
   subroutine mpi_allreduce_sum_r8_array(arr, n)
     integer, intent(in)     :: n
     real(R8), intent(inout) :: arr(n)
 #ifdef USE_MPI
     integer :: ierr
-    call MPI_ALLREDUCE(MPI_IN_PLACE, arr, n, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
+    real(R8), allocatable :: send(:)
+    send = arr
+    call MPI_ALLREDUCE(send, arr, n, MPI_DOUBLE_PRECISION, MPI_SUM, MPI_COMM_WORLD, ierr)
     call check_mpi_error(ierr)
 #endif
   end subroutine mpi_allreduce_sum_r8_array
@@ -216,16 +221,19 @@ contains
   end function mpi_allreduce_norm2
 
 
-  !> MPI_REDUCE with MPI_SUM for a scalar real(R8) to root rank 0.
+  !> MPI_REDUCE with MPI_SUM for a scalar real(R8) to root rank 0: val holds the sum on the root and is
+  !> left as it is elsewhere, where the receive buffer is not significant. Every rank sends a copy of val:
+  !> no buffer passed twice (an OUT argument cannot be aliased with another one) and no MPI_IN_PLACE.
+  !> With gfortran the MPI sentinels in COMMON blocks (MPI_IN_PLACE, MPI_BOTTOM, MPI_STATUS_IGNORE,
+  !> MPI_STATUSES_IGNORE, MPI_ERRCODES_IGNORE, MPI_ARGV_NULL, MPI_ARGVS_NULL) are not recognised while
+  !> -fno-underscoring is set (cmake/SetFortranFlags.cmake): do not use them.
   subroutine mpi_reduce_sum_r8(val)
     real(R8), intent(inout) :: val
 #ifdef USE_MPI
     integer :: ierr
-    if (mpi_rank_ == 0) then
-      call MPI_REDUCE(MPI_IN_PLACE, val, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
-    else
-      call MPI_REDUCE(val, val, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
-    end if
+    real(R8) :: send
+    send = val
+    call MPI_REDUCE(send, val, 1, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
     call check_mpi_error(ierr)
 #endif
   end subroutine mpi_reduce_sum_r8
@@ -233,17 +241,20 @@ contains
 
   !> MPI_REDUCE with MPI_SUM for an array of real(R8) to root rank 0.
   !> Result is only valid on root. More efficient than ALLREDUCE when
-  !> only root needs the result (e.g. for residual output).
+  !> only root needs the result (e.g. for residual output). arr is left as it is elsewhere, where the
+  !> receive buffer is not significant. Every rank sends a copy of arr: no buffer passed twice (an OUT
+  !> argument cannot be aliased with another one) and no MPI_IN_PLACE.
+  !> With gfortran the MPI sentinels in COMMON blocks (MPI_IN_PLACE, MPI_BOTTOM, MPI_STATUS_IGNORE,
+  !> MPI_STATUSES_IGNORE, MPI_ERRCODES_IGNORE, MPI_ARGV_NULL, MPI_ARGVS_NULL) are not recognised while
+  !> -fno-underscoring is set (cmake/SetFortranFlags.cmake): do not use them.
   subroutine mpi_reduce_sum_r8_array(arr, n)
     integer, intent(in)     :: n
     real(R8), intent(inout) :: arr(n)
 #ifdef USE_MPI
     integer :: ierr
-    if (mpi_rank_ == 0) then
-      call MPI_REDUCE(MPI_IN_PLACE, arr, n, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
-    else
-      call MPI_REDUCE(arr, arr, n, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
-    end if
+    real(R8), allocatable :: send(:)
+    send = arr
+    call MPI_REDUCE(send, arr, n, MPI_DOUBLE_PRECISION, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
     call check_mpi_error(ierr)
 #endif
   end subroutine mpi_reduce_sum_r8_array

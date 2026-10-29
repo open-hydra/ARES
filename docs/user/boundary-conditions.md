@@ -239,6 +239,9 @@ Each boundary cell is listed as an identifier line, optionally followed by a dat
 | `face` | Face index (1–6) |
 | `type` | Numeric BC type code |
 
+All boundary cells are listed — one entry per face cell, face by face, block by block, as ATLAS writes them (another
+order gives the same solution and the same wall output).
+
 Types that carry no data (symmetry, axisymmetric, extrapolation) have no second line.
 
 ### Numeric type codes

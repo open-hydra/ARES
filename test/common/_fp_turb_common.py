@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Shared helpers for the NASA-TMR turbulent flat-plate validation scripts
-(validate_sst.py, validate_wilcox2006.py, validate_sgglrr.py).
+(validate_sst.py, validate_wilcox2006.py, validate_ssglrr.py).
 
 All three cases are the NASA Turbulence Modeling Resource 2D zero-pressure
 gradient flat plate, defined at Re = 5e6, M = 0.2. The ARES runs use the

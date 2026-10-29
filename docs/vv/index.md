@@ -41,7 +41,7 @@ The current suite is entirely **2-D real-fluid turbulent** and is organised as f
 | `test/Flat_Plate_SA` | [Turbulent flat plate](2D-flat-plate-turbulent.md) | air | SA vs. NASA TMR |
 | `test/Flat_Plate_SST` | [Turbulent flat plate](2D-flat-plate-turbulent.md) | air | SST vs. NASA TMR |
 | `test/Flat_Plate_Wilcox2006` | [Turbulent flat plate](2D-flat-plate-turbulent.md) | air | Wilcox 2006 vs. NASA TMR |
-| `test/Flat_Plate_SGGLRR` | [Turbulent flat plate](2D-flat-plate-turbulent.md) | air | SSG-LRR (RSM) vs. NASA TMR |
+| `test/Flat_Plate_SSGLRR` | [Turbulent flat plate](2D-flat-plate-turbulent.md) | air | SSG-LRR (RSM) vs. NASA TMR |
 | `test/HTD` | [HTD](htd.md) | para-hydrogen | supercritical, preconditioned, 2-block axisymmetric |
 | `test/Prt-correction` | [Prt correction](prt-correction.md) | water (constant-property table) | SA-rough + `Prt-correction` |
 
@@ -58,4 +58,4 @@ The current suite is entirely **2-D real-fluid turbulent** and is organised as f
 Each case reads its `OUTPUT/`, compares against the `reference/` data (or against reference correlations / experimental points embedded in the script), and reports the error metrics. The turbulent flat plates share helper logic for the Reynolds-number-consistent comparison (`test/common/_fp_turb_common.py`); the cases that work on section-averaged 1-D profiles (`Flat_Plate_SA`, `HTD`, `Prt-correction`) use the shared `test/common/extract1d` tool to produce `OUTPUT/1d.dat` first.
 
 !!! note "Real-fluid tables and the analytic checks"
-    The canonical turbulence references (NASA TMR) assume a calorically simple gas. To compare cleanly, the `Flat_Plate_SST`, `Flat_Plate_Wilcox2006`, and `Flat_Plate_SGGLRR` cases ship `set_constant_cp.py` and `set_constant_transport.py`, which flatten the real-fluid $(p,h)$ table to constant $c_p$ and constant transport, isolating the numerics from real-fluid property variation. The [HTD](htd.md) case instead uses the full real-fluid table, since the property variation *is* the physics under test.
+    The canonical turbulence references (NASA TMR) assume a calorically simple gas. To compare cleanly, the `Flat_Plate_SST`, `Flat_Plate_Wilcox2006`, and `Flat_Plate_SSGLRR` cases ship `set_constant_cp.py` and `set_constant_transport.py`, which flatten the real-fluid $(p,h)$ table to constant $c_p$ and constant transport, isolating the numerics from real-fluid property variation. The [HTD](htd.md) case instead uses the full real-fluid table, since the property variation *is* the physics under test.

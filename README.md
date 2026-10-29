@@ -95,7 +95,7 @@ ARES/
 │   ├── Flat_Plate_SA/        #   turbulent flat plate — Spalart–Allmaras
 │   ├── Flat_Plate_SST/       #   turbulent flat plate — Menter SST
 │   ├── Flat_Plate_Wilcox2006/#   turbulent flat plate — Wilcox k-ω 2006
-│   ├── Flat_Plate_SGGLRR/    #   turbulent flat plate — SSG-LRR
+│   ├── Flat_Plate_SSGLRR/    #   turbulent flat plate — SSG-LRR
 │   ├── HTD/                  #   supercritical heat transfer (real-fluid)
 │   └── Prt-correction/       #   turbulent Prandtl correction
 ├── docs/              # MkDocs documentation source
