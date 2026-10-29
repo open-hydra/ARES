@@ -17,8 +17,11 @@ program ARES_program
   call mpi_init_env()
 
 #if defined (_OPENMP)
+  ! The size of the team: one thread writes it (every thread of the team writing it would be a data race)
   !$omp parallel
+  !$omp single
   obj_sim_param%nthreads = OMP_GET_NUM_THREADS()
+  !$omp end single
   !$omp end parallel
   if (mpi_is_root) then
     write(*,'(A)')    ' Parallel execution'

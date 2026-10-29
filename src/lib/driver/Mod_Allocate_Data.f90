@@ -196,9 +196,9 @@ contains
     integer :: b, d, i, c
     logical, allocatable :: needs_remote_P(:)
 
-    ! Build mask of remote blocks whose P (and dir) must be kept:
-    !  - chimera (102): donorID(:,1) can reference remote blocks
-    !  - manifold (501): bc%bs can be remote
+    ! Build mask of remote blocks whose P must be kept:
+    !  - chimera (102): remote donors of a receiver block this rank owns
+    ! Not 104: its donors are blocks of the other solver, which hydra exchanges
     allocate(needs_remote_P(domain%nb))
     needs_remote_P = .false.
     do i = 1, domain%nbound
@@ -208,6 +208,7 @@ contains
           if (allocated(domain%bc(i)%donorID)) then
             do c = 1, size(domain%bc(i)%donorID, 1)
               b = domain%bc(i)%donorID(c, 1)
+              if (b < 1 .or. b > domain%nb) cycle
               if (.not. is_local_block(b)) needs_remote_P(b) = .true.
             end do
           end if
@@ -227,13 +228,13 @@ contains
       if (allocated(domain%blk(b)%rc_term1))     deallocate(domain%blk(b)%rc_term1)
       if (allocated(domain%blk(b)%rc_term2))     deallocate(domain%blk(b)%rc_term2)
 
-      ! P — free unless this remote block is a chimera donor or manifold source
+      ! P — free unless this remote block is a chimera donor
       if (.not. needs_remote_P(b)) then
         if (allocated(domain%blk(b)%P)) deallocate(domain%blk(b)%P)
       end if
 
-      ! Metrics — free on non-root ranks only (root needs them for wall I/O)
-      ! Keep dir on blocks needed for manifold (BC_Manifold reads blk(Bs)%dir%f%A)
+      ! Metrics — free on non-root ranks only (root needs them for wall I/O).
+      ! Chimera donors are read through P alone, so their metrics go too.
       if (.not. mpi_is_root) then
         if (allocated(domain%blk(b)%node)) deallocate(domain%blk(b)%node)
         if (allocated(domain%blk(b)%M))    deallocate(domain%blk(b)%M)
@@ -241,11 +242,9 @@ contains
         if (allocated(domain%blk(b)%vol))  deallocate(domain%blk(b)%vol)
         if (allocated(domain%blk(b)%yn))   deallocate(domain%blk(b)%yn)
         if (allocated(domain%blk(b)%ks))   deallocate(domain%blk(b)%ks)
-        if (.not. needs_remote_P(b)) then
-          do d = 1, 3
-            if (allocated(domain%blk(b)%dir(d)%f)) deallocate(domain%blk(b)%dir(d)%f)
-          end do
-        end if
+        do d = 1, 3
+          if (allocated(domain%blk(b)%dir(d)%f)) deallocate(domain%blk(b)%dir(d)%f)
+        end do
       end if
     end do
 

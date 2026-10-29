@@ -101,6 +101,17 @@ module ARES_Mod_GhostExchange
   type(ghost_schedule_type), allocatable, target :: ghost_scheds(:)
   type(ghost_schedule_type), pointer, public :: ghost_sched => null()
 
+  ! Tags of the exchanges of a stage, one per exchange. Every receive names the
+  ! sender's rank, so a tag has only to tell apart the exchanges in flight
+  ! together (P and chimera). The gathers and scatters of the output, outside the
+  ! stages, use TAG_IO: one message per block, posted on both sides in increasing
+  ! block order, and the messages between two ranks with one tag are matched in
+  ! the order they were started (MPI 4.1, Sec. 3.7.4), so the k-th receive from a
+  ! rank takes the k-th block that rank sends. All are below 32767, the least
+  ! MPI_TAG_UB the MPI standard allows.
+  integer, parameter :: TAG_P = 0, TAG_PG = 1, TAG_CHIMERA = 2, TAG_R = 3
+  integer, parameter, public :: TAG_IO = 5
+
   public :: allocate_exchange_schedules, set_active_mg_level
 
   public :: build_ghost_schedule
@@ -112,8 +123,9 @@ module ARES_Mod_GhostExchange
   public :: exchange_ghost_P_wait_send
   public :: exchange_ghost_R
   public :: exchange_ghost_Pg
-  public :: exchange_ghost_chimera_begin
-  public :: exchange_ghost_chimera_end
+  public :: exchange_ghost_chimera_post_recv, exchange_ghost_chimera_pack
+  public :: exchange_ghost_chimera_post_send, exchange_ghost_chimera_wait_recv
+  public :: exchange_ghost_chimera_unpack, exchange_ghost_chimera_wait_send
   public :: gather_P_to_root
   public :: gather_diagnostic_to_root
   public :: scatter_P_from_root
@@ -276,14 +288,15 @@ contains
 
 
   !> Build pre-filtered list of BC indices where Bm is local to this rank.
-  !> Avoids O(nbound) loop scanning in hot paths (Fill_Ghost_Cell, etc.).
+  !> Avoids O(nbound) loop scanning in hot paths (Fill_Ghost_Cell, BC_Fluxes, etc.).
   subroutine build_local_bc_index(domain)
     use ARES_Advanced_Types_m
 
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
     ! Local
-    integer :: i, n, ns
+    integer :: i, n, ns, b, f
+    integer, allocatable :: next(:,:)
 
     ! Count local BC entries (Bm is local) and local source entries (Bs is local, type-101)
     n = 0; ns = 0
@@ -318,6 +331,42 @@ contains
         end if
       end if
     end do
+
+    ! Group the local entries by block, then face, keeping the file order within
+    ! a group (counting sort). BC_Fluxes runs one worksharing loop per group: the
+    ! records of one face of one block write distinct target cells, and the faces
+    ! of a corner cell are summed in the order 1..6 whatever the order of the BC file.
+    if (allocated(domain%local_bf_first)) deallocate(domain%local_bf_first)
+    if (allocated(domain%local_bf_count)) deallocate(domain%local_bf_count)
+    if (allocated(domain%local_bf_idx))   deallocate(domain%local_bf_idx)
+    allocate(domain%local_bf_first(domain%nb, 6), domain%local_bf_count(domain%nb, 6))
+    allocate(domain%local_bf_idx(domain%n_local_bc))
+
+    domain%local_bf_count = 0
+    do n = 1, domain%n_local_bc
+      i = domain%local_bc_idx(n)
+      b = domain%bc(i)%b
+      f = domain%bc(i)%f
+      domain%local_bf_count(b,f) = domain%local_bf_count(b,f) + 1
+    end do
+
+    n = 1
+    do b = 1, domain%nb
+      do f = 1, 6
+        domain%local_bf_first(b,f) = n
+        n = n + domain%local_bf_count(b,f)
+      end do
+    end do
+
+    allocate(next(domain%nb, 6))
+    next(:,:) = domain%local_bf_first(:,:)
+    do n = 1, domain%n_local_bc
+      i = domain%local_bc_idx(n)
+      b = domain%bc(i)%b
+      f = domain%bc(i)%f
+      domain%local_bf_idx(next(b,f)) = i
+      next(b,f) = next(b,f) + 1
+    end do
   end subroutine build_local_bc_index
 
 
@@ -345,7 +394,7 @@ contains
     use mpi
 
     implicit none
-    integer :: r, ierr, tag, buf_pos, entry_size
+    integer :: r, ierr, buf_pos, entry_size
 
     entry_size = nprim * gc
 
@@ -357,11 +406,10 @@ contains
     ! Initialize persistent receives
     do r = 1, ghost_sched%n_recv_ranks
       buf_pos = (ghost_sched%recv_groups(r)%offset - 1) * entry_size + 1
-      tag = ghost_sched%recv_groups(r)%rank
       call MPI_RECV_INIT(ghost_sched%P_recv_buf(buf_pos), &
                          ghost_sched%recv_groups(r)%count * entry_size, &
                          MPI_DOUBLE_PRECISION, &
-                         ghost_sched%recv_groups(r)%rank, tag, &
+                         ghost_sched%recv_groups(r)%rank, TAG_P, &
                          MPI_COMM_WORLD, ghost_sched%P_recv_req_pers(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -369,11 +417,10 @@ contains
     ! Initialize persistent sends
     do r = 1, ghost_sched%n_send_ranks
       buf_pos = (ghost_sched%send_groups(r)%offset - 1) * entry_size + 1
-      tag = mpi_rank_
       call MPI_SEND_INIT(ghost_sched%P_send_buf(buf_pos), &
                          ghost_sched%send_groups(r)%count * entry_size, &
                          MPI_DOUBLE_PRECISION, &
-                         ghost_sched%send_groups(r)%rank, tag, &
+                         ghost_sched%send_groups(r)%rank, TAG_P, &
                          MPI_COMM_WORLD, ghost_sched%P_send_req_pers(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -383,14 +430,13 @@ contains
 
 
   !> Initialize persistent MPI requests for R field exchange.
-  !> Reuses P_send_buf/P_recv_buf (same size). Uses distinct tags (offset 30000).
+  !> Reuses P_send_buf/P_recv_buf (same size), with a tag of its own.
   subroutine init_persistent_R_requests()
     use ARES_Global_m, only: gc, nprim
     use mpi
 
     implicit none
-    integer :: r, ierr, tag, buf_pos, entry_size
-    integer, parameter :: TAG_OFFSET = 30000
+    integer :: r, ierr, buf_pos, entry_size
 
     entry_size = nprim * gc
 
@@ -402,11 +448,10 @@ contains
     ! Initialize persistent receives for R
     do r = 1, ghost_sched%n_recv_ranks
       buf_pos = (ghost_sched%recv_groups(r)%offset - 1) * entry_size + 1
-      tag = ghost_sched%recv_groups(r)%rank + TAG_OFFSET
       call MPI_RECV_INIT(ghost_sched%P_recv_buf(buf_pos), &
                          ghost_sched%recv_groups(r)%count * entry_size, &
                          MPI_DOUBLE_PRECISION, &
-                         ghost_sched%recv_groups(r)%rank, tag, &
+                         ghost_sched%recv_groups(r)%rank, TAG_R, &
                          MPI_COMM_WORLD, ghost_sched%R_recv_req_pers(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -414,11 +459,10 @@ contains
     ! Initialize persistent sends for R
     do r = 1, ghost_sched%n_send_ranks
       buf_pos = (ghost_sched%send_groups(r)%offset - 1) * entry_size + 1
-      tag = mpi_rank_ + TAG_OFFSET
       call MPI_SEND_INIT(ghost_sched%P_send_buf(buf_pos), &
                          ghost_sched%send_groups(r)%count * entry_size, &
                          MPI_DOUBLE_PRECISION, &
-                         ghost_sched%send_groups(r)%rank, tag, &
+                         ghost_sched%send_groups(r)%rank, TAG_R, &
                          MPI_COMM_WORLD, ghost_sched%R_send_req_pers(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -467,7 +511,8 @@ contains
     do i = 2, n
       tmp = list(i)
       j = i - 1
-      do while (j >= 1 .and. list(j)%remote_rank > tmp%remote_rank)
+      do while (j >= 1)
+        if (list(j)%remote_rank <= tmp%remote_rank) exit
         list(j+1) = list(j)
         j = j - 1
       end do
@@ -688,9 +733,16 @@ contains
       end do
     end do
 
-    ! Sort by peer rank (stable) and build per-rank groups
-    call sort_chim_entries_by_rank(ghost_sched%chim_send_list, ns)
-    call sort_chim_entries_by_rank(ghost_sched%chim_recv_list, nr)
+    ! Sort by (peer rank, donor cell) and drop repeats: neighbouring ghost cells
+    ! share donors, and each distinct cell only has to travel once per peer.
+    ! Both sides hold the same set per rank pair, so the same full-key order
+    ! keeps send and recv sequences matched.
+    call sort_unique_chim_entries(ghost_sched%chim_send_list, ns)
+    call sort_unique_chim_entries(ghost_sched%chim_recv_list, nr)
+    ghost_sched%n_chim_send = ns
+    ghost_sched%n_chim_recv = nr
+
+    ! Build per-rank groups
     call build_chim_rank_groups(ghost_sched%chim_send_list, ns, &
                                 ghost_sched%chim_send_groups, ghost_sched%n_chim_send_ranks)
     call build_chim_rank_groups(ghost_sched%chim_recv_list, nr, &
@@ -712,27 +764,77 @@ contains
   end subroutine build_chimera_schedule
 
 
-  !> Sort chimera entries by remote_rank using stable insertion sort.
-  subroutine sort_chim_entries_by_rank(list, n)
+  !> Sort chimera entries by (remote_rank, bs, ks, js, is) and remove repeats.
+  !> Merge sort: the lists hold one entry per (bc, donor) pair, up to several
+  !> hundred thousand, where an insertion sort would be quadratic. On return
+  !> the list is shrunk to the n distinct entries.
+  subroutine sort_unique_chim_entries(list, n)
     implicit none
-    type(chim_entry_type), intent(inout) :: list(:)
-    integer, intent(in) :: n
+    type(chim_entry_type), allocatable, intent(inout) :: list(:)
+    integer, intent(inout) :: n
     ! Local
-    integer :: i, j
-    type(chim_entry_type) :: tmp
+    type(chim_entry_type), allocatable :: tmp(:)
+    integer :: width, lo, mid, hi, i, j, k, m
 
-    do i = 2, n
-      tmp = list(i)
-      j = i - 1
-      ! No short-circuit in Fortran: list(j) is tested only once j >= 1 is known
-      do while (j >= 1)
-        if (list(j)%remote_rank <= tmp%remote_rank) exit
-        list(j+1) = list(j)
-        j = j - 1
+    if (n <= 1) return
+
+    ! Bottom-up merge sort, list <-> tmp
+    allocate(tmp(n))
+    width = 1
+    do while (width < n)
+      do lo = 1, n, 2*width
+        mid = min(lo + width, n + 1)
+        hi  = min(lo + 2*width, n + 1)
+        i = lo; j = mid; k = lo
+        do while (i < mid .and. j < hi)
+          if (chim_key_le(list(i), list(j))) then
+            tmp(k) = list(i); i = i + 1
+          else
+            tmp(k) = list(j); j = j + 1
+          end if
+          k = k + 1
+        end do
+        do while (i < mid)
+          tmp(k) = list(i); i = i + 1; k = k + 1
+        end do
+        do while (j < hi)
+          tmp(k) = list(j); j = j + 1; k = k + 1
+        end do
       end do
-      list(j+1) = tmp
+      list(1:n) = tmp(1:n)
+      width = 2*width
     end do
-  end subroutine sort_chim_entries_by_rank
+    deallocate(tmp)
+
+    ! Keep the first of each run of equal keys
+    m = 1
+    do i = 2, n
+      if (chim_key_le(list(i), list(m)) .and. chim_key_le(list(m), list(i))) cycle
+      m = m + 1
+      list(m) = list(i)
+    end do
+    n = m
+    list = list(1:n)
+  end subroutine sort_unique_chim_entries
+
+
+  !> Lexicographic a <= b on (remote_rank, bs, ks, js, is).
+  pure logical function chim_key_le(a, b)
+    implicit none
+    type(chim_entry_type), intent(in) :: a, b
+
+    if (a%remote_rank /= b%remote_rank) then
+      chim_key_le = a%remote_rank < b%remote_rank
+    elseif (a%bs /= b%bs) then
+      chim_key_le = a%bs < b%bs
+    elseif (a%ks /= b%ks) then
+      chim_key_le = a%ks < b%ks
+    elseif (a%js /= b%js) then
+      chim_key_le = a%js < b%js
+    else
+      chim_key_le = a%is <= b%is
+    end if
+  end function chim_key_le
 
 
   !> Build rank groups from a sorted chimera entry list.
@@ -776,7 +878,7 @@ contains
 #endif
 
 
-  !> Post persistent P receives. Call from !$omp single.
+  !> Post persistent P receives. Call from !$omp master (primary thread).
   subroutine exchange_ghost_P_post_recv(domain)
     use ARES_Advanced_Types_m
     implicit none
@@ -802,7 +904,7 @@ contains
   end subroutine exchange_ghost_P_pack
 
 
-  !> Post persistent P sends. Call from !$omp single after pack is complete.
+  !> Post persistent P sends. Call from !$omp master (primary thread) after pack is complete.
   subroutine exchange_ghost_P_post_send(domain)
     use ARES_Advanced_Types_m
     implicit none
@@ -814,7 +916,7 @@ contains
   end subroutine exchange_ghost_P_post_send
 
 
-  !> Wait for P receives and unpack. Call wait from !$omp single, unpack from !$omp do.
+  !> Wait for P receives and unpack. Call from !$omp master (primary thread: wait and unpack).
   subroutine exchange_ghost_P_wait_unpack(domain)
     use ARES_Advanced_Types_m
     implicit none
@@ -827,7 +929,7 @@ contains
   end subroutine exchange_ghost_P_wait_unpack
 
 
-  !> Wait for P sends to complete. Call from !$omp single.
+  !> Wait for P sends to complete. Call from !$omp master (primary thread).
   subroutine exchange_ghost_P_wait_send(domain)
     use ARES_Advanced_Types_m
     implicit none
@@ -915,7 +1017,7 @@ contains
           if (.not. is_local_block(b)) then
             nreq = nreq + 1
             call MPI_IRECV(buf(blk_offset(b)+1), blk_ncells(b), MPI_DOUBLE_PRECISION, &
-                           block_owner(b), b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           block_owner(b), TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -930,7 +1032,7 @@ contains
               reshape(domain%blk(b)%P(:, 1:n1, 1:n2, 1:n3), [blk_ncells(b)])
             nreq = nreq + 1
             call MPI_ISEND(buf(blk_offset(b)+1), blk_ncells(b), MPI_DOUBLE_PRECISION, &
-                           0, b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           0, TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1034,7 +1136,7 @@ contains
           if (.not. is_local_block(b)) then
             nreq = nreq + 1
             call MPI_IRECV(buf(blk_offset(b)+1), blk_size(b), MPI_DOUBLE_PRECISION, &
-                           block_owner(b), 1000+b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           block_owner(b), TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1055,7 +1157,7 @@ contains
               reshape(domain%blk(b)%dtlocal(1:n1, 1:n2, 1:n3), [ncells_dt])
             nreq = nreq + 1
             call MPI_ISEND(buf(blk_offset(b)+1), blk_size(b), MPI_DOUBLE_PRECISION, &
-                           0, 1000+b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           0, TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1149,7 +1251,7 @@ contains
               reshape(domain%blk(b)%P(:, 1:n1, 1:n2, 1:n3), [blk_ncells(b)])
             nreq = nreq + 1
             call MPI_ISEND(buf(blk_offset(b)+1), blk_ncells(b), MPI_DOUBLE_PRECISION, &
-                           block_owner(b), b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           block_owner(b), TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1159,7 +1261,7 @@ contains
           if (is_local_block(b)) then
             nreq = nreq + 1
             call MPI_IRECV(buf(blk_offset(b)+1), blk_ncells(b), MPI_DOUBLE_PRECISION, &
-                           0, b, MPI_COMM_WORLD, reqs(nreq), ierr)
+                           0, TAG_IO, MPI_COMM_WORLD, reqs(nreq), ierr)
             call check_mpi_error(ierr)
           end if
         end do
@@ -1206,34 +1308,88 @@ contains
   end subroutine exchange_ghost_Pg
 
 
-  !> Begin chimera donor-cell exchange: post receives, pack local donor
-  !> cells, post sends. Call from !$omp single before local BC processing.
-  subroutine exchange_ghost_chimera_begin(domain)
+  !> Chimera donor-cell exchange, split like the P exchange so that packing
+  !> and unpacking run over the whole thread team:
+  !>   post_recv (master) -> pack (omp do) -> post_send (master)
+  !>   wait_recv (master) -> unpack (omp do) -> wait_send (master)
+  !> Unpacked cells land in the kept-alive P arrays of remote donor blocks,
+  !> where Ghost_Chimera reads them.
+
+  !> Post chimera receives. Call from !$omp master (primary thread).
+  subroutine exchange_ghost_chimera_post_recv(domain)
     use ARES_Advanced_Types_m
     implicit none
     type(ARES_domain_type), intent(in) :: domain
     if (mpi_size_ <= 1) return
-    call set_active_mg_level(domain%mg_level)
 #ifdef USE_MPI
-    call chimera_exchange_post(domain)
+    call chimera_post_recv()
 #endif
-  end subroutine exchange_ghost_chimera_begin
+  end subroutine exchange_ghost_chimera_post_recv
 
 
-  !> Complete chimera donor-cell exchange: wait for receives and write the
-  !> donor cells into the kept-alive P arrays of remote donor blocks, so
-  !> Ghost_Chimera can interpolate from fresh data. Call from !$omp single
-  !> before processing type-102 BC entries.
-  subroutine exchange_ghost_chimera_end(domain)
+  !> Pack chimera send entries i_start..i_end. Call from !$omp do over
+  !> 1..ghost_sched%n_chim_send.
+  subroutine exchange_ghost_chimera_pack(domain, i_start, i_end)
+    use ARES_Advanced_Types_m
+    implicit none
+    type(ARES_domain_type), intent(in) :: domain
+    integer, intent(in) :: i_start, i_end
+    if (mpi_size_ <= 1) return
+#ifdef USE_MPI
+    call chimera_pack(domain, i_start, i_end)
+#endif
+  end subroutine exchange_ghost_chimera_pack
+
+
+  !> Post chimera sends. Call from !$omp master (primary thread) after packing is complete.
+  subroutine exchange_ghost_chimera_post_send(domain)
+    use ARES_Advanced_Types_m
+    implicit none
+    type(ARES_domain_type), intent(in) :: domain
+    if (mpi_size_ <= 1) return
+#ifdef USE_MPI
+    call chimera_post_send()
+#endif
+  end subroutine exchange_ghost_chimera_post_send
+
+
+  !> Wait for chimera receives. Call from !$omp master (primary thread).
+  subroutine exchange_ghost_chimera_wait_recv(domain)
+    use ARES_Advanced_Types_m
+    implicit none
+    type(ARES_domain_type), intent(in) :: domain
+    if (mpi_size_ <= 1) return
+#ifdef USE_MPI
+    call chimera_wait_recv()
+#endif
+  end subroutine exchange_ghost_chimera_wait_recv
+
+
+  !> Unpack chimera recv entries i_start..i_end into remote donor blocks' P.
+  !> Call from !$omp do over 1..ghost_sched%n_chim_recv. Entries are
+  !> distinct cells, so threads never write the same location.
+  subroutine exchange_ghost_chimera_unpack(domain, i_start, i_end)
     use ARES_Advanced_Types_m
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
+    integer, intent(in) :: i_start, i_end
     if (mpi_size_ <= 1) return
-    call set_active_mg_level(domain%mg_level)
 #ifdef USE_MPI
-    call chimera_exchange_complete(domain)
+    call chimera_unpack(domain, i_start, i_end)
 #endif
-  end subroutine exchange_ghost_chimera_end
+  end subroutine exchange_ghost_chimera_unpack
+
+
+  !> Wait for chimera sends before the send buffer is reused. Call from !$omp master (primary thread).
+  subroutine exchange_ghost_chimera_wait_send(domain)
+    use ARES_Advanced_Types_m
+    implicit none
+    type(ARES_domain_type), intent(in) :: domain
+    if (mpi_size_ <= 1) return
+#ifdef USE_MPI
+    call chimera_wait_send()
+#endif
+  end subroutine exchange_ghost_chimera_wait_send
 
 
 #ifdef USE_MPI
@@ -1246,7 +1402,7 @@ contains
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
     ! Local
-    integer :: ns, nr, i, r, ierr, tag, bc_idx, buf_pos
+    integer :: ns, nr, i, r, ierr, bc_idx, buf_pos
     integer :: entry_size
     integer, parameter :: PG_NCOLS = 4   ! Pg columns 3..6
 
@@ -1259,11 +1415,10 @@ contains
     ! Post one receive per remote rank (aggregated)
     do r = 1, ghost_sched%n_recv_ranks
       buf_pos = (ghost_sched%recv_groups(r)%offset - 1) * entry_size + 1
-      tag = ghost_sched%recv_groups(r)%rank + 10000  ! unique tag per rank for Pg
       call MPI_IRECV(ghost_sched%Pg_recv_buf(buf_pos), &
                      ghost_sched%recv_groups(r)%count * entry_size, &
                      MPI_DOUBLE_PRECISION, &
-                     ghost_sched%recv_groups(r)%rank, tag, &
+                     ghost_sched%recv_groups(r)%rank, TAG_PG, &
                      MPI_COMM_WORLD, ghost_sched%recv_req(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -1280,11 +1435,10 @@ contains
         ghost_sched%Pg_send_buf(buf_pos+3*nprim+1   : buf_pos+4*nprim) = domain%bc(bc_idx)%Pg(:,6)
       end do
       buf_pos = (ghost_sched%send_groups(r)%offset - 1) * entry_size + 1
-      tag = mpi_rank_ + 10000  ! sender's rank as tag for Pg
       call MPI_ISEND(ghost_sched%Pg_send_buf(buf_pos), &
                      ghost_sched%send_groups(r)%count * entry_size, &
                      MPI_DOUBLE_PRECISION, &
-                     ghost_sched%send_groups(r)%rank, tag, &
+                     ghost_sched%send_groups(r)%rank, TAG_PG, &
                      MPI_COMM_WORLD, ghost_sched%send_req(r), ierr)
       call check_mpi_error(ierr)
     end do
@@ -1315,34 +1469,39 @@ contains
   end subroutine exchange_Pg_field
 
 
-  !> Internal: post chimera receives, pack local donor cells, post sends.
-  subroutine chimera_exchange_post(domain)
-    use ARES_Advanced_Types_m
+  !> Internal: post one chimera receive per donor-owner rank (aggregated).
+  subroutine chimera_post_recv()
     use ARES_Global_m, only: nprim
     use mpi
-
     implicit none
-    type(ARES_domain_type), intent(in) :: domain
     ! Local
-    integer :: i, r, ierr, tag, buf_pos
-    integer, parameter :: TAG_OFFSET = 20000
+    integer :: r, ierr, buf_pos
 
     if (ghost_sched%n_chim_send == 0 .and. ghost_sched%n_chim_recv == 0) return
 
-    ! Post one receive per donor-owner rank (aggregated)
     do r = 1, ghost_sched%n_chim_recv_ranks
       buf_pos = (ghost_sched%chim_recv_groups(r)%offset - 1) * nprim + 1
-      tag = ghost_sched%chim_recv_groups(r)%rank + TAG_OFFSET
       call MPI_IRECV(ghost_sched%chim_recv_buf(buf_pos), &
                      ghost_sched%chim_recv_groups(r)%count * nprim, &
                      MPI_DOUBLE_PRECISION, &
-                     ghost_sched%chim_recv_groups(r)%rank, tag, &
+                     ghost_sched%chim_recv_groups(r)%rank, TAG_CHIMERA, &
                      MPI_COMM_WORLD, ghost_sched%chim_recv_req(r), ierr)
       call check_mpi_error(ierr)
     end do
+  end subroutine chimera_post_recv
 
-    ! Pack local donor cells and post one send per receiver rank
-    do i = 1, ghost_sched%n_chim_send
+
+  !> Internal: pack local donor cells i_start..i_end. Safe from !$omp do.
+  subroutine chimera_pack(domain, i_start, i_end)
+    use ARES_Advanced_Types_m
+    use ARES_Global_m, only: nprim
+    implicit none
+    type(ARES_domain_type), intent(in) :: domain
+    integer, intent(in) :: i_start, i_end
+    ! Local
+    integer :: i, buf_pos
+
+    do i = i_start, i_end
       buf_pos = (i - 1) * nprim
       ghost_sched%chim_send_buf(buf_pos+1 : buf_pos+nprim) = &
         domain%blk(ghost_sched%chim_send_list(i)%bs)%P(:, &
@@ -1350,31 +1509,36 @@ contains
           ghost_sched%chim_send_list(i)%js, &
           ghost_sched%chim_send_list(i)%ks)
     end do
+  end subroutine chimera_pack
+
+
+  !> Internal: post one chimera send per receiver rank (aggregated).
+  subroutine chimera_post_send()
+    use ARES_Global_m, only: nprim
+    use mpi
+    implicit none
+    ! Local
+    integer :: r, ierr, buf_pos
+
+    if (ghost_sched%n_chim_send == 0 .and. ghost_sched%n_chim_recv == 0) return
+
     do r = 1, ghost_sched%n_chim_send_ranks
       buf_pos = (ghost_sched%chim_send_groups(r)%offset - 1) * nprim + 1
-      tag = mpi_rank_ + TAG_OFFSET
       call MPI_ISEND(ghost_sched%chim_send_buf(buf_pos), &
                      ghost_sched%chim_send_groups(r)%count * nprim, &
                      MPI_DOUBLE_PRECISION, &
-                     ghost_sched%chim_send_groups(r)%rank, tag, &
+                     ghost_sched%chim_send_groups(r)%rank, TAG_CHIMERA, &
                      MPI_COMM_WORLD, ghost_sched%chim_send_req(r), ierr)
       call check_mpi_error(ierr)
     end do
-  end subroutine chimera_exchange_post
+  end subroutine chimera_post_send
 
 
-  !> Internal: wait for chimera receives, unpack donor cells into the
-  !> remote donor blocks' P arrays (kept allocated by
-  !> deallocate_remote_computation_data), then wait for sends.
-  subroutine chimera_exchange_complete(domain)
-    use ARES_Advanced_Types_m
-    use ARES_Global_m, only: nprim
+  !> Internal: wait for all chimera receives.
+  subroutine chimera_wait_recv()
     use mpi
-
     implicit none
-    type(ARES_domain_type), intent(inout) :: domain
-    ! Local
-    integer :: i, ierr, buf_pos
+    integer :: ierr
 
     if (ghost_sched%n_chim_send == 0 .and. ghost_sched%n_chim_recv == 0) return
 
@@ -1383,8 +1547,22 @@ contains
                        ghost_sched%chim_stat(:,1:ghost_sched%n_chim_recv_ranks), ierr)
       call check_mpi_error(ierr)
     end if
+  end subroutine chimera_wait_recv
 
-    do i = 1, ghost_sched%n_chim_recv
+
+  !> Internal: unpack donor cells i_start..i_end into the remote donor blocks'
+  !> P arrays (kept allocated by deallocate_remote_computation_data). Safe
+  !> from !$omp do.
+  subroutine chimera_unpack(domain, i_start, i_end)
+    use ARES_Advanced_Types_m
+    use ARES_Global_m, only: nprim
+    implicit none
+    type(ARES_domain_type), intent(inout) :: domain
+    integer, intent(in) :: i_start, i_end
+    ! Local
+    integer :: i, buf_pos
+
+    do i = i_start, i_end
       buf_pos = (i - 1) * nprim
       domain%blk(ghost_sched%chim_recv_list(i)%bs)%P(:, &
         ghost_sched%chim_recv_list(i)%is, &
@@ -1392,16 +1570,26 @@ contains
         ghost_sched%chim_recv_list(i)%ks) = &
           ghost_sched%chim_recv_buf(buf_pos+1 : buf_pos+nprim)
     end do
+  end subroutine chimera_unpack
+
+
+  !> Internal: wait for all chimera sends.
+  subroutine chimera_wait_send()
+    use mpi
+    implicit none
+    integer :: ierr
+
+    if (ghost_sched%n_chim_send == 0 .and. ghost_sched%n_chim_recv == 0) return
 
     if (ghost_sched%n_chim_send_ranks > 0) then
       call MPI_WAITALL(ghost_sched%n_chim_send_ranks, ghost_sched%chim_send_req, &
                        ghost_sched%chim_stat(:,1:ghost_sched%n_chim_send_ranks), ierr)
       call check_mpi_error(ierr)
     end if
-  end subroutine chimera_exchange_complete
+  end subroutine chimera_wait_send
 
 
-  !> Post persistent receives for P field. Call from !$omp single.
+  !> Post persistent receives for P field. Call from !$omp master (primary thread).
   subroutine exchange_P_post_recv()
     use mpi
     implicit none
@@ -1449,7 +1637,7 @@ contains
   end subroutine exchange_P_pack_faces
 
 
-  !> Post persistent sends for P field. Call from !$omp single after pack.
+  !> Post persistent sends for P field. Call from !$omp master (primary thread) after pack.
   subroutine exchange_P_post_send()
     use mpi
     implicit none
@@ -1512,7 +1700,7 @@ contains
   end subroutine exchange_P_unpack_faces
 
 
-  !> Wait for P sends to complete. Call from !$omp single.
+  !> Wait for P sends to complete. Call from !$omp master (primary thread).
   subroutine exchange_P_wait_send()
     use mpi
     implicit none

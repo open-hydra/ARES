@@ -139,7 +139,7 @@ contains
   subroutine Ghost_Residual_Extrapolation ( domain )
     use ARES_Advanced_Types_m
     use ARES_Parameters_m, only: guide
-    use ARES_Mod_MPI, only: is_local_block
+    use ARES_Mod_MPI, only: is_local_block, mpi_size_
     use ARES_Mod_GhostExchange, only: exchange_ghost_R
     implicit none
     type(ARES_domain_type) :: domain
@@ -147,10 +147,17 @@ contains
     integer :: ii, i, ig, jg, kg
     integer :: bm, im, jm, km, fm, bs, is, js, ks
 
-    ! MPI: exchange residual data for inter-rank type-1 connections
-    !$omp single
-    call exchange_ghost_R(domain)
-    !$omp end single
+    ! MPI: exchange residual data for inter-rank type-1 connections.
+    ! exchange_ghost_R is a no-op on one rank; skipping it also skips the
+    ! barrier, once per direction per stage. Under MPI_THREAD_FUNNELED only
+    ! the primary thread may call MPI (master); the barrier publishes the
+    ! received residuals to the other threads.
+    if (mpi_size_ > 1) then
+      !$omp master
+      call exchange_ghost_R(domain)
+      !$omp end master
+      !$omp barrier
+    end if
 
     ! BC array processing — iterate only over local BC entries
     !$omp do private ( ii, i, bm, im, jm, km, fm, bs, is, js, ks, ig, jg, kg )

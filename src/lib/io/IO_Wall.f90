@@ -160,8 +160,9 @@ contains
     ! Local
     real(R8), dimension(8) :: Ovar
     integer :: f, lower, upper, i, b, bb, pv, Bm, Im, Jm, Km, Fm, Is, Js, Ks
-    integer :: n_wall_total, wall_i
+    integer :: n_wall_total, wall_i, ii, nrec
     real(R8), allocatable :: wall_buf(:)
+    integer, allocatable  :: order(:), first(:,:), next(:,:)
 
     ! Count total BC cells across all viscous faces
     n_wall_total = 0
@@ -174,15 +175,36 @@ contains
     allocate(wall_buf(8 * n_wall_total))
     wall_buf = 0d0
 
-    ! Each rank computes Ovar only for its local blocks
-    upper = 0; wall_i = 0
+    ! The records grouped by block, then face, in the order of the file within a group
+    ! (a counting sort over n_bf): the wall properties are computed and laid out face by
+    ! face, block by block, whatever the order of bc.txt. The ranges n_bf(b,f) of the
+    ! record list itself hold one face of one block only when bc.txt is sorted.
+    allocate(order(domain%nbound), first(domain%nb,6), next(domain%nb,6))
+    nrec = 0
     do b = 1, domain%nb
       do f = 1, 6
-        lower = upper + 1
-        upper = upper + domain%n_bf(b,f)
+        first(b,f) = nrec + 1
+        nrec = nrec + domain%n_bf(b,f)
+      end do
+    end do
+    next = first
+    do i = 1, domain%nbound
+      b = domain%bc(i)%b
+      f = domain%bc(i)%f
+      order(next(b,f)) = i
+      next(b,f) = next(b,f) + 1
+    end do
+
+    ! Each rank computes Ovar only for its local blocks
+    wall_i = 0
+    do b = 1, domain%nb
+      do f = 1, 6
+        lower = first(b,f)
+        upper = lower + domain%n_bf(b,f) - 1
         if (.not. obj_io_bc%viscous_flag(b,f)) cycle
 
-        do i = lower, upper
+        do ii = lower, upper
+          i = order(ii)
           wall_i = wall_i + 1
           Bm = domain%bc(i)%b
           if (.not. is_local_block(Bm)) cycle
@@ -218,15 +240,16 @@ contains
 
     ! Root fills IOwall from the gathered buffer
     if (mpi_is_root) then
-      upper = 0; wall_i = 0; bb = 0
+      wall_i = 0; bb = 0
       do b = 1, domain%nb
         do f = 1, 6
-          lower = upper + 1
-          upper = upper + domain%n_bf(b,f)
+          lower = first(b,f)
+          upper = lower + domain%n_bf(b,f) - 1
           if (.not. obj_io_bc%viscous_flag(b,f)) cycle
           bb = bb + 1
 
-          do i = lower, upper
+          do ii = lower, upper
+            i = order(ii)
             wall_i = wall_i + 1
             Ovar = wall_buf(8*(wall_i-1)+1 : 8*wall_i)
 
@@ -254,7 +277,7 @@ contains
       enddo ! block
     end if
 
-    deallocate(wall_buf)
+    deallocate(wall_buf, order, first, next)
 
   end subroutine Extract_Properties_From_BC
   
