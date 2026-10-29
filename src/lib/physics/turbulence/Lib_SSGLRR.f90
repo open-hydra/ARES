@@ -1,4 +1,6 @@
-!> @brief Module for SSGLRR-RSM-w2019 model. see https://turbmodels.larc.nasa.gov/rsm-ssglrr.html.
+!> @brief Module for SSGLRR-RSM-w2012 model (default) and SSGLRR-RSM-w2019 (-w2019 suffix:
+!> length-scale correction in the omega equation), with generalized gradient or simple
+!> (-SD suffix) diffusion. see https://tmbwg.github.io/turbmodels/rsm-ssglrr.html.
 module ARES_Lib_SSGLRR
   use iso_fortran_env, only: I4 => int32, R8 => real64
 
@@ -35,7 +37,11 @@ module ARES_Lib_SSGLRR
   C3star_e = 0.65d0, &
   C4_e = 0.625d0, &
   C5_e = 0.2d0, &
-  D_e = 0.22d0
+  D_e = 0.22d0, &
+  ! length-scale correction coefficients (w2019)
+  A_LSC = 31d0, &
+  chiT_LSC = 1d0, &
+  kappa_LSC = 0.41d0
 
 contains
 
@@ -43,12 +49,16 @@ contains
   subroutine SSGLRR_Source_Terms ( domain )
     use ARES_Advanced_Types_m
     use ARES_Global_m
+    use ARES_Config_Types_m, only: obj_rans
     use ARES_Mod_MPI, only: is_local_block
 
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
+    logical :: LSC
+
+    LSC = obj_rans%LSC
     
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
@@ -58,14 +68,15 @@ contains
                         domain % blk(b) % M,    &
                         domain % blk(b) % vol,  &
                         domain % blk(b) % yn,   &
-                        domain % blk(b) % dim   )
+                        domain % blk(b) % dim,  &
+                        LSC                     )
     
     end do
 
   end subroutine SSGLRR_Source_Terms
 
 
-  subroutine SSGLRR_Blk ( Prim, Res, M, Volume, walldist, n )
+  subroutine SSGLRR_Blk ( Prim, Res, M, Volume, walldist, n, LSC )
     use ARES_Base_Types_m
     use ARES_Global_m
     use ARES_Lib_Fluid
@@ -79,6 +90,7 @@ contains
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: walldist
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    logical, intent(in) :: LSC ! length-scale correction (w2019)
     ! Local
     integer :: i, j, k, ii, jj, kk
     real(kind=8) :: rho, mil, rhoRij(3,3), omega, kappa, rhoe, dist
@@ -86,12 +98,13 @@ contains
     real(kind=8) :: F1, F2, alphaw, betaw, sigmaw, sigmad, C1, C2, C3, C4, C5, C1star, C3star
     real(kind=8), dimension(3,3) :: rhoP, rhoeij, aij, C1_term, C2_term, C3_term, C4_term, C5_term, aikakj, rhoPI 
     real(kind=8) :: rhoPkk, aklakl, aklSkl, Diff, Source(7) 
+    real(kind=8) :: Lratio, chi, F_LSC
 
     !$omp do collapse (3) private (rho, mil, rhoRij, omega, kappa, rhoe, dist) &
     !$omp private (Gradvel, Grad, Divel, Sij, Sij_star, Wij) &
     !$omp private (F1, F2, alphaw, betaw, sigmaw, sigmad, C1, C2, C3, C4, C5, C1star, C3star) &
     !$omp private (rhoP, rhoeij, aij, C1_term, C2_term, C3_term, C4_term, C5_term, aikakj, rhoPI) &
-    !$omp private (rhoPkk, aklakl, aklSkl, Diff, Source) &
+    !$omp private (rhoPkk, aklakl, aklSkl, Diff, Source, Lratio, chi, F_LSC) &
     !$omp private (i,j,k, ii, jj, kk)
 
     do k = 1, n(3)
@@ -245,6 +258,15 @@ contains
       ! Cross Diffusion term
       Diff = sigmad * rho/omega * Max( Dot_Product ( Grad(8,:), Grad(7,:) ), 0d0 )
 
+      ! Length-scale correction of the omega destruction (w2019), active only near
+      ! stagnation/reattachment points where L_t exceeds the log-layer length scale
+      F_LSC = 0d0
+      if ( LSC ) then
+        Lratio = Sqrt( kappa ) / ( C_mu**0.25d0 * kappa_LSC * omega * dist )
+        chi = Max( ( Lratio - 1d0 ) * Lratio**2, 0d0 )
+        F_LSC = 0.5d0 * ( 1d0 + Tanh( A_LSC * ( chi - chiT_LSC ) ) )
+      end if
+
       ! Source terms
       Source(1) = rhoP(1,1) + rhoPI(1,1) - rhoeij(1,1) 
       Source(2) = rhoP(2,2) + rhoPI(2,2) - rhoeij(2,2) 
@@ -252,7 +274,7 @@ contains
       Source(4) = rhoP(1,2) + rhoPI(1,2) - rhoeij(1,2)
       Source(5) = rhoP(1,3) + rhoPI(1,3) - rhoeij(1,3)
       Source(6) = rhoP(2,3) + rhoPI(2,3) - rhoeij(2,3)
-      Source(7) = alphaw*omega/kappa*0.5d0*rhoPkk - betaw*rho*omega**2 + Diff
+      Source(7) = alphaw*omega/kappa*0.5d0*rhoPkk - ( 1d0 - F_LSC )*betaw*rho*omega**2 + Diff
       ! print*, i,j,k
       ! print*, source
       
@@ -369,7 +391,9 @@ contains
     real(kind=8), intent(in)                         :: ks                ! : roughness of nearest wall
 
     var_wall(1:6) = 0d0 ! Solid surface condition on rhoRij
-    var_wall(7) = 8d2 * mil_wall / ( dist**2 ) ! approximate BC for smooth surface (Menter kw-SST)
+    ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
+    ! (800 = 10*6/beta_1^(omega), the TMR value; 80 = asymptotic y->0 limit). See Setup_RANS_Model.
+    var_wall(7) = obj_rans%omega_wall_coef * mil_wall / ( dist**2 )
 
   end subroutine SSGLRR_Set_Wall_Values
 

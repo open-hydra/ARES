@@ -48,7 +48,7 @@ This section provides the theoretical foundations for the physical models and nu
 
     ---
 
-    Spalart–Allmaras (R / RC / QCR / rough), Menter SST, Wilcox 2006 $k$–$\omega$, SSG-LRR
+    Spalart–Allmaras (R / RC / QCR / rough), Menter SST (+ SST-RC), Wilcox 2006 $k$–$\omega$, SSG-LRR
 
     [:octicons-arrow-right-24: Turbulence models](turbulence.md)
 

@@ -45,6 +45,9 @@ contains
   end function Stress_Vector_Std
 
 
+  !> Stress with the -2/3 rho k delta_ij part of the Boussinesq Reynolds stress (two-equation
+  !> models with k-energy-coupling): tau_ij = 2 mu (S_ij - 1/3 divU delta_ij) - 2/3 rho k delta_ij,
+  !> NASA TMR, https://tmbwg.github.io/turbmodels/implementrans.html
   pure function Stress_Vector_2eq ( Gradvel, Normal, mi_l, mi_t, rhok ) result ( Stress )
     implicit none
     real(kind=8), intent(in) :: Gradvel(3,3), Normal(3), mi_t, mi_l, rhok(:)
@@ -121,8 +124,8 @@ contains
     W(1,3) =  0.5d0*omega(2)
     W(3,1) = -0.5d0*omega(2)
 
-    W(2,3) =  0.5d0*omega(1)
-    W(3,2) = -0.5d0*omega(1)
+    W(2,3) = -0.5d0*omega(1)
+    W(3,2) =  0.5d0*omega(1)
   end function
 
 

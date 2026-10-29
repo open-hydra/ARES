@@ -95,8 +95,8 @@ contains
 
     Gradient = matmul ( Gradient, M )
 
-    ! Stress vector
-    Stress = Stress_Vector ( Gradient(nu:nw,:), Normal, mil, mit, Prim(nt:) )
+    ! Stress vector (turbulent variables at the wall face: Rij = 0 and k = 0)
+    Stress = Stress_Vector ( Gradient(nu:nw,:), Normal, mil, mit, Prim_Wall(nt:) )
 
     ! Fluxes
     Flux(np) = 0d0 

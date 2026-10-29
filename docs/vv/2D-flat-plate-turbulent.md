@@ -144,7 +144,7 @@ Each of the four models produces its own `reference/cf.png`. They are shown toge
 
 ![Skin friction: ARES (Wilcox 2006) vs NASA-TMR CFL3D/FUN3D](img/fp_cf_wilcox2006.png)
 
-![Skin friction: ARES (SSG-LRR) vs NASA-TMR CFL3D/FUN3D](img/fp_cf_sgglrr.png)
+![Skin friction: ARES (SSG-LRR) vs NASA-TMR SSG-LRR CFL3D](img/fp_cf_sgglrr.png)
 
 </div>
 
@@ -164,7 +164,7 @@ Each of the four models produces its own `reference/cf.png`. They are shown toge
 
 ### Reynolds-stress closure (SSG-LRR)
 
-`Flat_Plate_SGGLRR` runs the same plate with the seven-equation **SSG-LRR Reynolds-stress model** — the six Reynolds stresses $R_{ij}$ (`ruu, rvv, rww, ruv, ruw, rvw`) plus $\omega$ — instead of an eddy-viscosity closure. `validate_sgglrr.py` checks the skin friction $c_f(x)$ (the SSG-LRR panel in the skin-friction grid above): the RSM holds the NASA-TMR CFL3D/FUN3D curve to within the 5 % RMS tolerance, confirming that the Reynolds-stress transport, its near-wall treatment, and the symmetry boundary condition on the leading-edge segment are all correct.
+`Flat_Plate_SGGLRR` runs the same plate with the seven-equation **SSG-LRR Reynolds-stress model** — the six Reynolds stresses $R_{ij}$ (`ruu, rvv, rww, ruv, ruw, rvw`) plus $\omega$ — instead of an eddy-viscosity closure. `validate_sgglrr.py` checks the skin friction $c_f(x)$ (the SSG-LRR panel in the skin-friction grid above): the RSM holds the NASA-TMR SSG/LRR-RSM-w2012 curve (CFL3D on the finest 545×385 grid; `cf.dat` also carries the TAU solution, not plotted) to within the 5 % RMS tolerance, confirming that the Reynolds-stress transport, its near-wall treatment, and the symmetry boundary condition on the leading-edge segment are all correct.
 
 Unlike SST and Wilcox 2006, the SSG-LRR case does **not** ship a wall-normal profile figure: its $\mu_t/\mu$ peak scales with the run Reynolds number, so it is only meaningful exactly at $\mathrm{Re}=5\times10^6$ and the plot was intentionally removed (the validation reduces to the Reynolds-consistent $c_f$ check).
 

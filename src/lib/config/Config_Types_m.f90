@@ -235,15 +235,19 @@ module ARES_Config_Types_m
     real(R8) :: Prt    ! Prandtl turbolento
     character(len=llen) :: model
     logical :: SAcomp, SpalartShur, SAR, rough
-    logical :: QCR2000, blowing_corr, k_energy_coupling
+    logical :: QCR2000, blowing_corr
+    logical :: k_energy_coupling = .false. ! k in the total energy (k-energy-coupling, two-equation models)
     logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
     character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
+    character(len=llen) :: sst_production ! SST production: 'incompressible' or 'compressible'
     logical :: Prt_correction   ! Turbulent Prandtl correction for wall roughness
     logical :: sst_asymptotic       ! Impose the SST asymptotic omega solution on the near-wall cells
     integer :: sst_asymptotic_cells ! Number of cells off the wall where the asymptotic omega is imposed
     ! Useful variables
     logical :: RSM, SD
+    logical :: LSC               ! SSG/LRR-w2019 length-scale correction of the omega equation
     real(R8) :: omega_wall_coef  ! coefficient C in omega_wall = C*mi_l/dist**2 (set by Setup_RANS_Model)
+    logical :: sst_compressible  ! SST production with the dilatation terms (set by Setup_RANS_Model)
   end type rans_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

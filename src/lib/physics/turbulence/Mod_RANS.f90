@@ -25,6 +25,7 @@ contains
     obj_rans%blowing_corr = .false.
     obj_rans%rough = .false.
     obj_rans%RSM = .false.
+    obj_rans%LSC = .false.
 
     if (trim(obj_rans%model) == 'SAcomp') then
       obj_rans%SAcomp = .true.
@@ -61,7 +62,7 @@ contains
     if ( obj_rans%Prt_correction ) then
       if ( index(trim(obj_rans%model), 'SA') == 0 .or. .not. obj_rans%rough ) then
         write(*,'(A)') '[ERROR] Prt-correction requires a Spalart-Allmaras model with roughness (-rough) enabled.'
-        stop
+        stop 1
       end if
       ! The correlation was calibrated for the standard turbulent Prandtl number Prt = 0.9.
       if ( abs(obj_rans%Prt - 0.9d0) > 1.0d-6 ) then
@@ -76,7 +77,7 @@ contains
       obj_rans%sst_asymptotic = .false.
     end if
 
-    ! Omega wall condition (k-omega models): omega_wall = C * mi_l / dist**2.
+    ! Omega wall condition (k-omega models and SSGLRR): omega_wall = C * mi_l / dist**2.
     ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, meant for meshes
     !                 that do not resolve the viscous sublayer.
     ! 'asymptotic' -> C =  6/beta_1 =  80 : exact y->0 limit of the omega equation,
@@ -88,6 +89,19 @@ contains
       obj_rans%omega_wall_coef = 8d1
     case default
       error stop ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
+    end select
+
+    ! SST production term.
+    ! 'incompressible' -> P = mu_t*S^2 (SST-2003).
+    ! 'compressible'   -> P = tau_ij*du_i/dx_j with tau_ij = mu_t*(2 S_ij - 2/3 divU delta_ij)
+    !                     - 2/3 rho k delta_ij: the dilatation terms matter across shocks.
+    select case ( trim(obj_rans%sst_production) )
+    case ( 'incompressible' )
+      obj_rans%sst_compressible = .false.
+    case ( 'compressible' )
+      obj_rans%sst_compressible = .true.
+    case default
+      error stop ( 'Error: sst-production must be "incompressible" or "compressible".' )
     end select
 
     obj_rans%description = 'RANS model: '//trim(obj_rans%model)
@@ -158,6 +172,8 @@ contains
     elseif ( index ( trim(obj_rans%model), 'SSGLRR' ) > 0 ) then
       nRANS = 7
       obj_rans%RSM = .true.
+      ! w2019: length-scale correction of the omega destruction (default is w2012)
+      obj_rans%LSC = index ( trim(obj_rans%model), '-w2019' ) > 0
       Eddy_Viscosity => SSGLRR_Eddy_Viscosity
       if ( index ( trim(obj_rans%model), '-SD' ) > 0 ) then
         RANS_Diffusive_Flux => SSGLRR_SD_RANS_Diffusive_Flux

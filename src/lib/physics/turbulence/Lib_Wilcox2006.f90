@@ -1,4 +1,14 @@
-!> @brief Module for Wilcox 2006 Kappa-Omega model. see https://turbmodels.larc.nasa.gov/wilcox.html.
+!> @brief Wilcox (2006) k-omega model, as specified by the NASA Turbulence Modeling Resource (TMR):
+!> https://tmbwg.github.io/turbmodels/wilcox.html (formerly turbmodels.larc.nasa.gov/wilcox.html).
+!> Exact production P = tau_ij du_i/dx_j with the k-equation limiter 20 beta* rho omega k
+!> (TMR Wilcox2006-klim). Without k-energy-coupling, -2/3 rho k delta_ij is left out of the stress of
+!> the momentum and energy equations (TMR Wilcox2006-klim-e); with it, k is in the total energy
+!> (TMR Wilcox2006-klim; see Lib_SST.f90 and the TMR compressible-implementation page).
+!>
+!> References
+!>   Wilcox, D. C., "Formulation of the k-omega Turbulence Model Revisited", AIAA J. 46(11), 2008,
+!>     pp. 2823-2838, doi:10.2514/1.36541.
+!>   Wilcox, D. C., Turbulence Modeling for CFD, 3rd ed., DCW Industries, 2006.
 module ARES_Lib_Wilcox2006
   use iso_fortran_env, only: I4 => int32, R8 => real64
 
@@ -167,7 +177,9 @@ contains
 
       Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
       Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
-      if (k_energy_coupling) Res(nh,i,j,k) = Res(nh,i,j,k) + Source(1) * Volume(i,j,k)
+      ! With k in the total energy (k_energy_coupling) the mean-flow energy gives up the source of k with the same
+      ! point-implicit factor as the k row, so that E_m + k has the fluxes alone
+      if (k_energy_coupling) Res(nh,i,j,k) = Res(nh,i,j,k) + Source(1) * Volume(i,j,k) * fk
 
     enddo ; enddo ; enddo ! (i, j, k) loop
 

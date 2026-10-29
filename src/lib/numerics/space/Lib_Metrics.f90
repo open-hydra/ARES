@@ -278,7 +278,7 @@ contains
 
     if ( abs(det) == 0d0 ) then
       write(*,'(A90)') ' [ERROR] Metric tensor det=0. Should not happen, but going on with M==I'
-      stop
+      stop 1
 
       M % c = 0d0
       do h = 1, 3
@@ -345,7 +345,7 @@ contains
   
     if( vol <= 0d0 ) then
       write(*,'(A90)') ' [ERROR] Negative volume'
-      stop
+      stop 1
     endif
 
     contains

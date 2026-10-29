@@ -206,7 +206,19 @@ contains
                             walldist=dist, ks=hs)
     end if
     
-    Stress = Stress_Vector ( Gradient, Normal, mil, mie, Prim(nt:) )
+    ! Turbulent variables at the symmetry face: cell values (zero gradient), except
+    ! for RSM models, whose shear stresses normal to the plane vanish on it
+    Prim_Wall = Prim
+    if ( obj_rans%RSM ) then
+      ig = im - guide(fm,1)
+      jg = jm - guide(fm,2)
+      kg = km - guide(fm,3) ! ghost cell coordinates
+      call RSM_Symmetry ( Prim(nt:), Prim_Wall(nt:), Blk%P(nt:,Ig,Jg,Kg), Normal ) ! setting Rij
+      Prim_Wall(nprim) = Prim(nprim) 
+      Blk%P(nprim,Ig,Jg,Kg) = Prim(nprim) ! setting omega
+    end if
+
+    Stress = Stress_Vector ( Gradient, Normal, mil, mie, Prim_Wall(nt:) )
 
     Vel = 0.5d0 * ( Vel1 + Vel2 )
 
@@ -218,12 +230,6 @@ contains
     ! Special treatment of Reynolds stress for RSM models
     if ( obj_rans%RSM ) then
       Gradrij = 0d0 ! initialization
-      ig = im - guide(fm,1)
-      jg = jm - guide(fm,2)
-      kg = km - guide(fm,3) ! ghost cell coordinates
-      call RSM_Symmetry ( Prim(nt:), Prim_Wall(nt:), Blk%P(nt:,Ig,Jg,Kg), Normal ) ! setting Rij
-      Prim_Wall(nprim) = Prim(nprim) 
-      Blk%P(nprim,Ig,Jg,Kg) = Prim(nprim) ! setting omega
       Gradrij(:,Dir) = ( Prim(nt:nprim) - Prim_Wall(nt:nprim) )/rho * modfm3 ! gradient normal to BC face
       Gradrij = matmul ( Gradrij, M )
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &

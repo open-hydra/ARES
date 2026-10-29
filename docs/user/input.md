@@ -59,7 +59,7 @@ These are read by ARES and validated against the registry.
     | `[ARES-Parameters]` `simulation-type = laminar` | `[ARES-Physics]` `equations = navier-stokes` |
     | `[ARES-Parameters]` `simulation-type = turbulent` + `[ARES-RANS]` `turbulence-model = <model>` | `[ARES-Physics]` `equations = navier-stokes`, `turbulence = <model>` |
     | `[ARES-RANS]` `Sc` | `[ARES-Physics]` `schmidt` |
-    | `[ARES-RANS]` `Prt`, `Sct`, `point-implicit`, `k-coupling`, `Prt-correction`, `sst-asymptotic`, `sst-asymptotic-cells` | `[ARES-Turbulence]`, same names |
+    | `[ARES-RANS]` `Prt`, `Sct`, `point-implicit`, `Prt-correction`, `sst-asymptotic`, `sst-asymptotic-cells` | `[ARES-Turbulence]`, same names |
     | `[ARES-IO]` `ini-format` | `[ARES-IO]` `ic-format` |
 
     `time-scheme` in `[ARES-Numerics]` is now required: an input without it stops at set-up.
