@@ -48,12 +48,21 @@ FUNCTION(SET_COMPILE_FLAG FLAGVAR FLAGVAL LANG)
 
     # Make a variable holding the flags.  Filter out REQUIRED if it is there
     SET(FLAG_REQUIRED FALSE)
+    SET(FLAG_LINK FALSE)
     SET(FLAG_FOUND FALSE)
     UNSET(FLAGLIST)
     FOREACH (var ${ARGN})
         STRING(TOUPPER "${var}" UP)
         IF(UP STREQUAL "REQUIRED")
             SET(FLAG_REQUIRED TRUE)
+        ELSEIF(UP STREQUAL "LINK")
+            # Also put the flag on the link line of the test program.  Needed for
+            # flags whose object output cannot be linked without them -- -ipo emits
+            # IR rather than ELF, so a compile-only probe reports success and the
+            # real build then dies at link time.  Only pass LINK for single-token
+            # flags: LINK_OPTIONS is a list, so "-check bounds" would reach the
+            # linker as one quoted argument and be rejected.
+            SET(FLAG_LINK TRUE)
         ELSE()
             SET(FLAGLIST ${FLAGLIST} "${var}")
         ENDIF(UP STREQUAL "REQUIRED")
@@ -79,8 +88,14 @@ program dummyprog
   i = 5
 end program dummyprog
 ")
-            TRY_COMPILE(FLAG_WORKS ${CMAKE_BINARY_DIR} ${TESTFILE}
-                COMPILE_DEFINITIONS "${flag}" OUTPUT_VARIABLE OUTPUT)
+            IF(FLAG_LINK)
+                TRY_COMPILE(FLAG_WORKS ${CMAKE_BINARY_DIR} ${TESTFILE}
+                    COMPILE_DEFINITIONS "${flag}" LINK_OPTIONS "${flag}"
+                    OUTPUT_VARIABLE OUTPUT)
+            ELSE()
+                TRY_COMPILE(FLAG_WORKS ${CMAKE_BINARY_DIR} ${TESTFILE}
+                    COMPILE_DEFINITIONS "${flag}" OUTPUT_VARIABLE OUTPUT)
+            ENDIF()
             
             # Check that the output message doesn't match any errors
             FOREACH(rx ${FAIL_REGEX})

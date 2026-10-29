@@ -33,6 +33,7 @@ Commands:
     --use-tecio             Use TecIO
     --use-sundials          Use SUNDIALS
     --use-cantera           Use Cantera
+    --no-ipo                Disable interprocedural (link-time) optimization
 
   compile                   Compile the program using the CMakePresets file
 
@@ -96,7 +97,8 @@ function write_presets() {
         "USE_SUNDIALS": "${USE_SUNDIALS}",
         "USE_CANTERA": "${USE_CANTERA}",
         "USE_OPENMP": "${USE_OPENMP}",
-        "USE_MPI": "${USE_MPI}"
+        "USE_MPI": "${USE_MPI}",
+        "USE_IPO": "${USE_IPO}"
       }
     }
   ]
@@ -117,12 +119,14 @@ USE_MPI="false"
 USE_TECIO="false"
 USE_SUNDIALS="false"
 USE_CANTERA="false"
+# IPO is on by default; CMake self-disables it if the toolchain cannot do it.
+USE_IPO="true"
 REMOTE="false"
 BUILD_TYPE="RELEASE"
 
 # Define allowed options for each command using regular arrays
 CMD=("build" "compile" "update")
-CMD_OPTIONS_build=("--compilers --include-orion --include-flint --include-oslo --include-finer --use-openmp --use-mpi --use-tecio --use-sundials --use-cantera")
+CMD_OPTIONS_build=("--compilers --include-orion --include-flint --include-oslo --include-finer --use-openmp --use-mpi --use-tecio --use-sundials --use-cantera --no-ipo")
 CMD_OPTIONS_update=("--remote")
 
 # Parse global options
@@ -203,6 +207,10 @@ while [[ $# -gt 0 ]]; do
             [[ "$COMMAND" == "build" ]] || { error " --use-cantera is only valid for 'build' command"; exit 1; }
             USE_CANTERA="true"
             ;;
+        --no-ipo)
+            [[ "$COMMAND" == "build" ]] || { error " --no-ipo is only valid for 'build' command"; exit 1; }
+            USE_IPO="false"
+            ;;
         --remote)
             [[ "$COMMAND" == "update" ]] || { error " --remote is only valid for 'update' command"; exit 1; }
             REMOTE="true"
@@ -248,6 +256,7 @@ case "$COMMAND" in
         log "Use TecIO: $USE_TECIO"
         log "Use SUNDIALS: $USE_SUNDIALS"
         log "Use Cantera: $USE_CANTERA"
+        log "Use IPO: $USE_IPO"
         if [[ -z "${FC+x}" || -z "${CXX+x}" || -z "${CC+x}" ]]; then
           log "Compilers not set. CMake will decide."
         else
@@ -255,7 +264,7 @@ case "$COMMAND" in
         fi
         OSLO_PATH=$FLINT_PATH'/lib/OSLO/'
         rm -rf $BUILD_DIR
-        cmake -B $BUILD_DIR -DORION_PATH=$ORION_PATH -DOSLO_PATH=$OSLO_PATH -DFINER_PATH=$FINER_PATH -DFLINT_PATH=$FLINT_PATH -DUSE_TECIO=$USE_TECIO -DUSE_OPENMP=$USE_OPENMP -DUSE_MPI=$USE_MPI -DUSE_SUNDIALS=$USE_SUNDIALS -DUSE_CANTERA=$USE_CANTERA -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
+        cmake -B $BUILD_DIR -DORION_PATH=$ORION_PATH -DOSLO_PATH=$OSLO_PATH -DFINER_PATH=$FINER_PATH -DFLINT_PATH=$FLINT_PATH -DUSE_TECIO=$USE_TECIO -DUSE_OPENMP=$USE_OPENMP -DUSE_MPI=$USE_MPI -DUSE_SUNDIALS=$USE_SUNDIALS -DUSE_CANTERA=$USE_CANTERA -DUSE_IPO=$USE_IPO -DCMAKE_BUILD_TYPE=$BUILD_TYPE || exit 1
         cmake --build $BUILD_DIR || exit 1
         log "[OK] Compilation successful"
 

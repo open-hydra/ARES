@@ -201,7 +201,7 @@ The script reads `OUTPUT/field.tec` and `OUTPUT/wall.tec`, computes $c_f(x)$ and
 
 ## Next Steps
 
-- **Try the other models:** run the sibling `Flat_Plate_SA`, `Flat_Plate_Wilcox2006`, and `Flat_Plate_SGGLRR` cases and compare their $c_f$ against the same reference.
+- **Try the other models:** run the sibling `Flat_Plate_SA`, `Flat_Plate_Wilcox2006`, and `Flat_Plate_SSGLRR` cases and compare their $c_f$ against the same reference.
 - **Explore real-fluid physics:** the [HTD case](../vv/htd.md) runs supercritical para-hydrogen with low-Mach preconditioning.
 - **Study the theory:** see [Real-Fluid Thermodynamics](../theory/thermo.md), [Low-Mach Preconditioning](../theory/preconditioning.md), and [Turbulence Modelling](../theory/turbulence.md).
 

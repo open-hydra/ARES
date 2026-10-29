@@ -25,4 +25,13 @@ ENDIF(USE_OPENMP)
 IF(USE_MPI)
     target_compile_definitions(ARESL PUBLIC USE_MPI)
     target_link_libraries(ARESL PUBLIC MPI::MPI_Fortran)
+    # An mpi module paired with a compiler that cannot ignore the types of choice buffers declares no
+    # interfaces for the routines with choice buffers (MPI 4.1, Section 19.1.3), as the gfortran modules of
+    # Intel MPI do: gfortran >= 10 then stops on calls of one such routine with buffers of different types
+    # or ranks. -fallow-argument-mismatch turns those errors into warnings; it is set in MPI builds only,
+    # and on Mod_MPI.f90 only, the one file that makes such calls: the builds without MPI, and the other
+    # files of ARES and FLINT in the MPI builds, keep the full check.
+    IF(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
+        set_source_files_properties(parallel/Mod_MPI.f90 PROPERTIES COMPILE_OPTIONS -fallow-argument-mismatch)
+    ENDIF()
 ENDIF(USE_MPI)

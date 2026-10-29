@@ -17,26 +17,52 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   # Uncomment the below if you want the user to choose a parallelization library
   OPTION(USE_MPI "Use the MPI library for parallelization" OFF)
   OPTION(USE_OPENMP "Use OpenMP for parallelization" OFF)
+  # Interprocedural (link-time) optimization of the RELEASE build. On by default,
+  # switchable off for toolchains where it misbehaves. It also self-disables if
+  # unsupported.
+  OPTION(USE_IPO "Use interprocedural optimization in RELEASE builds" ON)
 
   # This INCLUDE statement executes code that sets the compile flags for DEBUG,
-  # RELEASE, and TESTING. You should  review this file and make sure the flags 
+  # RELEASE, and TESTING. You should  review this file and make sure the flags
   # are to your liking.
-  INCLUDE(${CMAKE_MODULE_PATH}/SetFortranFlags.cmake) 
+  INCLUDE(${CMAKE_MODULE_PATH}/SetFortranFlags.cmake)
 
-  # When GCC is used with -flto (slim LTO), plain ar cannot index LTO IR symbols
-  # in static archives, causing undefined-reference linker errors. Override the
-  # archiver and ranlib with the LTO-aware gcc-ar / gcc-ranlib wrappers so that
-  # every static library built by this project is correctly indexed.
-  if(CMAKE_Fortran_COMPILER_ID STREQUAL "GNU")
-    find_program(GCC_AR     NAMES gcc-ar-12 gcc-ar-11 gcc-ar-10 gcc-ar
-                 HINTS /usr/bin DOC "LTO-aware ar for GCC")
-    find_program(GCC_RANLIB NAMES gcc-ranlib-12 gcc-ranlib-11 gcc-ranlib-10 gcc-ranlib
-                 HINTS /usr/bin DOC "LTO-aware ranlib for GCC")
-    if(GCC_AR)
-      set(CMAKE_AR     "${GCC_AR}"     CACHE FILEPATH "LTO-aware ar (GCC)"     FORCE)
+  # ifx 2024.1 compiles a loop of the ghost metrics of ARES wrongly at -O2 and -O3 without interprocedural optimization:
+  # a minimal program in standard Fortran (an automatic array of a derived type, bounds from a module variable, filled
+  # element by element and passed to a procedure) gives wrong values at -O2 and -O3, also at the default level with no -O
+  # option, and the right ones at -O0, -O1 and with -ipo. BC_Extrapolate_Metrics has that loop: ARES built so can stop
+  # at set-up on a negative volume, or run with wrong ghost metrics. Such a build is refused. The level is the last -O
+  # option of the flags of the build type (-O2, the default of ifx, when there is none); IPO is -ipo in those flags (the
+  # RELEASE build adds it with USE_IPO, the default, and drops it when the toolchain cannot do it) or
+  # CMAKE_INTERPROCEDURAL_OPTIMIZATION. This only reads the flags: it changes none.
+  if(CMAKE_Fortran_COMPILER_ID STREQUAL "IntelLLVM" AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 2024.1
+     AND CMAKE_Fortran_COMPILER_VERSION VERSION_LESS 2024.2)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" _ifx_bt)
+    separate_arguments(_ifx_flags UNIX_COMMAND "${CMAKE_Fortran_FLAGS} ${CMAKE_Fortran_FLAGS_${_ifx_bt}}")
+    set(_ifx_level "no -O option (-O2)")
+    set(_ifx_high TRUE)
+    set(_ifx_ipo FALSE)
+    if(CMAKE_INTERPROCEDURAL_OPTIMIZATION OR CMAKE_INTERPROCEDURAL_OPTIMIZATION_${_ifx_bt})
+      set(_ifx_ipo TRUE)
     endif()
-    if(GCC_RANLIB)
-      set(CMAKE_RANLIB "${GCC_RANLIB}" CACHE FILEPATH "LTO-aware ranlib (GCC)" FORCE)
+    foreach(_ifx_f IN LISTS _ifx_flags)
+      if(_ifx_f MATCHES "^[-/]O[01]$")
+        set(_ifx_level "${_ifx_f}")
+        set(_ifx_high FALSE)
+      elseif(_ifx_f MATCHES "^[-/]O([23s]|fast)?$")
+        set(_ifx_level "${_ifx_f}")
+        set(_ifx_high TRUE)
+      elseif(_ifx_f MATCHES "^[-/]Q?ipo$")
+        set(_ifx_ipo TRUE)
+      endif()
+    endforeach()
+    if(_ifx_high AND NOT _ifx_ipo)
+      message(FATAL_ERROR "ifx ${CMAKE_Fortran_COMPILER_VERSION} with ${_ifx_level} and without IPO compiles a loop of the "
+                          "ghost metrics of ARES wrongly (an error of the compiler: a minimal program in standard Fortran "
+                          "gives wrong values at -O2 and -O3 and the right ones at -O0, -O1 and with -ipo); ARES built so "
+                          "can stop at set-up on a negative volume, or run with wrong ghost metrics. Build with IPO "
+                          "(RELEASE with -DUSE_IPO=ON, the default), with -O0 or -O1 (DEBUG), or with gfortran. See "
+                          "docs/getting-started/installation.md, \"ifx 2024.1 and IPO\".")
     endif()
   endif()
 

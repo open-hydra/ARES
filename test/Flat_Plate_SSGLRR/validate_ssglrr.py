@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Validation of the ARES turbulent flat-plate test case Flat_Plate_SGGLRR
+Validation of the ARES turbulent flat-plate test case Flat_Plate_SSGLRR
 (SSG-LRR Reynolds-Stress Model) against the NASA Turbulence Modeling
 Resource (TMR).
 
@@ -13,7 +13,7 @@ misleading unless the run is exactly at the NASA Re=5e6.
 
 See _fp_turb_common.py for the Reynolds-consistency handling.
 
-Usage:  python3 validate_sgglrr.py
+Usage:  python3 validate_ssglrr.py
 """
 import os
 import sys

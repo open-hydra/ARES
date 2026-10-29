@@ -1,6 +1,6 @@
 # Turbulent Flat Plate (NASA TMR)
 
-**Cases:** `test/Flat_Plate_SA`, `test/Flat_Plate_SST`, `test/Flat_Plate_Wilcox2006`, `test/Flat_Plate_SGGLRR`
+**Cases:** `test/Flat_Plate_SA`, `test/Flat_Plate_SST`, `test/Flat_Plate_Wilcox2006`, `test/Flat_Plate_SSGLRR`
 
 The turbulent flat plate is the standard RANS validation case. ARES is run with each of its turbulence models on the same flow and compared against the **[NASA Turbulence Modeling Resource](https://turbmodels.larc.nasa.gov/) (TMR)** flat-plate reference data.
 
@@ -9,7 +9,7 @@ The turbulent flat plate is the standard RANS validation case. ARES is run with 
 | `Flat_Plate_SA` | `SA` | `validate_sa.py` (reads `OUTPUT/1d.dat`) | `cf.dat` |
 | `Flat_Plate_SST` | `SST` | `validate_sst.py` | `cf.dat`, `kw.dat`, `mut.dat` |
 | `Flat_Plate_Wilcox2006` | `Wilcox2006` | `validate_wilcox2006.py` | `cf.dat`, `mut.dat` |
-| `Flat_Plate_SGGLRR` | `SSGLRR` | `validate_sgglrr.py` | `cf.dat`, `mut.dat` |
+| `Flat_Plate_SSGLRR` | `SSGLRR` | `validate_ssglrr.py` | `cf.dat`, `mut.dat` |
 
 Running the same geometry through all four models exercises the one-equation, both two-equation, and the Reynolds-stress closures against a common benchmark.
 
@@ -96,7 +96,7 @@ where `rhoK` = $\rho k$, `rhoOmega` = $\rho\omega$ (the density-weighted variabl
 
 ### Step 1 — generate the constant-property tables
 
-The NASA-TMR reference is a **calorically simple gas**, so before running `Flat_Plate_SST`, `Flat_Plate_Wilcox2006` or `Flat_Plate_SGGLRR` you must **run the bundled Python scripts that flatten the real-fluid $(p,h)$ table to constant properties**. They overwrite the case's `INPUT` tables in place:
+The NASA-TMR reference is a **calorically simple gas**, so before running `Flat_Plate_SST`, `Flat_Plate_Wilcox2006` or `Flat_Plate_SSGLRR` you must **run the bundled Python scripts that flatten the real-fluid $(p,h)$ table to constant properties**. They overwrite the case's `INPUT` tables in place:
 
 ```bash
 cd test/Flat_Plate_SST
@@ -144,11 +144,11 @@ Each of the four models produces its own `reference/cf.png`. They are shown toge
 
 ![Skin friction: ARES (Wilcox 2006) vs NASA-TMR CFL3D/FUN3D](img/fp_cf_wilcox2006.png)
 
-![Skin friction: ARES (SSG-LRR) vs NASA-TMR SSG-LRR CFL3D](img/fp_cf_sgglrr.png)
+![Skin friction: ARES (SSG-LRR) vs NASA-TMR SSG-LRR CFL3D](img/fp_cf_ssglrr.png)
 
 </div>
 
-*Skin-friction coefficient along the plate (ARES red points; NASA-TMR reference lines). Top row: `Flat_Plate_SA/reference/cf.png` (left — the NASA-TMR CFL3D curve is re-expressed at the run's own $\mathrm{Re}_x$, hence the log axis and reach to $x=2$ m) and `Flat_Plate_SST/reference/cf.png` (right). Bottom row: `Flat_Plate_Wilcox2006/reference/cf.png` (left) and `Flat_Plate_SGGLRR/reference/cf.png` — the SSG-LRR Reynolds-stress model (right). Every model holds the reference $c_f(x)$ from the leading edge to the trailing edge with RMS error below 5 %.*
+*Skin-friction coefficient along the plate (ARES red points; NASA-TMR reference lines). Top row: `Flat_Plate_SA/reference/cf.png` (left — the NASA-TMR CFL3D curve is re-expressed at the run's own $\mathrm{Re}_x$, hence the log axis and reach to $x=2$ m) and `Flat_Plate_SST/reference/cf.png` (right). Bottom row: `Flat_Plate_Wilcox2006/reference/cf.png` (left) and `Flat_Plate_SSGLRR/reference/cf.png` — the SSG-LRR Reynolds-stress model (right). Every model holds the reference $c_f(x)$ from the leading edge to the trailing edge with RMS error below 5 %.*
 
 ### Turbulence profiles (SST)
 
@@ -164,7 +164,7 @@ Each of the four models produces its own `reference/cf.png`. They are shown toge
 
 ### Reynolds-stress closure (SSG-LRR)
 
-`Flat_Plate_SGGLRR` runs the same plate with the seven-equation **SSG-LRR Reynolds-stress model** — the six Reynolds stresses $R_{ij}$ (`ruu, rvv, rww, ruv, ruw, rvw`) plus $\omega$ — instead of an eddy-viscosity closure. `validate_sgglrr.py` checks the skin friction $c_f(x)$ (the SSG-LRR panel in the skin-friction grid above): the RSM holds the NASA-TMR SSG/LRR-RSM-w2012 curve (CFL3D on the finest 545×385 grid; `cf.dat` also carries the TAU solution, not plotted) to within the 5 % RMS tolerance, confirming that the Reynolds-stress transport, its near-wall treatment, and the symmetry boundary condition on the leading-edge segment are all correct.
+`Flat_Plate_SSGLRR` runs the same plate with the seven-equation **SSG-LRR Reynolds-stress model** — the six Reynolds stresses $R_{ij}$ (`ruu, rvv, rww, ruv, ruw, rvw`) plus $\omega$ — instead of an eddy-viscosity closure. `validate_ssglrr.py` checks the skin friction $c_f(x)$ (the SSG-LRR panel in the skin-friction grid above): the RSM holds the NASA-TMR SSG/LRR-RSM-w2012 curve (CFL3D on the finest 545×385 grid; `cf.dat` also carries the TAU solution, not plotted) to within the 5 % RMS tolerance, confirming that the Reynolds-stress transport, its near-wall treatment, and the symmetry boundary condition on the leading-edge segment are all correct.
 
 Unlike SST and Wilcox 2006, the SSG-LRR case does **not** ship a wall-normal profile figure: its $\mu_t/\mu$ peak scales with the run Reynolds number, so it is only meaningful exactly at $\mathrm{Re}=5\times10^6$ and the plot was intentionally removed (the validation reduces to the Reynolds-consistent $c_f$ check).
 

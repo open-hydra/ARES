@@ -11,7 +11,7 @@ test/
 ├── Flat_Plate_SA/          # turbulent flat plate (SA)        — NASA TMR
 ├── Flat_Plate_SST/         # turbulent flat plate (SST)       — NASA TMR
 ├── Flat_Plate_Wilcox2006/  # turbulent flat plate (Wilcox06) — NASA TMR
-├── Flat_Plate_SGGLRR/      # turbulent flat plate (SSG-LRR)   — NASA TMR
+├── Flat_Plate_SSGLRR/      # turbulent flat plate (SSG-LRR)   — NASA TMR
 ├── HTD/                    # supercritical para-H₂ heat-transfer deterioration
 ├── Prt-correction/         # turbulent-Prandtl roughness correction (axisymmetric)
 └── common/                 # shared validation tooling (extract1d, _fp_turb_common.py)
@@ -22,7 +22,7 @@ test/
 | `Flat_Plate_SA/` | `validate_sa.py` | $c_f(\mathrm{Re}_x)$ vs. NASA TMR (from `OUTPUT/1d.dat`) |
 | `Flat_Plate_SST/` | `validate_sst.py` | $c_f$ + wall-scaled $k^+$, $\omega^+$ profiles vs. NASA TMR |
 | `Flat_Plate_Wilcox2006/` | `validate_wilcox2006.py` | $c_f$ (+ `mut.dat` reference) vs. NASA TMR |
-| `Flat_Plate_SGGLRR/` | `validate_sgglrr.py` | $c_f$ (+ `mut.dat` reference) vs. NASA TMR |
+| `Flat_Plate_SSGLRR/` | `validate_ssglrr.py` | $c_f$ (+ `mut.dat` reference) vs. NASA TMR |
 | `HTD/` | `reference/validate_htd.py` | Wall / bulk temperature vs. NASA experimental pipe-H₂ data |
 | `Prt-correction/` | `validate_Prt_correction.py` | $f_D/f_{D,theo}$ and $\mathrm{Nu}/\mathrm{Nu}_{theo}$ vs. rough-pipe correlations |
 
