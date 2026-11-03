@@ -26,7 +26,7 @@ contains
     call reg%add(section,'newrun',obj_sim_param%newrun,'true','Start a new simulation (false = restart)','true , false',.false. )
     call reg%add(section,'res-threshold',obj_sim_param%res_threshold,'1e-10','Residual convergence threshold','> 0',.false.)
     call reg%add( section,'time-threshold',obj_sim_param%time_threshold,'1e30','Maximum simulation time','> 0',.false.)
-    call reg%add(section,'iter-threshold',obj_sim_param%iter_threshold,'1000000000','Maximum number of iterations','> 0',.false.)
+    call reg%add(section,'iter-threshold',obj_sim_param%iter_threshold,'1000000000','Maximum number of iterations (re-read at runtime)','> 0',.false.)
 
   end subroutine Register_Sim_Param
 

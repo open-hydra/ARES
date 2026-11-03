@@ -7,10 +7,11 @@ contains
 
   subroutine Load_Ini(fini)
     use ARES_Input_Registry, only: reg
-    use Finer, only: file_ini
+    use Finer, only: file_ini, err_option_vals
     implicit none
     type(file_ini), intent(in) :: fini
-    integer :: i, error
+    integer :: i, error, error_text
+    character(len=:), allocatable :: text
 
     do i = 1, reg%size
       error = 1
@@ -31,13 +32,29 @@ contains
       end if
 
       if (error == 0) reg%params(i)%is_set = .true.
+
+      ! A key of the file whose value the reader cannot take as the type of its parameter (a value that does not
+      ! convert, a list with more values than the parameter holds, no value: FiNeR gives err_option_vals, and leaves
+      ! the parameter as it was) is an error of the file, which Validate_Registry gives with the value as written
+      reg%params(i)%unread = ( error == err_option_vals )
+      if (allocated(reg%params(i)%text)) deallocate(reg%params(i)%text)
+      call fini%get_string(section_name=reg%params(i)%section, option_name=reg%params(i)%name, val=text, error=error_text)
+      if (error_text == 0) reg%params(i)%text = text
+      ! An integer, or a list of integers, written with a period or an exponent is not one (the input form of an integer is
+      ! a signed digit string): gfortran refuses it, ifx takes it and cuts the fraction (2.7 reads 2), so the text decides,
+      ! in every build
+      if (error == 0 .and. error_text == 0 .and. &
+          (associated(reg%params(i)%value%i) .or. associated(reg%params(i)%value%iarr))) then
+        if (scan(text, '.eEdDqQ') > 0) reg%params(i)%unread = .true.
+      end if
     end do
 
   end subroutine
 
 
   subroutine Scan_Ini(fini, nprobes, probes_name, nmgl)
-    use Finer, only: file_ini
+    use Finer, only: file_ini, err_option_vals
+    use ARES_Input_Registry, only: reg
     !use ARES_Lib_RotatingFrame, only: obj_rot
     use ARES_Config_Types_m, only: obj_sim_param
     use ARES_Global_m
@@ -48,14 +65,28 @@ contains
     character(len=16), allocatable, intent(out) :: probes_name(:)
     ! Local
     character(len=llen) :: wholestring
-    integer :: error, i
+    integer :: error, error_text, i
+    character(len=:), allocatable :: section, text
 
     ! Read the MGL (HYDRA coupling reads it from a dedicated section)
     nmgl = 1
     if (.not. obj_sim_param%HYDRA_MG) then
-      call fini%get(section_name=trim(codename)//'-Multigrid', option_name='levels', val=nmgl, error=error)
+      section = trim(codename)//'-Multigrid'
     else
-      call fini%get(section_name='HYDRA-Multigrid', option_name='levels', val=nmgl, error=error)
+      section = 'HYDRA-Multigrid'
+    endif
+    call fini%get(section_name=section, option_name='levels', val=nmgl, error=error)
+    ! A value that is not an integer, or no value: the run would go on with one grid level, without a word; an integer
+    ! written with a period or an exponent is not one either (gfortran refuses it, ifx takes it and cuts the fraction).
+    ! levels is no key of the registry: Validate_Registry gives this error first (Check_Input), as those of its keys
+    text = ''
+    call fini%get_string(section_name=section, option_name='levels', val=text, error=error_text)
+    if (error == err_option_vals .or. (error == 0 .and. error_text == 0 .and. scan(text, '.eEdDqQ') > 0)) then
+      if (len_trim(text) > 0) then
+        reg%load_error = '[ERROR] input.ini, ['//section//'] levels = '//trim(text)//': the value is not an integer'
+      else
+        reg%load_error = '[ERROR] input.ini, ['//section//'] levels =: the value is empty'
+      endif
     endif
 
     ! Count the probes

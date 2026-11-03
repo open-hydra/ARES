@@ -6,7 +6,7 @@ module ARES_Mod_MPI
 #ifdef USE_MPI
   use mpi
 #endif
-  use iso_fortran_env, only: R8 => real64, I4 => int32
+  use iso_fortran_env, only: R8 => real64, I4 => int32, output_unit
 
   implicit none
   private
@@ -30,8 +30,8 @@ module ARES_Mod_MPI
   public :: mpi_allreduce_sum_r8_array
   public :: mpi_reduce_sum_r8, mpi_reduce_sum_r8_array
   public :: mpi_allreduce_norm2
-  public :: mpi_bcast_logical, mpi_bcast_integer
-  public :: mpi_abort_all
+  public :: mpi_bcast_logical, mpi_bcast_integer, mpi_bcast_chars
+  public :: mpi_abort_all, mpi_stop_all
   public :: check_mpi_error
 
 contains
@@ -50,6 +50,7 @@ contains
       call check_mpi_error(ierr)
       if (provided < MPI_THREAD_FUNNELED) then
         write(*,'(A)') ' ERROR: MPI does not support the required threading level (MPI_THREAD_FUNNELED)'
+        call flush_output_units()
         call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
       end if
     end if
@@ -282,6 +283,31 @@ contains
   end subroutine mpi_bcast_integer
 
 
+  !> Broadcast a character string from root (rank 0) to all ranks: its length first, then its characters, so that every
+  !> rank passes MPI_BCAST the count of root (MPI-4.1, section 6.4: the type signature must be the same on every
+  !> process). The other ranks receive the string allocated to that length.
+  subroutine mpi_bcast_chars(text)
+    character(len=:), allocatable, intent(inout) :: text
+    integer :: n
+#ifdef USE_MPI
+    integer :: ierr
+#endif
+    n = 0
+    if (mpi_is_root .and. allocated(text)) n = len(text)
+    call mpi_bcast_integer(n)
+    if (.not. mpi_is_root) then
+      if (allocated(text)) deallocate(text)
+      allocate(character(len=n) :: text)
+    end if
+#ifdef USE_MPI
+    if (n > 0) then
+      call MPI_BCAST(text, n, MPI_CHARACTER, 0, MPI_COMM_WORLD, ierr)
+      call check_mpi_error(ierr)
+    end if
+#endif
+  end subroutine mpi_bcast_chars
+
+
   !> Check MPI return code. Abort all ranks on error.
   subroutine check_mpi_error(ierr)
     integer, intent(in) :: ierr
@@ -289,24 +315,79 @@ contains
     integer :: abort_ierr
     if (ierr /= 0) then
       write(*,'(A,I4,A,I6)') ' [RANK ', mpi_rank_, '] MPI error code: ', ierr
+      call flush_output_units()
       call MPI_ABORT(MPI_COMM_WORLD, 1, abort_ierr)
     end if
 #endif
   end subroutine check_mpi_error
 
 
-  !> MPI-aware abort: prints message, then aborts all ranks.
+  !> MPI-aware abort: prints message, writes out the output of this process (flush_output_units), then aborts all
+  !> ranks.
   subroutine mpi_abort_all(message)
     character(len=*), intent(in) :: message
 #ifdef USE_MPI
     integer :: ierr
     write(*,'(A,I4,A,A)') ' [RANK ', mpi_rank_, '] ABORT: ', trim(message)
+    call flush_output_units()
     call MPI_ABORT(MPI_COMM_WORLD, 1, ierr)
 #else
     write(*,'(A,A)') ' ABORT: ', trim(message)
     error stop
 #endif
   end subroutine mpi_abort_all
+
+
+#ifdef USE_MPI
+  !> Internal: write out what this process still holds for output_unit and error_unit, before MPI_ABORT. MPI_ABORT
+  !> makes only a "best attempt" to abort the processes (MPI-4.1, section 11.4.2) and need not end this one through
+  !> the end of the Fortran program, where the run-time library writes out its units: built with gfortran and run
+  !> with Open MPI 4.1.4 as one process with its output on a file, a run without this call loses the message, what it
+  !> wrote before and the lines on error_unit (where FLINT writes its warnings). Called before every MPI_ABORT of ARES. It
+  !> writes out the units of this process only: what the other ranks still hold when the run is aborted is not
+  !> written out by this call.
+  subroutine flush_output_units()
+    use iso_fortran_env, only: error_unit
+    flush(output_unit)
+    flush(error_unit)
+  end subroutine flush_output_units
+#endif
+
+
+  !> Stop of every rank on an error that every rank has found, a decision taken
+  !> on all ranks (the outcome of a check of rank 0 or of the reading of input.ini,
+  !> which rank 0 broadcasts; a file that every rank reads, such as bc.txt):
+  !> each rank prints the message and flushes its output, the ranks wait for
+  !> each other, so that what any rank printed before (rank 0 the explanation of
+  !> the error) is out before any rank ends, then the ranks finalize MPI and end
+  !> with exit code 1. MPI_ABORT
+  !> (mpi_abort_all) makes only a "best attempt" to abort the processes
+  !> (MPI-4.1, section 11.4.2): with Intel MPI 2021.12 the launcher at times
+  !> ends before writing out what the ranks printed (measured), and the first
+  !> rank to call it can stop another one before that one prints. A program that
+  !> ends normally calls MPI_FINALIZE in every process, which can then give an
+  !> exit code (MPI-4.1, section 11.2.2).
+  !> Precondition: every rank must reach this call on the same error, from the
+  !> same data (files that every rank reads at set-up, the outcome of a
+  !> broadcast). A decision that can differ between ranks, such as one on the
+  !> initial condition, which each rank reads itself (Check_IC in Wrap_Setup),
+  !> must be reduced first (mpi_allreduce_max_r8 of a flag); else the ranks that
+  !> do not stop wait in their next collective call and the run hangs.
+  subroutine mpi_stop_all(message)
+    character(len=*), intent(in) :: message
+#ifdef USE_MPI
+    integer :: ierr
+    write(*,'(A,I4,A,A)') ' [RANK ', mpi_rank_, '] STOP: ', trim(message)
+    flush(output_unit)
+    ! MPI_BARRIER returns at a rank only after every rank has entered it (MPI-4.1, section 6.3)
+    call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+    call MPI_FINALIZE(ierr)
+#else
+    write(*,'(A,A)') ' STOP: ', trim(message)
+    flush(output_unit)
+#endif
+    error stop 1
+  end subroutine mpi_stop_all
 
 
 end module ARES_Mod_MPI

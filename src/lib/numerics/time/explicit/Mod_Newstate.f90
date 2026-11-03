@@ -34,10 +34,10 @@ contains
     select case (obj_time_scheme%integration_variables)
     case ('prim')
       RK_Newstate => Newstate_Primitive
-      obj_time_scheme%integration_variables = 'Primitive'
+      obj_time_scheme%integration_name = 'Primitive'
     case ('prec')
       RK_Newstate => Newstate_Preconditioned
-      obj_time_scheme%integration_variables = 'Preconditioned'
+      obj_time_scheme%integration_name = 'Preconditioned'
     end select
 
   end subroutine Assign_Integration_Variables

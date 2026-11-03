@@ -68,7 +68,7 @@ The `type` key of a boundary section selects one of the following. They fall int
 | `type` | Group | Meaning | Data keys |
 |--------|-------|---------|-----------|
 | `symmetry` | geometric | Symmetry plane / inviscid slip wall | — |
-| `axisymmetric` | geometric | Axis of a 2-D axisymmetric domain | — |
+| `axisymmetric` | geometric | k faces (5 and 6) of an axisymmetric wedge or sector (the axis itself takes `symmetry`) | — |
 | `extrapolation` | geometric | Zeroth-order extrapolation (supersonic outflow / far-field) | — |
 | `connection` | connectivity | Inter-block abutting interface (usually auto-detected) | — |
 | `periodic` | connectivity | Periodic face pair | `blocks`, `faces` |
@@ -85,8 +85,8 @@ These carry no data line — just `type =`:
 [symmetry]
 type = symmetry      ; symmetry plane / inviscid slip wall
 
-[axis]
-type = axisymmetric  ; the axis of a 2-D axisymmetric (2Daxi) domain
+[wedge]
+type = axisymmetric  ; the k faces (5, 6) of a 2-D axisymmetric (2Daxi) wedge; the axis takes symmetry
 
 [farfield]
 type = extrapolation ; zeroth-order extrapolation: supersonic outflow / far-field
@@ -244,6 +244,13 @@ order gives the same solution and the same wall output).
 
 Types that carry no data (symmetry, axisymmetric, extrapolation) have no second line.
 
+Every value of the data line is required, except those with a default value: `k_rough` (`ks`) and `eps_wall` (`eps`)
+(0). An empty value (two commas with nothing between them) keeps that default; an empty required value stops the run at
+set-up, with the line of `bc.txt`, the record, its type and the name of the value. So does a line short of a value, or
+with a value that is not a number, and a value that is not finite (NaN or infinity), required or with a default, the
+flow directions `alpha` and `beta` included. Blank lines between records are skipped. On a coarse level of a multigrid
+run the messages name the file of that level.
+
 ### Numeric type codes
 
 The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that produces them:
@@ -255,7 +262,7 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 | `102` | `chimera`       | Overset interface: the two ghost cells take the volume-fraction mean of the donor-cell primitives | `n1 n2`, then `n1+n2` lines `bD iD jD kD vol_frac` |
 | `103` | —               | Multi-solver (HYDRA) coupling: symmetry wall + external flux | `bS iS jS kS fS d11 d12 d21 d22 [ks]` |
 | `104` | —               | Multi-solver (HYDRA-AF) coupling on a non-conforming interface: as `103`, with the partner cells found from the donors | `n1 n2 [ks]`, then `n1+n2` lines `bD iD jD kD vol_frac` (FUSS donors) |
-| `200` | `axisymmetric`  | Axisymmetric-axis treatment | — |
+| `200` | `axisymmetric`  | Rotational periodicity of a wedge or sector: the two k faces (5 and 6) of one block | — |
 | `201` | `periodic`      | Periodic face pair (dispatched as a connection) | — |
 | `300` | `symmetry` / `wall` (no data) | Symmetry plane / inviscid slip wall | — |
 | `301` | `wall` (`q`)    | No-slip wall, prescribed heat flux `qw` (`0` = adiabatic) | `q, ks, eps` |
@@ -265,7 +272,7 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 | `405` | `inlet` (`mach`,…) | Supersonic inlet: Mach + static `T` + static `p` | `M, T, p, α, β, rel[, turb]` |
 | `406` | `outlet` (`p`)  | Subsonic outlet: back pressure `pAmb` | `p, rel` |
 
-where `α`, `β` are the in-plane / out-of-plane inflow angles (`normal` = face-normal) and `rel` a relaxation factor. On an inlet, `turb` is the trailing group of as many values as the model transports (1, 2 or 7), read by position as the **specific** quantities `nuTilde`, `k`, `omega`, `Rij` — see [Inlets](#inlets) above. The inlet/outlet routines fall back to a symmetry wall if the local state would make the BC ill-posed (e.g. reversed flow).
+where `α`, `β` are the in-plane / out-of-plane inflow angles (`normal` = face-normal) and `rel` a relaxation factor. The mass flux `g` of the inlet `404` is positive into the domain on every face: zero, or a negative value on a face 1, 3 or 5, stops the run at set-up (an inlet only lets gas in; give a face where the gas leaves an outlet type, `406` or `400`); on a face 2, 4 or 6 a negative value is taken as its magnitude. The supersonic inlet `405` with `α` and `β` both `normal` lets the gas in along the normal of the face into the domain, on every face; with one angle `normal`, that angle is the one of that normal (`α` its azimuth, `β` its elevation). On an inlet, `turb` is the trailing group of as many values as the model transports (1, 2 or 7), read by position as the **specific** quantities `nuTilde`, `k`, `omega`, `Rij` — see [Inlets](#inlets) above. The inlet/outlet routines fall back to a symmetry wall if the local state would make the BC ill-posed (e.g. reversed flow).
 
 ### Example — mass-flux inlet (type 404)
 
@@ -277,6 +284,18 @@ A mass-flux inlet (`g = 80.65 kg/m²s`, `T = 300 K`) compiles to:
 ```
 
 The identifier line places the BC on block 1, cell `(1,1,1)`, face 1, with type `404` (inlet: mass flux + static temperature). The data line carries `T`, `g`, the in-plane and out-of-plane flow angles (`normal` = face-normal inflow), and a relaxation factor.
+
+!!! note "Type 200"
+    A face of type `200` takes what lies beyond it from the other $k$ face of its own block, in the same column
+    $(i, j)$, turned by the angle of the wedge or of the sector: type `200` joins the two $k$ faces (5 and 6) of one
+    block, and a block closed by type `200` holds the whole wedge or sector in $k$. A record of type `200` on a face 1 to
+    4, with its cell outside its block, or without a record of type `200` on the other $k$ face of the same column stops
+    the run at set-up with a message that names the record: so do a sector cut along $k$ into several blocks, a ring of
+    360° in several blocks closed by type `200` between the last block and the first, and a wedge with type `200` on one
+    $k$ face only. Where a wedge or a sector reaches the axis, the axis lies on one of the faces 1 to 4 and takes
+    symmetry (`300`), as the message of a record of type `200` there says. Cut a sector along $i$ or $j$; join the
+    blocks of a ring by block connections (`101`), and keep type `200` for a block that holds the whole sector or the
+    whole turn.
 
 !!! info "Numeric codes and ATLAS"
     In normal use you do not write these codes by hand — you write the `[BCB]` blocks above and let ATLAS translate them. The codes are documented here so you can interpret or hand-edit `bc.txt` when debugging a case.

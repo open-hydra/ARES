@@ -28,8 +28,32 @@ flux-limiter          = vanleer
 riemann-solver        = HLLC
 ```
 
+!!! note "Comments"
+    A line that starts with `!`, `;` or `#` is a comment, also when it holds `=` or a bracket. After a value only `;`
+    starts a comment (`cfl = 0.9 ; CFL number`): a `#` or a `!` after a value is part of the value. A number followed by
+    one does not read and stops the run; a name followed by one stops the run when its parameter takes one of a list of
+    names.
+
 !!! warning "Defaults are silent"
     If a parameter is omitted, the default is used without warning. Check the [Parameter Registry](registry.md) for exact names, defaults, and allowed values — names are case-sensitive.
+
+!!! warning "Keys that are not read"
+    ARES warns at the start for every line `key = value` of `input.ini` whose key the reader does not give in its section, with its line: such a key is an error in the input, and the run goes on with the default of its parameter in place of the value written. A parameter of the registry written with no value is named here, and stops the run (below). Comment lines are skipped, also when they hold `=`.
+
+!!! warning "An input.ini that cannot be read stops the run at the start"
+    If `input.ini` cannot be opened (missing, or without read permission), holds no line that is not blank, or the INI reader returns an error while it loads the file (a file with no section, a line it cannot parse, which the reader names on its error output), the run stops at the start with the reason and exit code 1; with MPI every rank stops. For a reading during the run, see the note «Errors of a reading during the run» below.
+
+!!! warning "Values outside their rules stop the run at the start"
+    A value outside the rule of its parameter (column Allowed of the [Parameter Registry](registry.md): a bound such as `> 0`, an interval such as `in (0, 1)`, where `(` and `)` leave the end out and `[` and `]` take it in, each held by every value of a list of numbers; a list of names; `logical`) stops the run with a message at the start. ARES reads `input.ini` again during the run, every `ini-diter` iterations (10000 by default), to take the values changed meanwhile; what an error of such a reading does is in the note «Errors of a reading during the run» below. In an MPI run rank 0 reads `input.ini`, at the start and at every reading, and passes its text to every rank, so that every rank takes the same values. The parameters that `input.ini` leaves out keep their values.
+
+!!! warning "Values that do not read stop the run at the start"
+    A value that does not read as the type of its parameter in the [Parameter Registry](registry.md) stops the run at the start with a message that gives the file, the section, the key and the value as written (`levels` of `[ARES-Multigrid]` is read at the start only): a real must be a finite number (not a word, `NaN`, `0,5`, or `1e999`, which gfortran reads as an infinity), an integer has no decimal point and no exponent (not `2.0` or `1e3`), a logical starts with `T` or `F` after an optional period (not `yes` or `1`; a word that starts with one of them reads as true or false), a list holds no more values than its parameter, and a key has a value.
+
+!!! warning "Errors of a reading during the run"
+    When ARES reads `input.ini` again during the run, an error of the reading (a file that cannot be read, a value that does not read as the type of its parameter, is out of its rule or is not finite) does what `ini-error` of `[ARES-IO]` says. With `warn`, the default, the reading is not taken: ARES writes a warning with the iteration and the error, which names the key and its value as written, and the run goes on with every value it had before the reading, those of the keys of the same reading that were right too. With `stop` the run stops with the message and exit code 1, as at the start; with MPI every rank stops. The value of `ini-error` in force when the reading starts decides. At the start every error stops the run, whatever `ini-error` says.
+
+!!! warning "What a reading during the run changes"
+    When ARES reads `input.ini` again during the run, only the parameters that the solver reads at every step take the new values, such as `cfl`, `vnn`, the intervals of the outputs, `iter-threshold` and `level<n>-iter`. The choices that the set-up makes once from the input are not made again, nor are its checks between keys: a new value of `equations`, `turbulence`, `space-reconstruction`, `flux-limiter`, `riemann-solver` or `time-scheme` is checked against its rule and leaves the run as it was. Residual smoothing cannot be turned on during a run started without it (`irs = true` or `irs-beta > 0`): its work arrays exist only when it was on at the start, so the reading ignores it, with a warning.
 
 ---
 

@@ -235,6 +235,7 @@ case "$COMMAND" in
         [[ $ORION_PATH == $(pwd)'/lib/ORION/' ]] && git submodule update --init lib/ORION
         [[ $FLINT_PATH == $(pwd)'/lib/FLINT/' ]] && git submodule update --init lib/FLINT
         [[ $FINER_PATH == $(pwd)'/lib/third_party/FiNeR/' ]] && git submodule update --init --recursive lib/third_party/FiNeR
+        [[ $FINER_PATH == $(pwd)'/lib/third_party/FiNeR/' ]] && git submodule update --init lib/third_party/PENF lib/third_party/FACE lib/third_party/FLAP lib/third_party/BeFoR64 lib/third_party/StringiFor
 
         task "Configuring and building $project"
         if [[ $COMPILERS == "intel" ]]; then

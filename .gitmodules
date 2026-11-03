@@ -9,3 +9,18 @@
 [submodule "lib/FLINT"]
 	path = lib/FLINT
 	url = https://github.com/MarcoGrossi92/FLINT.git
+[submodule "lib/third_party/PENF"]
+	path = lib/third_party/PENF
+	url = https://github.com/szaghi/PENF.git
+[submodule "lib/third_party/FACE"]
+	path = lib/third_party/FACE
+	url = https://github.com/szaghi/FACE.git
+[submodule "lib/third_party/FLAP"]
+	path = lib/third_party/FLAP
+	url = https://github.com/szaghi/FLAP.git
+[submodule "lib/third_party/BeFoR64"]
+	path = lib/third_party/BeFoR64
+	url = https://github.com/szaghi/BeFoR64.git
+[submodule "lib/third_party/StringiFor"]
+	path = lib/third_party/StringiFor
+	url = https://github.com/szaghi/StringiFor.git

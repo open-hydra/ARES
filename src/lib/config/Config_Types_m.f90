@@ -49,6 +49,7 @@ module ARES_Config_Types_m
     character(len=llen)  :: sol_variables, wall_variables   ! Variables to be printed in solution and wall files
     integer              :: shell_diter  ! Shell update
     integer              :: ini_diter    ! input.ini update
+    character(len=llen)  :: ini_error    ! input.ini read again with an error: warn (the reading not taken) or stop
     integer              :: timer_diter  ! Wall-clock timing report (0 = off)
     ! Useful variables
     character(len=llen)  :: nameinit  ! Initial file name
@@ -100,7 +101,8 @@ module ARES_Config_Types_m
     integer             :: rampa_cfl_iter   ! Numero di iterazioni per rampa di cfl
     logical             :: time_accurate    ! Flag per integrazione time-accurate
     integer             :: n_RK
-    character(len=llen) :: integration_variables ! Integration variables (cons/prim)
+    character(len=llen) :: integration_variables ! Integration variables (prim/prec), as input.ini gives them
+    character(len=llen) :: integration_name = '' ! Their name in the set-up summary
     ! Useful variables
     ! ...
   end type time_scheme_t
@@ -118,6 +120,7 @@ module ARES_Config_Types_m
     real(R8)  :: beta
     ! Useful variables
     logical   :: enabled
+    logical   :: at_setup = .false.            ! IRS on at setup: only then are its arrays allocated
   end type irs_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------
@@ -146,7 +149,8 @@ module ARES_Config_Types_m
     character(len=llen) :: description
     ! USER-DEFINED INPUTS
     character(len=llen) :: space_reconstruction ! Space reconstruction method
-    character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction
+    character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction, as input.ini gives it
+    character(len=llen) :: limiter_name = ''    ! Name of the limiter in use in the set-up summary (blank: first order)
     ! Useful variables
     logical :: SD
   end type space_scheme_t
@@ -159,7 +163,8 @@ module ARES_Config_Types_m
   type :: riemann_t
     character(len=llen) :: warning_message
     character(len=llen) :: error_message
-    character(len=llen) :: description
+    character(len=llen) :: description          ! The solver as input.ini gives it (riemann-solver)
+    character(len=llen) :: name = ''            ! Its name in the set-up summary
     ! USER-DEFINED INPUTS
     real(R8) :: Minf
     ! Useful variables
