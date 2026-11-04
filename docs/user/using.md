@@ -169,8 +169,11 @@ With `levels > 1` in `[ARES-Multigrid]` the run starts on the coarsest level, an
 | File | Description |
 |------|-------------|
 | `field-level<N>.*` | Solution on the grid of level $N$ |
+| `wall-level<N>.*` | Wall quantities of level $N$, from its own boundary records and metrics — viscous cases only |
 | `field-prolongated.*` | The level-$N$ solution prolongated to the finest grid |
 | `wall-prolongated.*` | Wall quantities of the prolongated solution — viscous cases only |
+
+Every file carries the time of its iteration (minus the global iteration count in a steady run). `prolongated-diter` in `[ARES-Multigrid]` spaces the prolongated files: with 0, the default, they are written with every field write of a coarse level; otherwise only once that many iterations of the level have passed since the last ones. The switch to the next finer level always writes them.
 
 If the run ends on a coarse level (a threshold of `[ARES-Parameters]` is reached before level 1), the final files carry the level as well, `field-level<N>.*`, `wall-level<N>.*` and `diagnostic-level<N>.*`, and do not overwrite those of the finest level.
 
@@ -183,7 +186,7 @@ Controlled by `sol-format` in `[ARES-IO]`:
 | `tecplot ascii` | Tecplot ASCII (`.tec`) — default |
 | `tecplot binary` | Tecplot binary (`.szplt`) — requires TecIO |
 | `vtk ascii` | VTK ASCII (`.vts`) |
-| `vtk raw` | VTK binary (`.vts`) |
+| `vtk raw` | VTK multi-block (`.vtm`) with its `.vts` block files in `OUTPUT/vtk/`, raw binary data appended to each file |
 
 ### Output variables
 
@@ -208,10 +211,12 @@ index-position = 50 33 1 1   ; i j k block
 diter = 100
 ```
 
-Each probe writes `OUTPUT/exit.txt` with columns for time/iteration and the requested variables.
+Each probe writes `OUTPUT/exit.txt` with columns for time/iteration and the requested variables. The accepted variables are `p u v w h T M` and, with a turbulence model, `mi_tilde`, the first transported turbulence variable (`rhoNuTilde`, `rhoK` or `ru'u'` in the solution files); an unknown name stops the run with the list. A probe given by `position` records the cell whose centre (the mean of its eight nodes) is the nearest to it. The rows with `diter` fall on the multiples of `diter` of the global iteration count; the time-based rows (`dtime`) on the multiples of `dtime`, from the first. Every row is passed to the file system when it is written. A new run replaces the probe file; a restart appends to it, and creates it when it is missing.
 
 ---
 
 ## Restart
 
-Set `newrun = .false.` in `[ARES-Parameters]` to resume. ARES reads the initial state from the latest solution file in `OUTPUT/` instead of `INPUT/`, restoring the flow field, physical time, and the global iteration counter.
+Set `newrun = .false.` in `[ARES-Parameters]` to resume. ARES reads the initial state from the latest solution file in `OUTPUT/` instead of `INPUT/`, restoring the flow field, the physical time, the global iteration counter and, from a solution of a run of the same kind, the counters stored with it (output numbering, CFL ramp, multigrid level, the reference of `res-threshold`): see [Restart](initial-conditions.md#restart).
+
+A steady run ends when its pressure residual has fallen by `res-threshold` from that of its first iteration (of each grid level), or at `iter-threshold`; `residual-history.dat` and the screen report the residual as it is. A time-accurate run ends at `time-threshold` or `iter-threshold`: `res-threshold` does not end it.

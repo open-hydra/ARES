@@ -7,7 +7,7 @@ ARES provides Reynolds-Averaged Navier–Stokes (RANS) closures for turbulent fl
 | `SA` | 1-equation eddy viscosity | Baseline Spalart–Allmaras |
 | `SA-R` | 1-equation | + rotation correction |
 | `SA-RC` | 1-equation | + Spalart–Shur rotation/curvature correction |
-| `SAcomp` | 1-equation | + compressibility correction |
+| `SAcomp` | 1-equation | + compressibility correction (stops at set-up: its result depends on the units) |
 | `SA-QCR2000` | 1-eq + algebraic | + Quadratic Constitutive Relation (stress anisotropy) |
 | `SA-rough` | 1-equation | + sand-grain wall roughness |
 | `SA-rough-QCR2000` | 1-eq + algebraic | roughness + QCR2000 |
@@ -44,9 +44,22 @@ SA transports a single modified eddy viscosity $\tilde\nu$:
 $$
 \frac{\partial(\rho\tilde\nu)}{\partial t} + \nabla\!\cdot\!(\rho\mathbf u\tilde\nu)
 = \underbrace{c_{b1}\tilde S\rho\tilde\nu}_{\text{production}}
-+ \underbrace{\frac{1}{\sigma}\bigl[\nabla\!\cdot\!((\mu+\rho\tilde\nu)\nabla\tilde\nu) + c_{b2}\rho|\nabla\tilde\nu|^2\bigr]}_{\text{diffusion}}
++ \underbrace{\frac{1}{\sigma}\bigl[\nabla\!\cdot\!((\mu+\rho\tilde\nu)\nabla\tilde\nu) + c_{b2}\rho|\nabla\tilde\nu|^2
+  - (\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu\bigr]}_{\text{diffusion}}
 - \underbrace{c_{w1}f_w\rho\Bigl(\frac{\tilde\nu}{y}\Bigr)^2}_{\text{destruction}}
 $$
+
+This is the conservation form of the original equation, which has no density and holds for
+compressible flows too: it is $\rho$ times the original equation plus $\tilde\nu$ times the
+continuity equation (S. R. Allmaras, F. T. Johnson, P. R. Spalart, *Modifications and
+Clarifications for the Implementation of the Spalart–Allmaras Turbulence Model*, ICCFD7-1902,
+2012, eq. 9; NASA Turbulence Modeling Resource, Spalart–Allmaras page). Since
+$\rho\,\nabla\cdot\bigl((\nu+\tilde\nu)\nabla\tilde\nu\bigr) = \nabla\cdot\bigl(\rho(\nu+\tilde\nu)\nabla\tilde\nu\bigr)
+- (\nu+\tilde\nu)\nabla\rho\cdot\nabla\tilde\nu$, the last diffusion term is needed wherever density
+and $\tilde\nu$ vary together (boundary layers at high Mach number, shocks, heated walls): without it,
+as in implementations that put the density inside the derivatives, the predictions of supersonic flows
+change (NASA Turbulence Modeling Resource, Note 4). In `SA_Source_Blk` the density gradient takes the
+same central differences as the gradient of $\tilde\nu$.
 
 ### Model constants
 
@@ -102,6 +115,20 @@ $$
 
     ARES computes the factor $2r^\ast/(1 + r^\ast)$ of $f_{r1}$ as $2S/(S + \Omega)$: where the vorticity vanishes it takes its limit, 2. Where strain and vorticity are both below $10^{-30}\ \mathrm{s^{-1}}$, in a fluid at rest or a uniform flow, $r^\ast$ is not defined: the velocity gradient there is the $10^{-40}$ that ARES adds to the velocity differences, times the metric of the cell. ARES then takes the value of simple shear, 1, with $\tilde r = 0$. The correction does not act there, and the production is that of SA.
 - **SAcomp (compressibility).** Paciorri–Sabetta correction scaling the production with the turbulent-stress ratio $S_\tau = \omega\,\tilde\nu f_{v1}/a^2$, for high-speed shear layers.
+
+    !!! warning "Stopped at set-up"
+        A run with `turbulence = SAcomp` stops at set-up. The correction takes
+        $c$ from $c^2 f(c) = 25\,\Omega\,\tilde\nu f_{v1}/a$, with
+        $f(c) = 0.44/(1 + 14c^5) + 0.56$, and multiplies the production by
+        $f_1(c)\,f(c)$, with $f_1(c) = 0.6/(1 + 9c^6) + 0.4$: the left side is a
+        number and the right side a speed (the code divides by $a$, not by $a^2$
+        as written above), so the factor depends on the units. For
+        $\Omega = 10^3$ 1/s, $\nu_t = 10^{-3}$ m²/s and $a = 340$ m/s it is 0.99
+        with lengths in metres and 0.22 with lengths in millimetres; and since
+        $a$ only divides, at $\Omega = 10^5$ 1/s it cuts the production by 78 %
+        whatever the Mach number. Until the correction is checked against its
+        source (the article the code cites, doi:10.2514/2.3967) it is not
+        available: use `SA` or another model.
 - **SA-rough (roughness).** Equivalent sand-grain roughness via the Aupoix–Spalart (“Boeing”) extension — see [Rough walls](#rough-walls-sa-rough) below.
 - **SA-QCR2000.** Replaces the Boussinesq stress with the [Quadratic Constitutive Relation](#quadratic-constitutive-relation-qcr2000) to capture stress anisotropy in corner and secondary flows.
 
@@ -294,7 +321,7 @@ $$
 \omega_\text{wall} = \frac{6\,\nu}{\beta_1\,y^2} = \frac{80\,\nu}{y^2},
 $$
 
-as in MOSE. The key sets the wall condition of the Wilcox 2006 and SSG-LRR models as well. Separately, `sst-asymptotic = .true.` (SST only, ARES only) imposes the same asymptotic value on the first `sst-asymptotic-cells` cells off each viscous wall, removing them from the time integration of the $\omega$ equation.
+as in MOSE. The key sets the wall condition of the Wilcox 2006 and SSG-LRR models as well, the asymptotic one with the $\beta$ of the $\omega$ equation of each model at the wall: $6\nu/(\beta_0 y^2) = 84.7\,\nu/y^2$ for Wilcox 2006 (see its section below), $80\,\nu/y^2$ for SSG-LRR, whose $\omega$ equation takes $\beta = 0.075$ there, as SST. Separately, `sst-asymptotic = .true.` (SST only, ARES only) imposes the same asymptotic value on the first `sst-asymptotic-cells` cells off each viscous wall, removing them from the time integration of the $\omega$ equation.
 
 ### Energy coupling (`k-energy-coupling`)
 
@@ -351,9 +378,23 @@ The $\omega$-destruction coefficient is modified by the Wilcox stress-limiter fu
 
 $$
 \beta = \beta_0\,f_\beta,\qquad
-X_\omega = \frac{|W_{ij}\,W_{jk}\,\bar S_{ki}|}{(\beta^\ast\omega)^3},\qquad
+X_\omega = \frac{|W_{ij}\,W_{jk}\,\hat S_{ki}|}{(\beta^\ast\omega)^3},\qquad
 f_\beta = \frac{1 + 85\,X_\omega}{1 + 100\,X_\omega}
 $$
+
+with $\hat S_{ki} = S_{ki} - \tfrac{1}{2}\,(\partial u_m/\partial x_m)\,\delta_{ki}$ (NASA Turbulence Modeling
+Resource, Wilcox 2006 page): off the diagonal $\hat S = S$. On that page the formula of $\chi_\omega$ reads
+$\Omega_{ij}\Omega_{ij}\hat S_{ki}$, whose indices do not close; ARES takes $W_{ij}W_{jk}\hat S_{ki}$, the form of the Wilcox
+1998 model on the same page ($\Omega_{ij}\Omega_{jk}S_{ki}$) and the only one for which the statement of the page that
+$\chi_\omega$ is zero in 2-D holds. In 2-D flows the product $W_{ij}W_{jk}\hat S_{ki}$ is zero and $f_\beta = 1$.
+
+### Wall boundary conditions
+
+$k_\text{wall} = 0$. With `omega-wall-bc = asymptotic` the wall takes the near-wall limit of the $\omega$ equation of the
+model, $\omega_\text{wall} = 6\nu/(\beta_0 y^2)$ with $\beta_0 = 0.0708$ (NASA Turbulence Modeling Resource, Wilcox 2006
+page), that is $84.7\,\nu/y^2$, $y$ the distance of the centre of the wall cell from the wall. With `practical`, the default,
+it takes Menter's condition of the [SST section](#wall-boundary-conditions), $800\,\nu/y^2$ with the $\beta_1$ of SST,
+as the same page advises for this model.
 
 ### Cross-diffusion *(conditional)*
 

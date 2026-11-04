@@ -5,7 +5,9 @@ module ARES_IO_Wall
   use ARES_Parameters_m
   use Lib_ORION_data
   implicit none
-  type(ORION_data) :: IOwall
+  ! Wall output, one container per multigrid level (index = domain%mg_level): allocated on
+  ! every rank, filled and written on root only
+  type(ORION_data), allocatable :: IOwall(:)
 
 contains
 
@@ -16,9 +18,10 @@ contains
     type(ARES_domain_type), intent(in) :: domain
     character(len=*), intent(in)       :: extension
     ! Local
-    integer :: b, f, bb, i, j, k
+    integer :: b, f, bb, i, j, k, lv
 
-    IOwall%tec%extension = extension
+    lv = domain%mg_level
+    IOwall(lv)%tec%extension = extension
 
     obj_io%write_wall_mechanical = .false.
     obj_io%write_wall_thermal = .false.
@@ -42,58 +45,63 @@ contains
     obj_io%Onwall = obj_io%Onwall + 1
     obj_io%Owallnames = trim(obj_io%Owallnames)//' "hs"'
 
-    allocate(IOwall%block(1:count(obj_io_bc%viscous_flag)))
+    allocate(IOwall(lv)%block(1:count(obj_io_bc%viscous_flag)))
 
     bb = 0
     do b = 1, domain % nb; do f = 1, 6
       if (obj_io_bc%viscous_flag( b , f )) then
         bb = bb + 1
-        IOwall%block(bb)%name = 'B'//trim(str(.true.,b))//'F'//trim(str(.true.,f))
+        IOwall(lv)%block(bb)%name = 'B'//trim(str(.true.,b))//'F'//trim(str(.true.,f))
         select case(f)
         case(1)
-          allocate(IOwall%block(bb)%mesh(1:3,0:0,0:domain%blk(b)%dim(2),0:domain%blk(b)%dim(3)))
-          allocate(IOwall%block(bb)%vars(1:obj_io%Onwall,1,1:domain%blk(b)%dim(2),1:domain%blk(b)%dim(3)))
+          allocate(IOwall(lv)%block(bb)%mesh(1:3,0:0,0:domain%blk(b)%dim(2),0:domain%blk(b)%dim(3)))
+          allocate(IOwall(lv)%block(bb)%vars(1:obj_io%Onwall,1,1:domain%blk(b)%dim(2),1:domain%blk(b)%dim(3)))
           do k = 0, domain%blk(b)%dim(3); do j = 0, domain%blk(b)%dim(2)
-              IOwall % block(bb) % mesh(1,0,j,k) = domain % blk(b) % node(0,j,k) % c(1)
-              IOwall % block(bb) % mesh(2,0,j,k) = domain % blk(b) % node(0,j,k) % c(2)
-              IOwall % block(bb) % mesh(3,0,j,k) = domain % blk(b) % node(0,j,k) % c(3)
+              IOwall(lv) % block(bb) % mesh(1,0,j,k) = domain % blk(b) % node(0,j,k) % c(1)
+              IOwall(lv) % block(bb) % mesh(2,0,j,k) = domain % blk(b) % node(0,j,k) % c(2)
+              IOwall(lv) % block(bb) % mesh(3,0,j,k) = domain % blk(b) % node(0,j,k) % c(3)
               ! Section to fool compiler...
-              if (IOwall%block(bb)%mesh(1,0,j,k)==0d0 .and. &
-                  IOwall%block(bb)%mesh(2,0,j,k)==0d0 .and. &
-                  IOwall%block(bb)%mesh(3,0,j,k)==0d0) &
-              print*, IOwall % block(bb) % mesh(:,0,j,k)
+              if (IOwall(lv)%block(bb)%mesh(1,0,j,k)==0d0 .and. &
+                  IOwall(lv)%block(bb)%mesh(2,0,j,k)==0d0 .and. &
+                  IOwall(lv)%block(bb)%mesh(3,0,j,k)==0d0) &
+              print*, IOwall(lv) % block(bb) % mesh(:,0,j,k)
           enddo; enddo
         case(2)
-          allocate(IOwall%block(bb)%mesh(1:3,0:0,0:domain%blk(b)%dim(2),0:domain%blk(b)%dim(3)))
-          allocate(IOwall%block(bb)%vars(1:obj_io%Onwall,1,1:domain%blk(b)%dim(2),1:domain%blk(b)%dim(3)))
+          allocate(IOwall(lv)%block(bb)%mesh(1:3,0:0,0:domain%blk(b)%dim(2),0:domain%blk(b)%dim(3)))
+          allocate(IOwall(lv)%block(bb)%vars(1:obj_io%Onwall,1,1:domain%blk(b)%dim(2),1:domain%blk(b)%dim(3)))
           do k = 0, domain%blk(b)%dim(3); do j = 0, domain%blk(b)%dim(2)
-              IOwall % block(bb) % mesh(:,0,j,k) = domain % blk(b) % node(domain%blk(b)%dim(1),j,k) % c
+              IOwall(lv) % block(bb) % mesh(:,0,j,k) = domain % blk(b) % node(domain%blk(b)%dim(1),j,k) % c
           enddo; enddo
         case(3)
-          allocate(IOwall%block(bb)%mesh(1:3,0:domain%blk(b)%dim(1),0:0,0:domain%blk(b)%dim(3)))
-          allocate(IOwall%block(bb)%vars(1:obj_io%Onwall,1:domain%blk(b)%dim(1),1,1:domain%blk(b)%dim(3)))
+          allocate(IOwall(lv)%block(bb)%mesh(1:3,0:domain%blk(b)%dim(1),0:0,0:domain%blk(b)%dim(3)))
+          allocate(IOwall(lv)%block(bb)%vars(1:obj_io%Onwall,1:domain%blk(b)%dim(1),1,1:domain%blk(b)%dim(3)))
           do k = 0, domain%blk(b)%dim(3); do i = 0, domain%blk(b)%dim(1)
-              IOwall % block(bb) % mesh(:,i,0,k) = domain % blk(b) % node(i,0,k) % c
+              IOwall(lv) % block(bb) % mesh(:,i,0,k) = domain % blk(b) % node(i,0,k) % c
           enddo; enddo
         case(4)
-          allocate(IOwall%block(bb)%mesh(1:3,0:domain%blk(b)%dim(1),0:0,0:domain%blk(b)%dim(3)))
-          allocate(IOwall%block(bb)%vars(1:obj_io%Onwall,1:domain%blk(b)%dim(1),1,1:domain%blk(b)%dim(3)))
+          allocate(IOwall(lv)%block(bb)%mesh(1:3,0:domain%blk(b)%dim(1),0:0,0:domain%blk(b)%dim(3)))
+          allocate(IOwall(lv)%block(bb)%vars(1:obj_io%Onwall,1:domain%blk(b)%dim(1),1,1:domain%blk(b)%dim(3)))
           do k = 0, domain%blk(b)%dim(3); do i = 0, domain%blk(b)%dim(1)
-              IOwall % block(bb) % mesh(:,i,0,k) = domain % blk(b) % node(i,domain%blk(b)%dim(2),k) % c
+              IOwall(lv) % block(bb) % mesh(:,i,0,k) = domain % blk(b) % node(i,domain%blk(b)%dim(2),k) % c
           enddo; enddo
         case(5)
-          allocate(IOwall%block(bb)%mesh(1:3,0:domain%blk(b)%dim(1),0:domain%blk(b)%dim(2),0:0))
-          allocate(IOwall%block(bb)%vars(1:obj_io%Onwall,1:domain%blk(b)%dim(1),1:domain%blk(b)%dim(2),1))
+          allocate(IOwall(lv)%block(bb)%mesh(1:3,0:domain%blk(b)%dim(1),0:domain%blk(b)%dim(2),0:0))
+          allocate(IOwall(lv)%block(bb)%vars(1:obj_io%Onwall,1:domain%blk(b)%dim(1),1:domain%blk(b)%dim(2),1))
           do j = 0, domain%blk(b)%dim(2); do i = 0, domain%blk(b)%dim(1)
-              IOwall % block(bb) % mesh(:,i,j,0) = domain % blk(b) % node(i,j,0) % c
+              IOwall(lv) % block(bb) % mesh(:,i,j,0) = domain % blk(b) % node(i,j,0) % c
           enddo; enddo
         case(6)
-          allocate(IOwall%block(bb)%mesh(1:3,0:domain%blk(b)%dim(1),0:domain%blk(b)%dim(2),0:0))
-          allocate(IOwall%block(bb)%vars(1:obj_io%Onwall,1:domain%blk(b)%dim(1),1:domain%blk(b)%dim(2),1))
+          allocate(IOwall(lv)%block(bb)%mesh(1:3,0:domain%blk(b)%dim(1),0:domain%blk(b)%dim(2),0:0))
+          allocate(IOwall(lv)%block(bb)%vars(1:obj_io%Onwall,1:domain%blk(b)%dim(1),1:domain%blk(b)%dim(2),1))
           do j = 0, domain%blk(b)%dim(2); do i = 0, domain%blk(b)%dim(1)
-              IOwall % block(bb) % mesh(:,i,j,0) = domain % blk(b) % node(i,j,domain%blk(b)%dim(3)) % c
+              IOwall(lv) % block(bb) % mesh(:,i,j,0) = domain % blk(b) % node(i,j,domain%blk(b)%dim(3)) % c
           enddo; enddo
         end select
+        ! Cells of the face in each direction, 0 across it: the vtk writer of ORION sizes the block
+        ! file with them (the Tecplot writer takes the sizes from the mesh array)
+        IOwall(lv)%block(bb)%Ni = size(IOwall(lv)%block(bb)%mesh, 2) - 1
+        IOwall(lv)%block(bb)%Nj = size(IOwall(lv)%block(bb)%mesh, 3) - 1
+        IOwall(lv)%block(bb)%Nk = size(IOwall(lv)%block(bb)%mesh, 4) - 1
       endif
     enddo; enddo
 
@@ -115,8 +123,12 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO
+    character(len=llen) :: name
+    character(len=len(obj_io%Owallnames)) :: vtknames
+    integer             :: E_IO, i, lv
     character(len=clen) :: format(2)
+
+    lv = domain%mg_level
 
     ! Each rank computes wall properties for its local blocks and reduces to root.
     ! (collective — all ranks must call)
@@ -130,14 +142,24 @@ contains
       ! Write the IOwall accordingly to the solution format
       select case(trim(format(1)))
       case('vtk')
-        IOwall%vtk%format = trim(format(2))
+        IOwall(lv)%vtk%format = trim(format(2))
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = obj_io%Owallnames
+        do i = 1, len_trim(vtknames)
+          if ( vtknames(i:i) == '"' ) vtknames(i:i) = ' '
+        enddo
+        ! As for the field (IO_Solution): the .vtm lists its blocks relative to its folder
+        name = file
+        if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
-        E_IO = vtk_write_structured_multiblock(orion=IOwall,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=obj_io%Owallnames,time=domain%time)
+        ! The time is the solution time of the Tecplot output: minus the global iteration count in a steady run
+        E_IO = vtk_write_structured_multiblock(orion=IOwall(lv),vtspath=trim(localpath_vtk)//trim(name), &
+                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=IOwall(lv)%solutiontime)
       case('tecplot')
-        IOwall%tec%format = trim(format(2))
-        E_IO = tec_write_structured_multiblock(orion=IOwall,varnames=obj_io%Owallnames,filename=trim(path)//trim(file)//trim(IOwall%tec%extension))
+        IOwall(lv)%tec%format = trim(format(2))
+        E_IO = tec_write_structured_multiblock(orion=IOwall(lv),varnames=obj_io%Owallnames, &
+                                               filename=trim(path)//trim(file)//trim(IOwall(lv)%tec%extension))
       end select
     end if
 
@@ -148,7 +170,8 @@ contains
 
 
   !> Compute wall BC properties on all ranks (local blocks only), reduce to root,
-  !> and fill IOwall on root. Collective — all ranks must call.
+  !> and fill IOwall on root. Collective — all ranks must call. The residual and
+  !> the ghost cells are left as they were: an output does not change the state.
   subroutine Extract_Properties_From_BC ( domain )
     use ARES_Advanced_Types_m
     use ARES_Global_m
@@ -160,9 +183,13 @@ contains
     ! Local
     real(R8), dimension(8) :: Ovar
     integer :: f, lower, upper, i, b, bb, pv, Bm, Im, Jm, Km, Fm, Is, Js, Ks
-    integer :: n_wall_total, wall_i, ii, nrec
+    integer :: n_wall_total, wall_i, ii, nrec, lv
     real(R8), allocatable :: wall_buf(:)
     integer, allocatable  :: order(:), first(:,:), next(:,:)
+    integer  :: Ig, Jg, Kg
+    real(R8) :: r_keep(nprim), g_keep(nprim)   ! residual of the wall cell and its ghost cell, before the call
+
+    lv = domain%mg_level
 
     ! Count total BC cells across all viscous faces
     n_wall_total = 0
@@ -213,6 +240,17 @@ contains
           Jm = domain%bc(i)%j
           Km = domain%bc(i)%k
           Fm = domain%bc(i)%f
+
+          ! The wall flux routines below are called for the wall properties (Ovar)
+          ! only, but they also add the wall flux to the residual of the wall cell
+          ! and rewrite the RANS variables of its ghost cell. The diagnostic output,
+          ! written next, prints that residual: keep both and put them back.
+          Ig = Im - guide(Fm,1)
+          Jg = Jm - guide(Fm,2)
+          Kg = Km - guide(Fm,3)
+          r_keep = domain % blk(Bm) % r (:,Im,Jm,Km)
+          g_keep = domain % blk(Bm) % P (:,Ig,Jg,Kg)
+
           Ovar = 0d0
 
           ! Roughness of the wall cell (0 for a smooth case; blk%ks is allocated
@@ -228,6 +266,10 @@ contains
               call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar )
 
           end select
+
+          domain % blk(Bm) % r (:,Im,Jm,Km) = r_keep
+          domain % blk(Bm) % P (:,Ig,Jg,Kg) = g_keep
+
           wall_buf(8*(wall_i-1)+1 : 8*wall_i) = Ovar
         enddo
 
@@ -258,18 +300,18 @@ contains
               case(3,4); Is = domain%bc(i)%i   ; Js = 1              ; Ks = domain%bc(i)%k
               case(5,6); Is = domain%bc(i)%i   ; Js = domain%bc(i)%j ; Ks = 1
             end select
-            IOwall%block(bb)%vars(1, Is, Js, Ks) = Ovar(1)
+            IOwall(lv)%block(bb)%vars(1, Is, Js, Ks) = Ovar(1)
             pv = 1
             if (obj_io%write_wall_mechanical) then
-              IOwall%block(bb)%vars(pv+1:pv+4, Is, Js, Ks) = Ovar(2:5)
+              IOwall(lv)%block(bb)%vars(pv+1:pv+4, Is, Js, Ks) = Ovar(2:5)
               pv = pv + 4
             endif
             if (obj_io%write_wall_thermal) then
-              IOwall%block(bb)%vars(pv+1:pv+2, Is, Js, Ks) = Ovar(6:7)
+              IOwall(lv)%block(bb)%vars(pv+1:pv+2, Is, Js, Ks) = Ovar(6:7)
               pv = pv + 2
             endif
             ! Roughness — always last
-            IOwall%block(bb)%vars(pv+1, Is, Js, Ks) = Ovar(8)
+            IOwall(lv)%block(bb)%vars(pv+1, Is, Js, Ks) = Ovar(8)
             pv = pv + 1
           enddo
 

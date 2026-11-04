@@ -10,7 +10,7 @@ This page is the reference for every `[ARES-*]` parameter. It mirrors the output
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | newrun | true | true , false | no | Start a new simulation (false = restart) |
-| res-threshold | 1e-10 | > 0 | no | Residual convergence threshold |
+| res-threshold | 1e-10 | > 0 | no | Residual convergence threshold, relative to the first iteration (steady runs only) |
 | time-threshold | 1e30 | > 0 | no | Maximum simulation time |
 | iter-threshold | 1000000000 | > 0 | no | Maximum number of iterations (re-read at runtime) |
 
@@ -46,6 +46,7 @@ Per-level iteration counts. The number of levels is set by the `levels` key; one
 | level1-iter | 0 | >= 0 | no | Iterations on multigrid level 1 (finest; re-read at runtime) |
 | level2-iter | 0 | >= 0 | no | Iterations on multigrid level 2 (re-read at runtime) |
 | … | 0 | >= 0 | no | (one entry per level) |
+| prolongated-diter | 0 | >= 0 | no | Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime) |
 
 ## ARES-Physics
 
@@ -69,7 +70,7 @@ These keys are read for every run and used only when `turbulence` names a model.
 | Prt | 0.90 | > 0 | no | Turbulent Prandtl number |
 | Sct | 0.90 | > 0 | no | Turbulent Schmidt number |
 | point-implicit | .false. | logical | no | Point-implicit (Patankar) treatment of the turbulence destruction source terms (steady runs only) |
-| omega-wall-bc | practical | practical, asymptotic | no | Omega wall condition of the k-omega models (SST, Wilcox2006) and of SSGLRR: Menter practical $60\nu/(\beta_1 y^2)$, or asymptotic $6\nu/(\beta_1 y^2)$, the exact $y \to 0$ limit, for wall-resolved meshes |
+| omega-wall-bc | practical | practical, asymptotic | no | Omega wall condition of the k-omega models (SST, Wilcox2006) and of SSGLRR: Menter practical $60\nu/(\beta_1 y^2)$, $\beta_1$ of SST, for every model, or asymptotic $6\nu/(\beta y^2)$, the exact $y \to 0$ limit with the $\beta$ of the model ($\beta_1$ for SST and SSGLRR, $\beta_0$ for Wilcox2006), for wall-resolved meshes |
 | sst-production | incompressible | incompressible, compressible | no | SST production (NASA TMR naming): incompressible ($P = \mu_t S^2$, SST-2003m) or compressible ($P = \tau_{ij}\,\partial u_i/\partial x_j$, SST-2003e, as OpenFOAM kOmegaSST: adds $-\tfrac23\mu_t(\nabla\cdot\mathbf u)^2 - \tfrac23\rho k\,\nabla\cdot\mathbf u$, and $-\tfrac23\gamma\rho\omega\,\nabla\cdot\mathbf u$ to the $\omega$ equation) |
 | k-energy-coupling | .false. | logical | no | Two-equation models (SST, Wilcox2006): $k$ in the total energy, the full compressible RANS form of NASA TMR: $-\tfrac23\rho k\,\delta_{ij}$ in the stress tensor of the momentum and energy equations, and the $k$-equation source (production − dissipation) taken from the mean-flow energy. `.false.` = TMR m/e variants |
 | Prt-correction | .false. | logical | no | Turbulent-Prandtl correction for wall roughness (SA with `-rough`) |

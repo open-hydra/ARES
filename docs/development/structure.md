@@ -179,7 +179,7 @@ The selection is suffix-based: modifiers are detected with `index()` on the mode
 | `-QCR2000` | Quadratic Constitutive Relation stress (`Stress_Vector_QCR2000`) |
 | `-rough` | Sand-grain roughness wall BC (SA only; $k$–$\omega$ models warn and use the smooth-wall $\omega$ BC) |
 | `-blowcorr` | Wall-blowing correction of the $k$–$\omega$ wall BC (SST / Wilcox2006) |
-| `SAcomp` | SA compressibility correction (Paciorri–Sabetta) |
+| `SAcomp` | SA compressibility correction (Paciorri–Sabetta; stops at set-up: its result depends on the units) |
 | `SSGLRR-SD` | SSG-LRR with simple-diffusion model |
 | `SSGLRR-w2019` | SSG-LRR with the length-scale correction of the $\omega$ equation (`LSC`) |
 

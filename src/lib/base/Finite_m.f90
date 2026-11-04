@@ -12,8 +12,9 @@ contains
   !> -ffast-math (-ffinite-math-only) lets gfortran fold isnan, ieee_is_nan and ieee_is_finite to constants. Reading
   !> the bits is an operation on integers, which raises no floating-point exception, and it is no comparison, which a
   !> NaN passes as false: the state update (Lib_Newstate) and the readers of the input values (the initial condition in
-  !> Wrap_Setup, the time tables in Series_Data_m, the lines of bc.txt in IO_BC, the reals of input.ini in the registry)
-  !> check their values with it, also in a build that traps the invalid operations, such as the DEBUG build.
+  !> Wrap_Setup, the lines of bc.txt in IO_BC, the reals of input.ini in the registry, the time and the counters of a
+  !> restart in IO_Solution) check their values with it, also in a build that traps the invalid operations, such as the
+  !> DEBUG build.
   elemental logical function Not_Finite ( x )
     use iso_fortran_env, only: int64
     implicit none
