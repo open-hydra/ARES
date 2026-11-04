@@ -21,6 +21,10 @@ module ARES_Lib_Wilcox2006
   gamma = 13d0/25d0, &
   Clim = 7d0/8d0
 
+  !> C of the asymptotic omega wall condition, omega_wall = C nu/d**2: the limit 6/beta_0 of the omega equation as y -> 0
+  !> (NASA Turbulence Modeling Resource, Wilcox 2006 page)
+  real(kind=8), parameter, public :: Wilcox2006_omega_wall_asymptotic = 6d0/beta_0
+
 contains
 
 
@@ -141,10 +145,11 @@ contains
       if ( dkDotdw <= 0d0 ) sigma_d = 0d0
       Diff = sigma_d * rho / ome * dkDotdw
 
-      ! Dissipation term
-      Sij_hat(1,1) = Sij(1,1) - 0.5d0 * Divel 
-      Sij_hat(2,2) = Sij(2,2) - 0.5d0 * Divel 
-      Sij_hat(3,3) = Sij(3,3) - 0.5d0 * Divel 
+      ! Dissipation term. S^_ki = S_ki - (1/2) du_m/dx_m delta_ki: off the diagonal S^ = S
+      Sij_hat = Sij
+      Sij_hat(1,1) = Sij(1,1) - 0.5d0 * Divel
+      Sij_hat(2,2) = Sij(2,2) - 0.5d0 * Divel
+      Sij_hat(3,3) = Sij(3,3) - 0.5d0 * Divel
 
       Wij = Vorticity_Tensor ( Vorticity_Vector ( Gradvel ) )
 
@@ -251,7 +256,7 @@ contains
     
     rkw_wall(1) = 0d0 ! Solid surface condition on k
     ! Smooth-surface BC: omega_wall = C*mi_l/dist**2, with C set by omega-wall-bc
-    ! (800 = Menter practical, 80 = asymptotic y->0 limit). See Setup_RANS_Model.
+    ! (800 = Menter practical, 6/beta_0 = asymptotic y->0 limit). See Setup_RANS_Model.
     rkw_wall(2) = obj_rans%omega_wall_coef * mil_wall / ( dist**2 )
 
   end subroutine Wilcox2006_Set_Wall_Values

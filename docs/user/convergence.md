@@ -115,9 +115,9 @@ Every `ini-diter` iterations the solver re-reads `input.ini` and re-validates th
 - `sol-diter`, `res-diter`, `shell-diter`, `sol-overwrite` — start dumping snapshots the moment a run starts misbehaving
 
 !!! warning "What hot-reload does *not* change"
-    Keys consumed **once at setup** are copied into the running state and will not change mid-run even though the registry value updates. The important one is `iter-threshold`: it is read into `domain%itermax` during setup, so editing it while the solver runs will not extend or shorten the run. The same applies to anything that binds the solver's structure — turbulence model, mesh, multigrid level count, output format.
+    Keys consumed **once at setup** are copied into the running state and will not change mid-run even though the registry value updates: anything that binds the solver's structure — turbulence model, mesh, multigrid level count, output format — and the switch-on of IRS, whose arrays are allocated at set-up (`irs` or `irs-beta > 0` added to a run started without IRS is ignored, with a warning). `iter-threshold` and `level<n>-iter` do take effect at the reading: they set the iteration limit of each level again.
 
-Set `ini-diter` small enough to be responsive and large enough not to hammer the filesystem; the default is 10000. Bear in mind that the file is re-validated on every reload, so a syntax error introduced while editing will be caught mid-run.
+Set `ini-diter` small enough to be responsive and large enough not to hammer the filesystem; the default is 10000. The file is re-validated on every reload: with `ini-error = warn`, the default, a reading with an error (a value out of its rule, a value that does not read as its type) is not taken, the run keeps the values it held and says so; with `ini-error = stop` the run stops.
 
 ---
 

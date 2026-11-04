@@ -2,6 +2,12 @@ module ARES_IO_Solution
 
   implicit none
 
+  !> Names of the counters stored with every solution, next to its time and to CYCLE (the iteration
+  !> count over all grid levels): field data of the vtk files, data set auxiliary data of the
+  !> Tecplot files; see restart_counters_t in Config_Types_m
+  character(len=21), parameter, public :: restart_counter_names(5) = [character(len=21) :: &
+    'ARES_ITERATION', 'ARES_OUTPUT_NUMBER', 'ARES_GRID_LEVEL', 'ARES_LAST_OUTPUT_TIME', 'ARES_RES_REFERENCE']
+
   !> Concrete procedure pointing to one of the subroutine realizations
   procedure(r_solution_if), pointer, public :: Read_IC
   procedure(w_solution_if), pointer, public :: Write_solution
@@ -94,20 +100,34 @@ contains
 
   end subroutine Setup_Input_Solution
 
+  !> Read the initial or the restart field into IOfield. A restart also reads the time of its solution and the counters
+  !> stored with it (obj_io%restart), in every format.
   subroutine Read_vtk_tec ( IOfield )
     use ARES_Config_Types_m, only: obj_sim_param, obj_io
     use ARES_Parameters_m
     use Lib_ORION_data
     use Lib_VTK
     use Lib_Tecplot
+    use IR_Precision, only: I4P, R8P
     use strings, only: parse
     implicit none
     type(ORION_data), intent(inout) :: IOfield
     ! Local
     integer         :: error
     character(clen) :: format(2)
+    character(llen) :: vtspath
+    integer(I4P)    :: cycle
+    integer         :: nc
+    ! The counters stored with a vtk solution, and TIME, asked for by name to know whether the files hold it
+    character(len=len(restart_counter_names)) :: fldnames(size(restart_counter_names)+1)
+    real(R8P)       :: counters(size(restart_counter_names)+1)
+    logical         :: found(size(restart_counter_names)+1)
 
     error = 0
+    cycle = 0
+    counters = 0._R8P
+    found = .false.
+    nc = size(restart_counter_names)
 
     if ( obj_sim_param%newrun ) then
       call parse(obj_io%ini_format,' ', format)
@@ -120,15 +140,206 @@ contains
     select case(trim(format(1)))
     case('tecplot')
       IOfield%tec%format = trim(format(2))
-      error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit))
+      if ( obj_sim_param%newrun ) then
+        error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit))
+      else
+        ! Restart: also the counters stored with the solution, as data set auxiliary data
+        error = tec_read_structured_multiblock(orion=IOfield,filename=trim(obj_io%nameinit), &
+                                               cycle=cycle,fldnames=restart_counter_names, &
+                                               fldvalues=counters(1:nc),fldfound=found(1:nc))
+      endif
+      ! Restart: a time or a counter of the solution that is not finite stops the run (Check_IC), before the tests
+      ! below, which compare
+      if ( .not. obj_sim_param%newrun .and. error == 0 ) then
+        if ( Restart_Not_Finite ( IOfield%solutiontime ) ) return
+      endif
+      ! Restart: does the solution hold a time? The ORION reader gives -huge(1._R8P) when no zone of a Tecplot
+      ! ASCII file holds SOLUTIONTIME, and every valid time lies far above half of it; a zone of a binary file
+      ! always holds its solution time. A steady run writes its solutions at minus the global iteration count, a
+      ! time-accurate one at t >= 0, so a negative solution time marks a steady solution, as a negative TIME does
+      ! in vtk. Its global iteration count, |time|, goes where the vtk branch stores it
+      if ( .not. obj_sim_param%newrun ) then
+        obj_io%restart%time_found = ( IOfield%solutiontime > -0.5_R8P*huge(1._R8P) )
+        obj_io%restart%steady = obj_io%restart%time_found .and. ( IOfield%solutiontime < 0._R8P )
+        if ( obj_io%restart%steady ) IOfield%solutiontime = abs(IOfield%solutiontime)
+      endif
     case('vtk')
       IOfield%tec%format = trim(format(2))
-      error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4),vtspath='INPUT/vtk/field',time=obj_io%IOtime)
+      ! The .vtm lists its block files relative to its own folder, as ORION writes it: the solutions of ARES in
+      ! OUTPUT/, and a solution copied into INPUT/ as ic.vtm with its vtk/ folder. An initial condition whose first
+      ! block file is not there but at INPUT/vtk/field<entry>.vts is read there
+      vtspath = obj_io%nameinit(1:index(obj_io%nameinit,'/',back=.true.))
+      if ( obj_sim_param%newrun ) then
+        if ( .not. Vtm_First_Block_Exists(obj_io%nameinit, vtspath) .and. &
+             Vtm_First_Block_Exists(obj_io%nameinit, 'INPUT/vtk/field') ) vtspath = 'INPUT/vtk/field'
+      endif
+      ! The ORION reader needs the vtk format of the block files, and it is the one they declare: ARES writes
+      ! vtk raw solutions as raw appended data, and an initial condition may come in any format. When the files
+      ! cannot tell, the reader keeps its format (base64).
+      IOfield%vtk%format = Vtk_Block_Format(obj_io%nameinit, vtspath, IOfield%vtk%format)
+      if ( obj_sim_param%newrun ) then
+        error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
+                                               vtspath=trim(vtspath),time=obj_io%IOtime)
+        ! The solution time of the file, where the Tecplot reader stores it
+        IOfield%solutiontime = obj_io%IOtime
+      else
+        ! Restart: also the counters stored with the solution, as field data, and whether it holds a time (the
+        ! reader gives TIME = 0 when the files hold none)
+        fldnames(1:nc) = restart_counter_names
+        fldnames(nc+1) = 'TIME'
+        error = vtk_read_structured_multiblock(orion=IOfield,vtmpath=obj_io%nameinit(1:len(trim(obj_io%nameinit))-4), &
+                                               vtspath=trim(vtspath),time=obj_io%IOtime,cycle=cycle, &
+                                               fldnames=fldnames,fldvalues=counters,fldfound=found)
+        ! A time or a counter that is not finite stops the run (Check_IC), before the tests below, which compare
+        if ( error == 0 ) then
+          if ( Restart_Not_Finite ( obj_io%IOtime ) ) return
+        endif
+        obj_io%restart%time_found = found(nc+1)
+        ! A steady run writes its solutions at time minus the global iteration count, a time-accurate one at t >= 0
+        obj_io%restart%steady = ( obj_io%IOtime < 0.d0 )
+        ! The solution time where the Tecplot reader stores it, with its convention for a steady
+        ! solution: the global iteration count, CYCLE when the file holds it (the reader gives 0
+        ! otherwise), else |TIME|
+        if ( obj_io%restart%steady ) then
+          if ( cycle > 0 ) then
+            IOfield%solutiontime = real(cycle, R8P)
+          else
+            IOfield%solutiontime = abs(obj_io%IOtime)
+          endif
+        else
+          IOfield%solutiontime = obj_io%IOtime
+        endif
+      endif
     end select
+
+    ! Restart: the counters stored with the solution, the same in every format, when it holds them all (found(5),
+    ! the residual reference, is recorded on its own)
+    if ( .not. obj_sim_param%newrun ) then
+      obj_io%restart%found = all(found(1:4))
+      if ( obj_io%restart%found ) then
+        obj_io%restart%cycle            = cycle
+        obj_io%restart%iteration        = nint(counters(1))
+        obj_io%restart%output_number    = nint(counters(2))
+        obj_io%restart%grid_level       = nint(counters(3))
+        obj_io%restart%last_output_time = counters(4)
+        obj_io%restart%res_found        = found(5)
+        obj_io%restart%res_reference    = counters(5)
+      endif
+    endif
 
     if (error/=0) obj_io%error_message = "[ERROR] reading input file "//trim(obj_io%nameinit)
 
+  contains
+
+    !> The time that a restart reads, and the counters that the solution holds (found(1:nc), values counters(1:nc)): the
+    !> first one that is not finite (NaN or infinity) is an error of the read, which stops the run (Check_IC), and the
+    !> result is .true.. The test reads the bits (Not_Finite): the tests of the time compare, and every comparison with
+    !> a NaN is false; a counter goes to an integer with nint, which an infinity or a NaN does not fit.
+    logical function Restart_Not_Finite ( time )
+      use ARES_Finite_m, only: Not_Finite
+      implicit none
+      real(R8P), intent(in) :: time
+      ! Local
+      integer :: k
+
+      Restart_Not_Finite = .true.
+      if ( Not_Finite(time) ) then
+        obj_io%error_message = '[ERROR] '//trim(obj_io%nameinit)//': the solution time is not finite (NaN or infinity)'
+        return
+      endif
+      do k = 1, nc
+        if ( found(k) .and. Not_Finite(counters(k)) ) then
+          obj_io%error_message = '[ERROR] '//trim(obj_io%nameinit)//': '//trim(restart_counter_names(k))// &
+                                 ' is not finite (NaN or infinity)'
+          return
+        endif
+      enddo
+      Restart_Not_Finite = .false.
+
+    end function Restart_Not_Finite
+
   end subroutine Read_vtk_tec
+
+
+  !> \brief Entry of the first block file listed by a .vtm (its file attribute without '.vts'), '' when
+  !>        the .vtm cannot be read or lists none.
+  function Vtm_First_Entry ( vtmfile ) result(block)
+    use ARES_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile
+    character(llen)          :: block
+    ! Local
+    integer         :: u, ios, i1, i2
+    character(llen) :: line
+
+    block = ''
+    open(newunit=u, file=trim(vtmfile), action='read', status='old', iostat=ios)
+    if (ios /= 0) return
+    do
+      read(u, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      i1 = index(line, 'file="')
+      if (i1 == 0) cycle
+      i2 = index(line, '.vts"')
+      if (i2 > i1+6) block = line(i1+6:i2-1)
+      exit
+    enddo
+    close(u)
+
+  end function Vtm_First_Entry
+
+
+  !> \brief Is the first block file of a .vtm at vtspath//<entry>//'.vts', the path the ORION reader opens?
+  logical function Vtm_First_Block_Exists ( vtmfile, vtspath )
+    use ARES_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile, vtspath
+    ! Local
+    character(llen) :: block
+
+    block = Vtm_First_Entry(vtmfile)
+    Vtm_First_Block_Exists = .false.
+    if (len_trim(block) > 0) inquire(file=trim(vtspath)//trim(block)//'.vts', exist=Vtm_First_Block_Exists)
+
+  end function Vtm_First_Block_Exists
+
+
+  !> \brief vtk format of the block files of a .vtm: 'ascii', 'binary' (base64) or 'raw'
+  !>        (appended), as the first block file declares it, or fallback when it cannot tell.
+  !> \details The blocks of a .vtm are written in one call, so they share the format. The
+  !>          block file is vtspath//<entry of the .vtm>//'.vts', the path the ORION reader
+  !>          opens; its XML header names the format of every DataArray before any data.
+  function Vtk_Block_Format ( vtmfile, vtspath, fallback ) result(fmt)
+    use ARES_Parameters_m, only: llen
+    implicit none
+    character(*), intent(in) :: vtmfile, vtspath, fallback
+    character(6)             :: fmt
+    ! Local
+    integer         :: u, ios
+    character(llen) :: line, block
+
+    fmt = fallback
+    block = Vtm_First_Entry(vtmfile)
+    if (len_trim(block) == 0) return
+
+    open(newunit=u, file=trim(vtspath)//trim(block)//'.vts', action='read', status='old', iostat=ios)
+    if (ios /= 0) return
+    do
+      read(u, '(A)', iostat=ios) line
+      if (ios /= 0) exit
+      if (index(line, '<DataArray') == 0) cycle
+      if (index(line, 'format="appended"') > 0) then
+        fmt = 'raw'
+      elseif (index(line, 'format="binary"') > 0) then
+        fmt = 'binary'
+      elseif (index(line, 'format="ascii"') > 0) then
+        fmt = 'ascii'
+      endif
+      exit
+    enddo
+    close(u)
+
+  end function Vtk_Block_Format
 
 
   !> Output setup
@@ -201,7 +412,9 @@ contains
       else
         IOfield(m)%tec%extension = '.szplt'
         IOfield(m)%tec%format = 'binary'
-        IOfield(m)%vtk%format = 'binary'
+        ! vtk raw: raw binary data appended to each .vts file, as the wall and diagnostic outputs.
+        ! The diagnostic output writes with these IOfields and sets the same format.
+        IOfield(m)%vtk%format = 'raw'
       endif
     end do
 
@@ -233,7 +446,7 @@ contains
 
   subroutine Write_vtk_tec ( domain, IOfield, file )
     use ARES_Advanced_Types_m
-    use ARES_Config_Types_m, only: obj_io
+    use ARES_Config_Types_m, only: obj_io, obj_sim_param, obj_multigrid
     use ARES_Global_m
     use ARES_Parameters_m
     use IR_Precision
@@ -249,7 +462,10 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO, b
+    character(len=llen) :: name
+    character(len=len(obj_io%Ovarnames)) :: vtknames
+    integer             :: E_IO, b, c
+    real(R8P)           :: counters(size(restart_counter_names))
 
     ! Gather P from all ranks to root (collective — all ranks must call)
     call gather_P_to_root(domain)
@@ -313,15 +529,37 @@ contains
 
     if (mpi_is_root) then
       path = 'OUTPUT/'
+      ! The counters a restart needs to go on as the uninterrupted run, the same in every format (Read_vtk_tec
+      ! reads them)
+      counters = [real(domain%iter,R8P), real(obj_io%output_number,R8P), real(obj_multigrid%MG_level,R8P), &
+                  obj_sim_param%time_from_call, obj_sim_param%res_reference]
 
       ! Write the IOfield accordingly to the solution format
       if (index(obj_io%sol_format,'vtk')>0) then
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = obj_io%Ovarnames
+        do c = 1, len_trim(vtknames)
+          if ( vtknames(c:c) == '"' ) vtknames(c:c) = ' '
+        enddo
+        ! The block files go to OUTPUT/vtk/ and the .vtm lists them relative to its own
+        ! folder (vtk/fieldBlockN.vts), as VTK readers and the restart resolve them: the
+        ! leading '/' of file is dropped so that both paths share the prefix OUTPUT/.
+        name = file
+        if ( name(1:1) == '/' ) name = name(2:)
         localpath_vtk = trim(path)//'vtk/'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
-        E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                              vtmpath=trim(path)//trim(file),varnames=obj_io%Ovarnames,time=domain%time)
+        ! The counters as field data, next to TIME and CYCLE. The time is the solution time of the Tecplot
+        ! outputs: minus the global iteration count in a steady run
+        E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(name), &
+                                               vtmpath=trim(path)//trim(name),varnames=vtknames,time=IOfield%solutiontime, &
+                                               cycle=int(obj_sim_param%iter_general,I4P), &
+                                               fldnames=restart_counter_names,fldvalues=counters)
       else
-        E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
+        ! The counters as data set auxiliary data, next to CYCLE
+        E_IO = tec_write_structured_multiblock(orion=IOfield,varnames=obj_io%Ovarnames, &
+                                               filename=trim(path)//trim(file)//trim(IOfield%tec%extension), &
+                                               cycle=int(obj_sim_param%iter_general,I4P), &
+                                               fldnames=restart_counter_names,fldvalues=counters)
       end if
     end if
 

@@ -78,15 +78,18 @@ contains
     end if
 
     ! Omega wall condition (k-omega models and SSGLRR): omega_wall = C * mi_l / dist**2.
-    ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, meant for meshes
-    !                 that do not resolve the viscous sublayer.
-    ! 'asymptotic' -> C =  6/beta_1 =  80 : exact y->0 limit of the omega equation,
-    !                 the consistent choice on a wall-resolved (y+ < 1) mesh.
+    ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, as the NASA TMR gives it on the SST
+    !                 page (with the beta_1 of SST) and as its Wilcox 2006 page refers to it, for every
+    !                 model; meant for meshes that do not resolve the viscous sublayer.
+    ! 'asymptotic' -> C = 6/beta : exact y->0 limit of the omega equation of the model, beta_1 for SST
+    !                 and SSGLRR (80: the omega equation of SSGLRR takes beta = 0.075 at the wall, as SST)
+    !                 and beta_0 for Wilcox 2006 (84.7, set with the model below); the consistent choice on a
+    !                 wall-resolved (y+ < 1) mesh.
     select case ( trim(obj_rans%omega_wall_bc) )
     case ( 'practical' )
       obj_rans%omega_wall_coef = 8d2
     case ( 'asymptotic' )
-      obj_rans%omega_wall_coef = 8d1
+      obj_rans%omega_wall_coef = SST_omega_wall_asymptotic
     case default
       error stop ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
     end select
@@ -142,6 +145,7 @@ contains
       end if
       RANS_Source_Terms => Wilcox2006_Source_Terms
       RANS_Set_Wall_Values => Wilcox2006_Set_Wall_Values
+      if ( trim(obj_rans%omega_wall_bc) == 'asymptotic' ) obj_rans%omega_wall_coef = Wilcox2006_omega_wall_asymptotic
       if (obj_rans%blowing_corr) then
         RANS_Set_Blowing_Wall => SST_Blowing_Correction
       else

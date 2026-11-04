@@ -10,6 +10,8 @@ module ARES_Mod_Diagnostic
 
 contains
 
+  !> The sum over the cells of the block is taken in a fixed order, the same for any number of threads: each thread sums
+  !> whole i lines, and the sums of the lines are added in turn.
   subroutine Compute_Residual ( new, old, dt, n, average, total )
     use ARES_Global_m
     implicit none
@@ -21,30 +23,35 @@ contains
     real(R8), intent(inout) :: total(nres)
     ! Local
     integer :: i, j, k
-    real(R8) :: resn(nres), residuo(nres), reslocal ( nres, n(1), n(2), n(3) )
+    real(R8) :: resn(nres), residuo(nres)
+    real(R8), allocatable :: line(:,:,:)   ! sum over each i line
 
-    residuo = 0d0
-    
-    !$omp parallel
-    !$omp do private ( resn ) reduction ( + : residuo ) collapse (3)
+    allocate ( line(nres, n(2), n(3)) )
+
+    !$omp parallel do private ( i, resn ) collapse (2)
     do k = 1, n(3)
     do j = 1, n(2)
-    do i = 1, n(1)
-      
-      resn(1:nres) = abs ( new(np:nprim,i,j,k) - old(np:nprim,i,j,k) ) ! delta(p - u - v - w - h - rans(if))
-      reslocal(:,i,j,k) = resn
-      residuo = residuo + resn*resn  ! sum ( r(i)**2 )
+      line(:,j,k) = 0d0
+      do i = 1, n(1)
 
-    enddo; enddo; enddo
-    !$omp end parallel
+        resn(1:nres) = abs ( new(np:nprim,i,j,k) - old(np:nprim,i,j,k) ) ! delta(p - u - v - w - h - rans(if))
+        line(:,j,k) = line(:,j,k) + resn*resn  ! sum ( r(i)**2 )
 
-    ! Local max residual (UNUSED)
-    ! do i = 1, nres; resmax_(i) = maxval ( reslocal(i,:,:,:) ); enddo
+      enddo
+    enddo; enddo
+    !$omp end parallel do
+
+    residuo = 0d0
+    do k = 1, n(3)
+    do j = 1, n(2)
+      residuo = residuo + line(:,j,k)
+    enddo; enddo
 
     ! Average residual of this block
     average = sqrt ( residuo / float ( n(1)*n(2)*n(3) ) )
     ! Overall residual
     total = total + residuo
+    deallocate ( line )
 
   end subroutine Compute_Residual
 
@@ -67,8 +74,10 @@ contains
     ! Local
     character(len=llen) :: path
     character(len=llen) :: localpath_vtk
-    integer             :: E_IO, b, i, j, k
+    character(len=llen) :: vtknames
+    integer             :: E_IO, b, i, j, k, ndiag
     character(len=clen) :: format(2)
+    real(R8), allocatable :: full(:,:,:,:)
 
     ! Gather R, dtlocal, beta from all ranks to root (collective)
     call gather_diagnostic_to_root(domain)
@@ -107,17 +116,40 @@ contains
         enddo; enddo; enddo
       enddo
 
+      ! The residuals and dt
+      ndiag = nres + 1
+
       ! Write the IOfield accordingly to the solution format
       select case(trim(format(1)))
       case('vtk')
         IOfield%vtk%format = trim(format(2))
+        ! The names become XML attributes (Name="..."): the double quotes of the Tecplot list must go
+        vtknames = Dvarnames
+        do i = 1, len_trim(vtknames)
+          if ( vtknames(i:i) == '"' ) vtknames(i:i) = ' '
+        enddo
+        ! IOfield is the output buffer of the field, with obj_io%Onvar columns, and the vtk
+        ! writer writes every column it holds: give it the ndiag diagnostic columns only,
+        ! then the field's size back (the field writer fills every column at each write).
+        do b = 1, size(IOfield%block)
+          call move_alloc(IOfield%block(b)%vars, full)
+          allocate(IOfield%block(b)%vars(1:ndiag,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk))
+          IOfield%block(b)%vars(:,:,:,:) = full(1:ndiag,:,:,:)
+          deallocate(full)
+        enddo
         localpath_vtk = trim(path)//'/vtk'
         call execute_command_line('mkdir -p '//trim(localpath_vtk))
+        ! The time is the solution time of the Tecplot output: minus the global iteration count in a steady run
         E_IO = vtk_write_structured_multiblock(orion=IOfield,vtspath=trim(localpath_vtk)//trim(file), &
-                                                             vtmpath=trim(path)//trim(file),varnames=Dvarnames,time=domain%time)
+                                                             vtmpath=trim(path)//trim(file),varnames=vtknames, &
+                                                             time=IOfield%solutiontime)
+        do b = 1, size(IOfield%block)
+          deallocate(IOfield%block(b)%vars)
+          allocate(IOfield%block(b)%vars(1:obj_io%Onvar,1:IOfield%block(b)%Ni,1:IOfield%block(b)%Nj,1:IOfield%block(b)%Nk))
+        enddo
       case('tecplot')
         IOfield%tec%format = trim(format(2))
-        E_IO = tec_write_structured_multiblock(Nvars=nres+1,orion=IOfield,varnames=Dvarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
+        E_IO = tec_write_structured_multiblock(Nvars=ndiag,orion=IOfield,varnames=Dvarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
       end select
     end if
 

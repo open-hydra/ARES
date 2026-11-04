@@ -34,6 +34,14 @@ X_STATION = 0.97      # NASA profile station
 
 
 # --------------------------------------------------------------------------- #
+def _data_tokens(fh):
+    """The numbers of a Tecplot ASCII file after its zone header: the data set
+       auxiliary data records (DATASETAUXDATA name = "value"), which ARES writes
+       after the zones of its solutions (the restart counters), are skipped."""
+    return [t for ln in fh if not ln.lstrip().upper().startswith("DATASETAUXDATA")
+            for t in ln.split()]
+
+
 def read_wall_tec(path):
     """Read the wall Tecplot BLOCK file (x,y,z nodal; y+,tauX,tauY,tauZ,pw,Tw,qw
        cell-centred; J=1 surface zone). Returns x cell-centres and a dict of
@@ -41,7 +49,7 @@ def read_wall_tec(path):
     with open(path) as fh:
         fh.readline()                       # VARIABLES = ...
         zone = fh.readline()
-        body = np.array(fh.read().split(), dtype=float)
+        body = np.array(_data_tokens(fh), dtype=float)
 
     def _dim(tag):
         s = zone.upper().split(tag + "=")[1]
@@ -117,7 +125,7 @@ def read_field_tec(path, cell_vars):
     with open(path) as fh:
         fh.readline()                       # VARIABLES = ...
         zone = fh.readline()
-        body = np.array(fh.read().split(), dtype=float)
+        body = np.array(_data_tokens(fh), dtype=float)
 
     def _dim(tag):
         s = zone.upper().split(tag + "=")[1]

@@ -96,9 +96,9 @@ contains
     integer :: i, j, k
     real(R8) :: rho, nitilde, mil, nil, Gradvel(3,3), Gradnit(3), omega(3), Om, abs_Eij, Wij(3,3)
     real(R8) :: Eij(3,3), chi, ynlocal, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, D2, rtilde
-    real(R8) :: Production, Diffusion, Destruction, Source, fnu
+    real(R8) :: Production, Diffusion, Destruction, Source, fnu, Gradrho(3), rho_n(2,3)
 
-    !$omp do collapse (3) private ( rho, nitilde, mil, nil, Gradvel, Gradnit, omega, Om, abs_Eij, Wij ), &
+    !$omp do collapse (3) private ( rho, nitilde, mil, nil, Gradvel, Gradnit, omega, Om, abs_Eij, Wij, Gradrho, rho_n ), &
     !$omp private ( Eij, chi, ynlocal, Stilde, Sbar, fw, Gradnit2, r_Fun, g_Fun, fr1, D2, rtilde ), &
     !$omp private ( Production, Diffusion, Destruction, Source, fnu, i, j, k)
     
@@ -162,19 +162,34 @@ contains
         
       end if
 
+      ! Density of the two neighbours of the cell along each index direction (rho_n(1,d) behind, rho_n(2,d) ahead),
+      ! for the gradients of ni-tilde and of the density
+      rho_n(1,1) = ph2vars( Prim(np,i-1,j,k), Prim(nh,i-1,j,k), rho_tab )
+      rho_n(2,1) = ph2vars( Prim(np,i+1,j,k), Prim(nh,i+1,j,k), rho_tab )
+      rho_n(1,2) = ph2vars( Prim(np,i,j-1,k), Prim(nh,i,j-1,k), rho_tab )
+      rho_n(2,2) = ph2vars( Prim(np,i,j+1,k), Prim(nh,i,j+1,k), rho_tab )
+      rho_n(1,3) = ph2vars( Prim(np,i,j,k-1), Prim(nh,i,j,k-1), rho_tab )
+      rho_n(2,3) = ph2vars( Prim(np,i,j,k+1), Prim(nh,i,j,k+1), rho_tab )
+
       ! finite differences for ni-tilde in computational reference frame
-      Gradnit(1) = ( Prim(nt,i+1,j,k) / ph2vars( Prim(np,i+1,j,k), Prim(nh,i+1,j,k), rho_tab ) - &
-                     Prim(nt,i-1,j,k) / ph2vars( Prim(np,i-1,j,k), Prim(nh,i-1,j,k), rho_tab ) ) * 0.5d0
-      Gradnit(2) = ( Prim(nt,i,j+1,k) / ph2vars( Prim(np,i,j+1,k), Prim(nh,i,j+1,k), rho_tab ) - &
-                     Prim(nt,i,j-1,k) / ph2vars( Prim(np,i,j-1,k), Prim(nh,i,j-1,k), rho_tab ) ) * 0.5d0
-      Gradnit(3) = ( Prim(nt,i,j,k+1) / ph2vars( Prim(np,i,j,k+1), Prim(nh,i,j,k+1), rho_tab ) - &
-                     Prim(nt,i,j,k-1) / ph2vars( Prim(np,i,j,k-1), Prim(nh,i,j,k-1), rho_tab ) ) * 0.5d0
+      Gradnit(1) = ( Prim(nt,i+1,j,k) / rho_n(2,1) - Prim(nt,i-1,j,k) / rho_n(1,1) ) * 0.5d0
+      Gradnit(2) = ( Prim(nt,i,j+1,k) / rho_n(2,2) - Prim(nt,i,j-1,k) / rho_n(1,2) ) * 0.5d0
+      Gradnit(3) = ( Prim(nt,i,j,k+1) / rho_n(2,3) - Prim(nt,i,j,k-1) / rho_n(1,3) ) * 0.5d0
 
       Gradnit = Matmul ( Gradnit, M(i,j,k) % c ) ! ni-tilde gradient
 
       Gradnit2 = Sum ( Gradnit**2 )              ! ni-tilde gradient squared
 
-      Diffusion = cb2 / sigma * Gradnit2         ! Non-conservative Diffusion term
+      ! Density gradient, same differences
+      Gradrho(:) = ( rho_n(2,:) - rho_n(1,:) ) * 0.5d0
+      Gradrho = Matmul ( Gradrho, M(i,j,k) % c )
+
+      ! Diffusion terms outside the flux div((mu + rho nu~) grad nu~)/sigma: the cb2 term and, with variable density,
+      ! -(nu + nu~) grad rho . grad nu~ / sigma, which makes this conservation form equal to the original equation
+      ! (S. R. Allmaras, F. T. Johnson, P. R. Spalart, ICCFD7-1902, 2012, eq. 9). The source below is multiplied by
+      ! rho, so the second term enters divided by rho.
+      Diffusion = cb2 / sigma * Gradnit2 &
+                - ( nil + nitilde ) * Dot_Product ( Gradrho, Gradnit ) / ( sigma * rho )
 
       ! Destruction term computation
       r_Fun = nitilde / ( Stilde * cK**2 * ynlocal**2 )
@@ -224,6 +239,8 @@ contains
 
 
   ! Compressibility correction Paciorri-Sabetta https://doi.org/10.2514/2.3967
+  ! Not reached: turbulence = SAcomp stops at set-up (Assign_Setup), since staux, a speed, is set against the number
+  ! c^2 f(c), which makes the result depend on the units
   subroutine Compressibility_Correction ( nitilde, rho, chi, entalpy, pressure, om, prod )
     use ARES_Global_m
     use FLINT_Lib_Thermodynamic

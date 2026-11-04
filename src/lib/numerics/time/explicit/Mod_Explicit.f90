@@ -28,9 +28,10 @@ contains
     type(ARES_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
     external :: External_Function
     ! Local
-    logical  :: endsim, iosim, endmg
+    logical  :: endsim, iosim, endmg, accurate
     integer  :: i_rk, i_strang, b, level
     real(R8) :: average(nres)
+    real(R8), allocatable :: res_block(:,:)   ! residual sums over the cells of each block
 
     call timer_iter_begin()
 
@@ -39,6 +40,8 @@ contains
     domain(level) % iter = domain(level) % iter + 1
     obj_sim_param%iter_from_call = obj_sim_param%iter_from_call + 1
     obj_sim_param%iter_general   = obj_sim_param%iter_general + 1
+
+    accurate = obj_sim_param%HYDRA_time_accurate .or. obj_time_scheme%time_accurate
 
     if (obj_sim_param%HYDRA_time_accurate) then
       call Set_Global_dt ( domain(level) )
@@ -80,7 +83,12 @@ contains
 
     ! Save residuals
     if ( (obj_sim_param%iter_from_call == 1) .or. (mod (domain(level) % iter, obj_io%res_diter) == 0) ) then
+      ! Sums in a fixed order, the same for any number of threads and ranks: over the cells of each block
+      ! (Compute_Residual), then over the blocks in turn on the root; each column of res_block comes from the one rank that
+      ! holds the block, so its sum over the ranks is exact
       obj_sim_param%residuotot = 0.d0
+      allocate ( res_block(nres, domain(level)%nb) )
+      res_block = 0.d0
       do b = 1, domain(level) % nb
         if (.not. is_local_block(b)) cycle
         call Compute_Residual ( new=domain(level)%blk(b)%P, &
@@ -88,25 +96,41 @@ contains
                                 dt=domain(level)%blk(b)%dtlocal, &
                                 n=domain(level)%blk(b)%dim, &
                                 average=average, &
-                                total=obj_sim_param%residuotot )
+                                total=res_block(:,b) )
       enddo
       call timer_sync_begin()
-      call mpi_reduce_sum_r8_array(obj_sim_param%residuotot, nres)
+      call mpi_reduce_sum_r8_array(res_block, nres*domain(level)%nb)
       call timer_sync_end()
-      if (mpi_is_root) obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
+      if (mpi_is_root) then
+        do b = 1, domain(level) % nb
+          obj_sim_param%residuotot = obj_sim_param%residuotot + res_block(:,b)
+        enddo
+        obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
+      endif
+      deallocate ( res_block )
+      ! The unit of res-threshold: the pressure residual of the first iteration of the run (of the grid level), or that of
+      ! the uninterrupted run, read with the restart solution (ARES_setup)
+      if ( obj_sim_param%iter_from_call == 1 ) then
+        if ( mpi_is_root .and. .not. obj_sim_param%res_restored ) obj_sim_param%res_reference = obj_sim_param%residuotot(1)
+        obj_sim_param%res_restored = .false.
+      endif
     endif
 
     ! Determine simulation control flags on root, then broadcast to all ranks
     if (mpi_is_root) then
       endsim = .false.
       endmg  = .false.
+      ! res-threshold is a convergence test of steady runs: the change per iteration does not end a time-accurate run.
+      ! A steady run ends when its pressure residual has fallen by res-threshold from the first iteration.
       if (level == 1) then
         endsim = ( obj_sim_param%iter_from_call >= domain(1) % itermax ) &
-            .or. ( obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
+            .or. ( .not. accurate .and. &
+                   obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold * obj_sim_param%res_reference ) &
             .or. ( domain(1) % time >= obj_sim_param%time_threshold )
       else
         endmg = ( obj_sim_param%iter_from_call >= domain(level) % itermax ) &
-           .or. ( obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold ) &
+           .or. ( .not. accurate .and. &
+                  obj_sim_param%residuotot(1) <= obj_sim_param%res_threshold * obj_sim_param%res_reference ) &
            .or. ( domain(level) % time >= obj_sim_param%time_threshold )
       endif
 

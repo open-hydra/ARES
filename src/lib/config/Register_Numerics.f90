@@ -110,11 +110,15 @@ contains
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
         call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
       enddo
+      call reg%add( trim(codename)//'-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
+        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime)', '>= 0', .false. )
     else
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
         call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
       enddo
+      call reg%add( 'HYDRA-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
+        'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime)', '>= 0', .false. )
     endif
 
   end subroutine Register_Multigrid_Levels  
