@@ -39,34 +39,34 @@ contains
     !! Lax-Friedrichs-type solvers
     case ('Rusanov')
       Riemann => riemann_LLF
-      obj_riemann%description = 'Local Lax-Friedrichs (Rusanov)'
+      obj_riemann%name = 'Local Lax-Friedrichs (Rusanov)'
 
     case ('PLLF')
       Riemann => riemann_PLLF
-      obj_riemann%description = 'Preconditioned Local Lax-Friedrichs'
+      obj_riemann%name = 'Preconditioned Local Lax-Friedrichs'
 
     !! HLL-type solvers
     case ('HLLE')
       Riemann => riemann_HLLE
-      obj_riemann%description = 'HLLE'
+      obj_riemann%name = 'HLLE'
 
     case ('HLLC Prec')
       Riemann => riemann_HLLCprec
-      obj_riemann%description = 'Preconditioned HLLC'
+      obj_riemann%name = 'Preconditioned HLLC'
 
     case ('HLLC Rotated')
       Riemann => riemann_HLLCHLLE
-      obj_riemann%description = 'Rotated HLLC Batten / HLLE'
+      obj_riemann%name = 'Rotated HLLC Batten / HLLE'
 
     case ('HLLC')
       Riemann => riemann_HLLC
-      obj_riemann%description = 'HLLC Batten'
+      obj_riemann%name = 'HLLC Batten'
 
     !! Default: unknown solver
     case default
       obj_riemann%error_message = '[ERROR] Unknown Riemann solver: '//trim(obj_riemann%description)//'. Valid options: Rusanov, PLLF, HLLE, HLLC, HLLC Prec, HLLC Rotated.'
       Riemann => riemann_HLLC
-      obj_riemann%description = 'HLLC Batten (fallback)'
+      obj_riemann%name = 'HLLC Batten (fallback)'
 
 
     end select

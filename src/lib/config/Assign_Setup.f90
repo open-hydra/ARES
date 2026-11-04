@@ -66,12 +66,12 @@ contains
 
     ! Validate Riemann solver for preconditioned integration
     if ( obj_prec%enabled ) then
-      if ( trim(obj_riemann%description) /= 'Preconditioned HLLC' ) then
+      if ( trim(obj_riemann%name) /= 'Preconditioned HLLC' ) then
         obj_riemann%error_message = '[ERROR] Preconditioning requires Riemann solver "HLLC Prec". ' // &
           'Current selection: "' // trim(obj_riemann%description) // '" is not compatible.'
       end if
     else
-      if ( trim(obj_riemann%description) == 'Preconditioned HLLC' ) then
+      if ( trim(obj_riemann%name) == 'Preconditioned HLLC' ) then
         obj_riemann%error_message = '[ERROR] Riemann solver "HLLC Prec" requires preconditioned integration variables (integration-variables = prec).'
       end if
     end if
@@ -87,6 +87,7 @@ contains
       obj_irs%warning_message = '[WARNING] IRS enabled but irs-beta is not set (or <= 0). IRS will have no effect.'
       obj_irs%enabled = .false.
     end if
+    obj_irs%at_setup = obj_irs%enabled
     call Assign_Integration_Variables()
 
     ! Assign RANS model
@@ -131,6 +132,11 @@ contains
     end if
     if (obj_irs%enabled) then
       obj_irs%description = 'Beta set to '//trim(str(.true.,real(obj_irs%beta)))
+    end if
+    ! IRS accelerates steady runs: the smoothed residual changes the transient of a time-accurate run
+    if (obj_irs%enabled .and. obj_time_scheme%time_accurate) then
+      obj_irs%error_message = '[ERROR] Implicit residual smoothing (irs, irs-beta > 0) is supported only for '// &
+                              'steady/pseudo-time runs.'
     end if
     ! Space scheme
     ! ... written in Mod_Space ...

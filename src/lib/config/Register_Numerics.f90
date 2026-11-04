@@ -44,8 +44,10 @@ contains
     obj_irs%description     = 'none'
     obj_irs%warning_message = 'none'
     obj_irs%error_message   = 'none'
-    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', 'Implicit Residual Smoothing', 'logical', .false. )
-    call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', 'IRS beta parameter', '>= 0', .false. )
+    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
+          'Implicit Residual Smoothing (steady runs only; switched on only at setup)', 'logical', .false. )
+    call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
+          'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
 
 
     ! Preconditioning (enabled automatically when integration-variables = prec)
@@ -65,7 +67,9 @@ contains
     obj_space_scheme%warning_message = 'none'
     obj_space_scheme%error_message   = 'none'
     call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, 'none', 'Space reconstruction method', 'MUSCL, first-order, none', .true. )
-    call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, 'none', 'Flux limiter for space reconstruction', 'vanalbada, minmod, superbee, vanleer, mc, MC, LIMO3, none', .false. )
+    call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, 'none', &
+          'Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order)', &
+          'vanalbada, minmod, superbee, vanleer, mc, MC, LIMO3, none', .false. )
 
 
     ! Riemann solver ---------------------------------------
@@ -104,12 +108,12 @@ contains
     if (.not. obj_sim_param%HYDRA_MG) then
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false. )
+        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
       enddo
     else
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m)), '>= 0', .false. )
+        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
       enddo
     endif
 

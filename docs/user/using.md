@@ -128,6 +128,23 @@ ARES | Iter =     3000 | Global iter =   503000 | Pressure residual = 0.259158E-
 !!! tip "Loading checks"
     A clean `Loading … OK` block means the input files were read successfully. If something is missing or malformed, ARES prints an error and exits.
 
+!!! note "Exit code"
+    A run that ARES stops on an error, at loading, at set-up or because the solution diverges («Integration failed at
+    b, i, j, k», then «NaN, infinity or p<0 detected»), ends with a non-zero exit code: 1 where ARES ends with `stop 1`
+    or `error stop 1`, otherwise the one the MPI launcher gives for `MPI_ABORT` with error code 1. With MPI, an error
+    that every rank finds (a line of `bc.txt`, a value of the initial condition that is not finite), an initial condition
+    that cannot be read (also when one rank alone finds it) and an error that rank 0 finds at set-up or when it reads
+    `input.ini` again stop every rank together: each rank writes its message, the ranks finalize MPI and end with exit
+    code 1. A `stop` outside these collective stops, a divergence for instance, ends its own rank only, and the MPI
+    launcher ends the run with a code of its own (255 with the `mpiexec` of Intel MPI 2021.12). A divergence is caught on
+    any value that is not finite or on a negative pressure. The errors of each input are in its page
+    ([Input File](input.md), [Boundary Conditions](boundary-conditions.md)).
+
+    Known limit: errors raised inside the ORION library, which reads and writes the solution files, end with code 0,
+    because ORION stops with `STOP` (for example a binary Tecplot file, `ic-format = tecplot binary`, in a build without
+    TecIO: «You can not read in binary format without compiling against TecIO»). Check the end of the log, not only the
+    exit code, when a run reads or writes binary files.
+
 !!! note "Which residual?"
     For real-fluid / low-Mach runs ARES monitors the **pressure** residual (the natural convergence indicator when the primitive set is $(p, \mathbf{u}, h)$ and the pseudo-time derivative is preconditioned). `Global iter` is the cumulative iteration count across restarts; `Iter` is the count within the current run.
 

@@ -22,7 +22,7 @@ contains
     use ARES_IO_Probes,            only: Setup_Probes
     use ARES_IO_Wall,              only: Initialize_Wall_File
     use ARES_Lib_Ghost,            only: Fill_Ghost_Cell
-    use ARES_Mod_MPI,              only: mpi_is_root, partition_blocks, mpi_abort_all
+    use ARES_Mod_MPI,              only: mpi_is_root, mpi_size_, partition_blocks, mpi_stop_all, mpi_bcast_logical
     use ARES_Mod_Timers,           only: timer_run_begin
     use ARES_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index, &
                                          allocate_exchange_schedules
@@ -30,6 +30,7 @@ contains
     type(ARES_simulation_type), intent(inout) :: simulation
     ! Local
     integer :: m, ios
+    logical :: setup_error   ! an error found by a check of rank 0 (Stop_Together)
 
     !! ------------------------------------------------------
     !! ------------------------------------------------------
@@ -37,11 +38,15 @@ contains
     if (mpi_is_root) call Print_Header ()
 
     call Load_ThermoTransport ()
-    if (mpi_is_root) call Check_Tables ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_Tables ( setup_error )
+    call Stop_Together ( setup_error, 'thermodynamic or transport data error (see above)' )
 
     ! Read input.ini
     call Read_Inifile ()
-    if (mpi_is_root) call Check_Input ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_Input ( setup_error )
+    call Stop_Together ( setup_error, 'input file error (see above)' )
 
     ! Allocate container objects Domain and IOfield.
     allocate ( simulation%domain  ( obj_multigrid%MGL ) )
@@ -51,12 +56,20 @@ contains
     ! Assign setup
     call Assign_Setup ()
 
+    ! Stop on configuration errors now, before the (possibly long) initial-condition read.
+    setup_error = .false.
+    if (mpi_is_root) call Stop_Simulation ( setup_error )
+    call Stop_Together ( setup_error, 'setup error (see above)' )
+
     ! Read file for initial solution.
     call Read_IC ( simulation%IOfield(1) )
-    if (mpi_is_root) call Check_IC ()
+    ! The ranks decide together on an error of the read (Check_IC)
+    call Check_IC ( summary = .true. )
 
     ! Allocation of data structures and copy solution from IOfield.
     call Setup_Data_Structure ( simulation%domain(1), simulation%IOfield(1) )
+    ! Every value that the initial condition gives the domain is finite, before the coarse levels are built from it
+    call Check_IC_Values ( simulation%domain(1), simulation%IOfield(1) )
     allocate(obj_sim_param%residuotot(nres))
 
     ! With multigrid, allocate Grid and IOfield 2,...,MGL
@@ -66,7 +79,9 @@ contains
 
     ! Read Boundary Conditions file
     call Setup_BC ( simulation%domain )
-    if (mpi_is_root) call Check_BC ()
+    setup_error = .false.
+    if (mpi_is_root) call Check_BC ( setup_error )
+    call Stop_Together ( setup_error, 'boundary condition error (see above)' )
 
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at
@@ -163,7 +178,9 @@ contains
     if (mpi_is_root) call Print_Warnings ()
 
     ! If errors are found, print error messages and stop the simulation.
-    if (mpi_is_root) call Stop_Simulation()
+    setup_error = .false.
+    if (mpi_is_root) call Stop_Simulation ( setup_error )
+    call Stop_Together ( setup_error, 'setup error (see above)' )
 
     ! Calculate time at beginning of simulation
     call Cpu_Time ( obj_sim_param%cputime(1) )
@@ -208,9 +225,9 @@ contains
     end subroutine Print_Header
 
 
-    subroutine Check_Tables()
+    subroutine Check_Tables ( has_error )
       implicit none
-      logical :: has_error
+      logical, intent(out) :: has_error
 
       has_error = .false.
 
@@ -245,30 +262,126 @@ contains
         write(*,'(A,T35,A)') '   Thermo inversion', 'OK'
       endif
 
-      if (has_error) call mpi_abort_all('Invalid thermo/transport tables: see errors above')
-
     end subroutine Check_Tables
 
 
-    subroutine Check_IC()
+    !> An error of the read of the initial condition (Read_IC, the reader writes it in obj_io%error_message) stops the run.
+    !> Every rank reads the file, and a rank can fail to read what rank 0 reads. So the ranks take the decision together
+    !> (the largest of a flag): with summary, rank 0 writes the line of the set-up summary with the verdict of all ranks;
+    !> the first rank that found an error writes it (with its rank when the run has more than one), and every rank stops
+    !> with mpi_stop_all, exit code 1.
+    subroutine Check_IC ( summary )
+      use ARES_Mod_MPI, only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8
       implicit none
+      logical, intent(in) :: summary   ! write the line of the set-up summary
+      real(R8) :: flag, flag_all, first
 
-      if (index(obj_io%error_message,'ERROR')>0) then
-        write(*,'(A,T35,A)') '   Initial conditions', 'FAIL'
-        write(*,'(4X,A)') trim(obj_io%error_message)
-        call mpi_abort_all('Invalid initial conditions: see error above')
-      else
-        write(*,'(A,T35,A)') '   Initial conditions', 'OK'
+      flag = 0.0_R8
+      if ( index(obj_io%error_message,'ERROR') > 0 ) flag = 1.0_R8
+      call mpi_allreduce_max_r8 ( flag, flag_all )
+      if ( summary .and. mpi_is_root ) then
+        if ( flag_all > 0.0_R8 ) then
+          write(*,'(A,T35,A)') '   Initial conditions', 'FAIL'
+        else
+          write(*,'(A,T35,A)') '   Initial conditions', 'OK'
+        endif
+      endif
+      if ( flag_all > 0.0_R8 ) then
+        call mpi_allreduce_min_r8 ( merge(real(mpi_rank_, R8), huge(1.0_R8), flag > 0.0_R8), first )
+        if ( flag > 0.0_R8 .and. nint(first) == mpi_rank_ ) then
+          if ( mpi_size_ > 1 ) then
+            write(*,'(4X,A,I0,A)') trim(obj_io%error_message)//' (rank ', mpi_rank_, ')'
+          else
+            write(*,'(4X,A)') trim(obj_io%error_message)
+          endif
+        endif
+        call mpi_stop_all ( 'initial condition error (see above)' )
       endif
 
     end subroutine Check_IC
 
 
-    subroutine Check_Input()
+    !> The initial condition, or the solution that a restart reads, gives the domain the coordinates of its nodes and the
+    !> variables of its cells, and a value there that is not finite (NaN, infinity) stops the run at set-up, with the place
+    !> of the value. Not_Finite reads the bits of each value, an operation on integers that raises no floating-point
+    !> exception: a build that traps the invalid operations (the DEBUG build; a comparison with a NaN is one) stopped
+    !> with SIGFPE at the first such operation on the value, at the end of the set-up, and -ffast-math cannot fold the
+    !> test away. Each rank checks the values it holds: the nodes of every block, the cells of the blocks whose state it
+    !> holds. The ranks take the decision together (the largest of a flag), the first rank that found a value writes it,
+    !> and every rank stops with mpi_stop_all: exit code 1, in every build.
+    subroutine Check_IC_Values ( domain, IOfield )
+      use Lib_ORION_data,    only: ORION_data
+      use ARES_Finite_m,     only: Not_Finite
+      use ARES_Mod_MPI,      only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8
+      implicit none
+      type(ARES_domain_type), intent(in) :: domain
+      type(ORION_data), intent(in)       :: IOfield
+      ! Local
+      character(len=1), parameter :: axis(3) = ['x', 'y', 'z']
+      character(len=hlen) :: what
+      character(len=40)   :: name
+      integer  :: b, i, j, k, d, off
+      real(R8) :: flag, flag_all, first
+
+      what = ''
+      blocks: do b = 1, domain%nb
+        do k = 0, domain%blk(b)%dim(3)
+          do j = 0, domain%blk(b)%dim(2)
+            do i = 0, domain%blk(b)%dim(1)
+              do d = 1, 3
+                if ( Not_Finite(domain%blk(b)%node(i,j,k)%c(d)) ) then
+                  write(what,'(3A,I0,A,2(I0,A),I0)') 'coordinate ', axis(d), ' of block ', b, ', node i, j, k = ', &
+                    i, ', ', j, ', ', k
+                  exit blocks
+                end if
+              end do
+            end do
+          end do
+        end do
+        if ( .not. allocated(domain%blk(b)%P) ) cycle
+        do k = 1, domain%blk(b)%dim(3)
+          do j = 1, domain%blk(b)%dim(2)
+            do i = 1, domain%blk(b)%dim(1)
+              do d = 1, nprim
+                if ( Not_Finite(domain%blk(b)%P(d,i,j,k)) ) then
+                  ! The name of the variable when the file gives the names (Tecplot ASCII), which come after the coordinates
+                  name = ''
+                  if ( allocated(IOfield%varnames) .and. allocated(IOfield%block(1)%vars) ) then
+                    off = size(IOfield%varnames) - size(IOfield%block(1)%vars, 1)
+                    if ( off >= 0 .and. off + d <= size(IOfield%varnames) ) &
+                      name = ' ('//trim(adjustl(IOfield%varnames(off + d)))//')'
+                  end if
+                  write(what,'(A,I0,2A,I0,A,2(I0,A),I0)') 'variable ', d, trim(name), ' of block ', b, &
+                    ', cell i, j, k = ', i, ', ', j, ', ', k
+                  exit blocks
+                end if
+              end do
+            end do
+          end do
+        end do
+      end do blocks
+
+      flag = 0.0_R8
+      if ( len_trim(what) > 0 ) flag = 1.0_R8
+      call mpi_allreduce_max_r8 ( flag, flag_all )
+      if ( flag_all > 0.0_R8 ) then
+        ! Written once, by the first rank that found a value (rank 0 when every rank holds it)
+        call mpi_allreduce_min_r8 ( merge(real(mpi_rank_, R8), huge(1.0_R8), flag > 0.0_R8), first )
+        if ( flag > 0.0_R8 .and. nint(first) == mpi_rank_ ) &
+          write(*,'(A)') ' [ERROR] '//trim(obj_io%nameinit)//' holds a value that is not finite (NaN or infinity): '// &
+                         trim(what)
+        call mpi_stop_all ( 'initial condition error (see above)' )
+      end if
+
+    end subroutine Check_IC_Values
+
+
+    subroutine Check_Input ( has_error )
       use ARES_Input_Registry
       use ARES_Backend_INI, only: Obsolete_Keys
       use Finer,            only: file_ini
       implicit none
+      logical, intent(out) :: has_error
       character(len=hlen) :: out
       type(file_ini) :: fini
 
@@ -276,10 +389,10 @@ contains
       call fini%load(filename='input.ini')
       out = Obsolete_Keys(fini)
       if (len_trim(out) == 0) out = Validate_Registry()
-      if (index(out,'ERROR')>0) then
+      has_error = index(out,'ERROR') > 0
+      if ( has_error ) then
         write(*,'(A,T35,A)') '   Input file', 'FAIL'
         write(*,'(4X,A)') trim(out)
-        call mpi_abort_all('Invalid input file: see error above')
       else
         write(*,'(A,T35,A)') '   Input file', 'OK'
       endif
@@ -287,13 +400,14 @@ contains
     end subroutine Check_Input
 
 
-    subroutine Check_BC()
+    subroutine Check_BC ( has_error )
       implicit none
+      logical, intent(out) :: has_error
 
-      if (index(obj_io_bc%error_message,'ERROR')>0) then
+      has_error = index(obj_io_bc%error_message,'ERROR') > 0
+      if ( has_error ) then
         write(*,'(A,T35,A)') '   Boundary conditions', 'FAIL'
         write(*,'(4X,A)') trim(obj_io_bc%error_message)
-        call mpi_abort_all('Invalid boundary conditions: see error above')
       else
         write(*,'(A,T35,A)') '   Boundary conditions', 'OK'
       endif
@@ -322,14 +436,16 @@ contains
     end subroutine Print_Warnings
 
 
-    subroutine Stop_Simulation()
+    subroutine Stop_Simulation ( has_error )
       implicit none
-      logical :: has_error
+      logical, intent(out) :: has_error
 
       has_error = .false.
 
       ! Physics errors
-
+      if (index(obj_transport%error_message,'ERROR')>0) then
+        write(*,'(A)') obj_transport%error_message;  has_error = .true.
+      endif
       if (index(obj_rans%error_message,'ERROR')>0) then
         write(*,'(A)') obj_rans%error_message;       has_error = .true.
       endif
@@ -353,9 +469,23 @@ contains
         write(*,'(A)') obj_prec%error_message;         has_error = .true.
       endif
 
-      if (has_error) call mpi_abort_all('Invalid set-up: see errors above')
-
     end subroutine Stop_Simulation
+
+
+    !> A check of the set-up that runs on rank 0 alone writes what it finds there. Rank 0 broadcasts whether it found an
+    !> error, and on an error every rank stops together (mpi_stop_all): rank 0 has written its message before any rank
+    !> ends, and the run ends with exit code 1. With MPI_ABORT from rank 0 alone, which makes only a best attempt to stop
+    !> the processes (MPI-4.1, section 11.4.2), the launcher can end while rank 0 is writing: with Intel MPI 2021.12,
+    !> one run in ten ends so (measured), with exit code 141 (128 + SIGPIPE) and without the line of the abort.
+    subroutine Stop_Together ( found, why )
+      implicit none
+      logical, intent(inout)       :: found
+      character(len=*), intent(in) :: why
+
+      call mpi_bcast_logical ( found )
+      if ( found ) call mpi_stop_all ( why )
+
+    end subroutine Stop_Together
 
 
     subroutine Print_Shell_Info()
@@ -447,12 +577,12 @@ contains
       write(*,'(A)') ' ========================================================================================='
       write(*,'(A,T35,A)') ' Space'
       write(*,'(A,T35,A)') '   Reconstruction', trim(obj_space_scheme%description)
-      if (len_trim(obj_space_scheme%flux_limiter)>0) &
-        write(*,'(A,T35,A)') '   Flux limiter',trim(obj_space_scheme%flux_limiter)
+      if (len_trim(obj_space_scheme%limiter_name)>0) &
+        write(*,'(A,T35,A)') '   Flux limiter',trim(obj_space_scheme%limiter_name)
       write(*,*)
       write(*,'(A,T35,A)') ' Time'
       write(*,'(A,T35,A)') '   Scheme', trim(obj_time_scheme%description)
-      write(*,'(A,T35,A)') '   Integration variables', trim(obj_time_scheme%integration_variables)
+      write(*,'(A,T35,A)') '   Integration variables', trim(obj_time_scheme%integration_name)
       if (len_trim(obj_irs%description)>0) &
         write(*,'(A,T35,A)') '   Implicit residual smoothing', trim(obj_irs%description)
       if ( obj_prec%enabled ) then
@@ -470,7 +600,7 @@ contains
       end if
       write(*,*)
       write(*,'(A,T35,A)') ' Fluxes'
-      write(*,'(A,T35,A)') '   Riemann solver', trim(obj_riemann%description)
+      write(*,'(A,T35,A)') '   Riemann solver', trim(obj_riemann%name)
       write(*,'(A)') ' ========================================================================================='
       write(*,*)
 

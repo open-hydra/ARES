@@ -66,6 +66,12 @@ with $\delta l_L,\delta l_R$ the cell-centre-to-interface distances.
 | `MUSCL` | Second-order MUSCL with the selected limiter |
 | `none` | No reconstruction (used for some pure-diffusion configurations) |
 
+!!! note "Choosing the reconstruction"
+    `space-reconstruction = MUSCL` limits the slopes with the function named by `flux-limiter` (see
+    [Flux Limiters](#flux-limiters)); if `flux-limiter` is omitted, van Leer is used and a warning is printed.
+    `space-reconstruction = first-order` sets every slope to zero (donor-cell); a `flux-limiter` given with it is
+    ignored, with a warning.
+
 ---
 
 ## Flux Limiters

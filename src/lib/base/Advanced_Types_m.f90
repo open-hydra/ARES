@@ -51,7 +51,7 @@ module ARES_Advanced_Types_m
 
   type, extends(bc_type) :: ARES_bc_type
     real(R8)                  :: qw, Tw, Taw, hg, qrad             ! BC wall specifications 
-    real(R8)                  :: eps_wall, k_rough = 0.0_R8        ! BC viscous wall specifications   
+    real(R8)                  :: eps_wall = 0.0_R8, k_rough = 0.0_R8 ! BC viscous wall specifications   
     real(R8)                  :: T0, p0, alpha, beta, mach, pamb   ! BC 4 (inflow/outflow) specifications
     real(R8)                  :: mdot                              ! BC 4 (inflow/outflow) specifications
     real(R8)                  :: rel_fac                           ! BC 4 (inflow/outflow) specifications

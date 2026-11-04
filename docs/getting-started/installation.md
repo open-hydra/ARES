@@ -24,7 +24,10 @@ ARES depends on several repositories included as Git submodules.
 |------|------------|---------|
 | `lib/FLINT` | `github.com/MarcoGrossi92/FLINT` | Real-fluid thermodynamic & transport tables |
 | `lib/ORION` | `github.com/MarcoGrossi92/ORION` | I/O routines (Tecplot, VTK, Plot3D, …) |
-| `lib/third_party/FiNeR` | `github.com/szaghi/FiNeR` | INI file parser |
+| `lib/third_party/FiNeR` | `github.com/szaghi/FiNeR` | INI file parser (v2.3.0) |
+| `lib/third_party/PENF`, `FACE`, `FLAP`, `BeFoR64`, `StringiFor` | `github.com/szaghi/<name>` | Libraries of FiNeR, at their release tags (PENF v2.0.1, FACE v1.1.17, FLAP v2.5.3, BeFoR64 v1.2.4, StringiFor v1.8.0) |
+
+FiNeR v2.0.7 and later no longer carry their libraries as git submodules: ARES carries them under `lib/third_party/` and adds them before FiNeR (`FINER_DEPS_PATH`, `lib/third_party/` by default), so a build needs neither FoBiS nor the network.
 
 ## Build methods
 
@@ -36,6 +39,9 @@ cd ARES
 # initialise submodules
 ./install.sh update            # or: git submodule update --init --recursive
 ```
+
+!!! note "An existing clone"
+    After pulling new commits into an existing clone, run `git submodule update --init --recursive`: a submodule checked out at an older commit is not updated by the build. If FiNeR is older than v2.1.0, the first version that reads a comment line holding `=` as a comment (CMake reads the version from its `VERSION` file, which FiNeR has since v2.0.7), CMake stops and gives this command.
 
 To install ARES you may either use the bundled install script or invoke CMake manually. The script is the preferred route for most users.
 

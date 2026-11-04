@@ -236,7 +236,7 @@ contains
   subroutine check_and_fix_state ( prim, b, i, j, k )
     use ARES_Global_m
     use ARES_Lib_RANS
-    use ARES_Mod_MPI, only: mpi_abort_all
+    use ARES_Finite_m, only: Not_Finite
 
     implicit none
     real(kind=8), dimension(:), intent(inout) :: prim
@@ -244,12 +244,14 @@ contains
     ! local
 
 
-    ! Check integration
-    if (isnan(product(prim(:))) .or. prim(np)<0d0 ) then
-      write(*,*) "Integration failed in"
-      write(*,*) b, i, j, k
+    ! Bail out on a value that is not finite (NaN or infinity) or on a negative pressure. STOP 1, not
+    ! mpi_abort_all: this runs inside OpenMP threads and MPI is initialised FUNNELED; the non-zero exit code makes
+    ! the launcher end the other ranks.
+    if ( any( Not_Finite(prim(1:nprim)) ) .or. prim(np) < 0d0 ) then
+      write(*,'(A,4I4)') "Integration failed at b, i, j, k:", b, i, j, k
       write(*,*) prim(1:nprim)
-      call mpi_abort_all("NaN or p<0 detected")
+      write(*,'(A)') "NaN, infinity or p<0 detected"
+      stop 1
     endif
 
     ! Check turbulence variables

@@ -12,7 +12,7 @@ This page is the reference for every `[ARES-*]` parameter. It mirrors the output
 | newrun | true | true , false | no | Start a new simulation (false = restart) |
 | res-threshold | 1e-10 | > 0 | no | Residual convergence threshold |
 | time-threshold | 1e30 | > 0 | no | Maximum simulation time |
-| iter-threshold | 1000000000 | > 0 | no | Maximum number of iterations |
+| iter-threshold | 1000000000 | > 0 | no | Maximum number of iterations (re-read at runtime) |
 
 ## ARES-Numerics
 
@@ -24,12 +24,12 @@ This page is the reference for every `[ARES-*]` parameter. It mirrors the output
 | cfl-rise-threshold | 0 | >= 0 | no | Iterations over which CFL is ramped up |
 | time-accurate | .false. | logical | **yes** | Time-accurate switch (false = march to steady state) |
 | integration-variables | prim | prim, prec | no | Update variables: primitive or preconditioned |
-| irs | .false. | logical | no | Implicit Residual Smoothing |
-| irs-beta | 0.0 | >= 0 | no | IRS smoothing coefficient |
+| irs | .false. | logical | no | Implicit Residual Smoothing (steady runs only; switched on only at setup) |
+| irs-beta | 0.0 | >= 0 | no | IRS smoothing coefficient (> 0 also enables IRS; steady runs only) |
 | preconditioning-Uref | -1.0 |  | no | Reference velocity for preconditioning (< 0 ⇒ use sound speed) |
 | preconditioning-eps-min | -1.0 |  | no | Minimum cut-off $\varepsilon$ for preconditioning (< 0 ⇒ default 0.10) |
 | space-reconstruction | none | MUSCL, first-order, none | **yes** | Space reconstruction method |
-| flux-limiter | none | vanalbada, minmod, superbee, vanleer, mc, MC, LIMO3, none | no | Flux limiter for reconstruction (`mc` and `MC` are the same limiter) |
+| flux-limiter | none | vanalbada, minmod, superbee, vanleer, mc, MC, LIMO3, none | no | Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order; `mc` and `MC` are the same limiter) |
 | riemann-solver | HLLC | Rusanov, PLLF, HLLE, HLLC, HLLC Prec, HLLC Rotated | no | Riemann (numerical flux) solver |
 | riemann-options-Minf | 0.0 | >= 0 | no | Reference Mach number for the Riemann solver |
 
@@ -43,8 +43,8 @@ Per-level iteration counts. The number of levels is set by the `levels` key; one
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | levels | 1 | >= 1 | no | Number of multigrid levels |
-| level1-iter | 0 | >= 0 | no | Iterations on multigrid level 1 (finest) |
-| level2-iter | 0 | >= 0 | no | Iterations on multigrid level 2 |
+| level1-iter | 0 | >= 0 | no | Iterations on multigrid level 1 (finest; re-read at runtime) |
+| level2-iter | 0 | >= 0 | no | Iterations on multigrid level 2 (re-read at runtime) |
 | … | 0 | >= 0 | no | (one entry per level) |
 
 ## ARES-Physics
@@ -93,6 +93,7 @@ These keys are read for every run and used only when `turbulence` names a model.
 | res-diter | 1 | > 0 | no | Residual-history write frequency |
 | shell-diter | 1 | > 0 | no | Console (shell) update frequency |
 | ini-diter | 10000 | > 0 | no | `input.ini` re-read frequency |
+| ini-error | warn | warn, stop | no | `input.ini` read again with an error: warn and keep the values held before the reading, or stop (at set-up every error stops) |
 | timer-diter | 0 | >= 0 | no | Wall-clock timing report frequency (0 ⇒ off) |
 
 ## ARES-Probes

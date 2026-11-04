@@ -87,8 +87,39 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_subdirectory(${flintD})
   endif()
 
+  # The libraries of FiNeR (PENF, FACE, FLAP, BeFoR64, StringiFor), submodules of ARES under FINER_DEPS_PATH, at their
+  # release tags, added before FiNeR in the order of their dependencies: FiNeR adds each of them from its own
+  # src/third_party/ only when its target is not defined yet, so a build needs neither FoBiS nor the network
+  if (NOT DEFINED FINER_DEPS_PATH)
+    set(FINER_DEPS_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/third_party/")
+  endif()
+  foreach (finer_dep PENF FACE FLAP BeFoR64 StringiFor)
+    if (NOT TARGET ${finer_dep})
+      add_subdirectory("${FINER_DEPS_PATH}/${finer_dep}" "${CMAKE_BINARY_DIR}/lib/third_party/${finer_dep}")
+    endif()
+  endforeach()
+
   # FiNeR
   if (NOT TARGET FiNeR)
+    # ARES needs FiNeR v2.1.0 or later: before it, a comment line that holds "=" or a bracket was taken for an option or
+    # a section header, and the reading of its section of input.ini ended there. A clone that pulls without
+    # "git submodule update" keeps the FiNeR it had checked out, and it would build in silence. FiNeR names its version
+    # in a VERSION file ("vX.Y.Z") since v2.0.7; a FiNeR without it is older
+    set(finer_version "")
+    if (EXISTS "${FINER_PATH}/VERSION")
+      file(STRINGS "${FINER_PATH}/VERSION" finer_version LIMIT_COUNT 1)
+      string(REGEX REPLACE "^[ \t]*v?([0-9][0-9.]*).*$" "\\1" finer_version "${finer_version}")
+    endif()
+    if (NOT "${finer_version}" VERSION_GREATER_EQUAL "2.1.0")
+      if ("${finer_version}" STREQUAL "")
+        set(finer_found "a FiNeR without a VERSION file, older than v2.0.7")
+      else()
+        set(finer_found "FiNeR v${finer_version}")
+      endif()
+      message(FATAL_ERROR "FiNeR at ${FINER_PATH} is ${finer_found}: ARES needs FiNeR v2.1.0 or later (it pins v2.3.0), "
+                          "as before v2.1.0 a comment line of input.ini that holds \"=\" ends the reading of its section. "
+                          "Run: git submodule update --init --recursive")
+    endif()
     set ( finerD "${FINER_PATH}" "${CMAKE_CURRENT_SOURCE_DIR}/build/lib/third_party/FiNeR/")
     add_subdirectory(${finerD})
   endif()

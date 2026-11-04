@@ -10,6 +10,10 @@ module ARES_Lib_BC_Fluxes_Inflow
 
 contains
 
+  !─────────────────────────────────────────────────────────────────────────────
+  ! BC 404: Inlet — static temperature T + prescribed mass flux g [kg/m2/s].
+  ! Pressure is extrapolated from the interior. g is positive into the domain on every face
+  ! (IO_BC.f90, Need_Inward).
   subroutine BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, Blk, BC_T, BC_g, &
                                     BC_rel_fac, BC_alpha, BC_beta, BC_RANS, error )
 
@@ -24,7 +28,7 @@ contains
     integer,  intent(inout) :: error
     ! Local
     integer  :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k
-    real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, Fmass, Face_Un, entalpy
+    real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, Fmass, Face_Un, entalpy, g
     real(R8) :: Bound_Prim(nprim), Int_Prim(nprim)
     real(R8) :: Un, Bound_rho, Bound_Sound, alpha, beta
     real(R8) :: E1, E2, rho3, p3, Un3, Ut3, Ub3
@@ -65,7 +69,10 @@ contains
     p3      = Bound_Prim(np)      ! pressure extrapolated from interior
     entalpy = pT2h( p3, BC_T )
     rho3    = ph2vars( p3, entalpy, rho_tab ) 
-    Un3     = BC_g / rho3
+    ! The mass flux into the domain, |g|, as its component along Normal, which points toward growing index:
+    ! out of the domain on the faces 2, 4, 6 (BC_Sign = +1), into it on the faces 1, 3, 5 (BC_Sign = -1)
+    g       = - BC_Sign * abs(BC_g)
+    Un3     = g / rho3
     Ut3     = Un3 * E1
     Ub3     = Un3 * E2
 
@@ -87,10 +94,10 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
-  ! BC 406: Supersonic inlet — Mach + static temperature T and static pressure p.
-  ! Note: BC_Supersonic_Inflow treats its BC_p0/BC_T0 arguments as static values,
-  ! so the BC 406 static inputs map directly.  The full 3-cell Riemann stencil is
-  ! preserved exactly as for BC 405.
+  ! BC 405: Supersonic inlet — Mach, static temperature T and static pressure p. The flux of the face is that of the
+  ! Riemann problem of the imposed state (Supersonic_Inflow: the static pressure and the Mach number blended with those
+  ! of the cell by rel_fac, the direction from alpha and beta or along the normal of the face into the domain) with the
+  ! boundary cell, through the 3-cell stencil.
   subroutine BC_Inlet_Supersonic_Static ( Bm, Im, Jm, Km, Fm, Blk, BC_Mach, BC_T, BC_p, &
                                            BC_rel_fac, BC_alpha, BC_beta, BC_RANS, BC_mdot, error )
     implicit none
@@ -118,8 +125,7 @@ contains
       return
     end if
 
-    ! BC_Supersonic_Inflow treats BC_p0/BC_T0 as static p/T — pass through directly.
-    ! Blending with the interior and the full Riemann stencil are handled inside.
+    ! Supersonic_Inflow takes BC_p and BC_T as static values; the blending with the interior and the Riemann stencil are inside.
     Flux = 0d0
     call Supersonic_Inflow ( Bound_Prim, Int_Prim, modfm, modfm1, modfm2, BC_Mach, BC_p, &
                                  BC_T, BC_RANS, BC_rel_fac, BC_alpha, BC_beta,         &
@@ -130,6 +136,13 @@ contains
   end subroutine BC_Inlet_Supersonic_Static
 
 
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Supersonic_Inflow (low-level, works on primitive arrays directly). The imposed state: the static T (BC_T), the
+  ! static p (BC_p) and the Mach number M, both blended with those of the cell by rel_fac, and the velocity M a d. With
+  ! alpha and beta both normal, d = n = -modfm2 Normal, the unit normal of the face into the domain (Normal points
+  ! toward growing index). Otherwise d = (cos alpha cos beta, sin alpha cos beta, sin beta), where an angle given as
+  ! normal is that of n: alpha its azimuth, (cos, sin) = (n_x, n_y)/|(n_x, n_y)|, 0 when n is along z; beta its
+  ! elevation, (cos, sin) = (|(n_x, n_y)|, n_z)/|n|.
   subroutine Supersonic_Inflow ( Prim2, Int_Prim, modfm, modfm1, modfm2, BC_Mach, BC_p, BC_T, & 
                                     BC_RANS, BC_rel_fac, BC_alpha, BC_beta, Normal, Area, Flux, Fmass )
     use ARES_Lib_Limiters, only : rlimiter
@@ -149,7 +162,7 @@ contains
     real(R8) :: rho_L, rho_R, F_r, F_u, F_v, F_w, F_E
     real(R8) :: su, Sel_L, Sel_R, Vel_T(3)
     real(R8) :: flow_Sound, flow_Mach, BC_Mach_local, BC_p0_local, Sup_p, Sup_h, entalpy, dx(3)
-    real(R8) :: alpha_eff, beta_eff
+    real(R8) :: n_in(3), h_xy, n_mod, cos_a, sin_a, cos_b, sin_b
 
     ! compute flow properties in the interior cell (sound from the boundary-cell state)
     flow_Sound = ph2vars( Prim2(np), Prim2(nh), sound_tab )
@@ -160,9 +173,6 @@ contains
     ! blended p static at the boundary
     BC_p0_local = BC_rel_fac*BC_p + (1-BC_rel_fac)*Prim2(np)
 
-    ! resolve inflow direction (handles the 'normal' sentinel from parse_dir_tok)
-    call Compute_Inflow_Direction ( Normal, BC_alpha, BC_beta, alpha_eff, beta_eff )
-
     ! supersonic inflow. BC_Mach enforced at boundary, T0 and p0 are static
     Sup_p = BC_p0_local
     Sup_T = BC_T
@@ -171,9 +181,38 @@ contains
     Sup_Prim(np) = Sup_p
     Sup_Prim(nh) = Sup_h
     Sup_Sound = ph2vars( Sup_p, Sup_h, sound_tab )
-    Sup_Prim(nu) = BC_Mach_local * Sup_Sound * cos(alpha_eff) * cos(beta_eff)
-    Sup_Prim(nv) = BC_Mach_local * Sup_Sound * sin(alpha_eff) * cos(beta_eff)
-    Sup_Prim(nw) = BC_Mach_local * Sup_Sound * sin(beta_eff)
+    n_in = - modfm2 * Normal
+    if ( Is_Normal_Dir ( BC_alpha ) .and. Is_Normal_Dir ( BC_beta ) ) then
+      Sup_Prim(nu:nw) = BC_Mach_local * Sup_Sound * n_in
+    else
+      if ( Is_Normal_Dir ( BC_alpha ) ) then
+        h_xy = norm2 ( n_in(1:2) )
+        cos_a = 1d0
+        sin_a = 0d0
+        if ( h_xy > 0d0 ) then
+          cos_a = n_in(1) / h_xy
+          sin_a = n_in(2) / h_xy
+        end if
+      else
+        cos_a = cos ( BC_alpha )
+        sin_a = sin ( BC_alpha )
+      end if
+      if ( Is_Normal_Dir ( BC_beta ) ) then
+        n_mod = norm2 ( n_in )
+        cos_b = 1d0
+        sin_b = 0d0
+        if ( n_mod > 0d0 ) then
+          cos_b = norm2 ( n_in(1:2) ) / n_mod
+          sin_b = n_in(3) / n_mod
+        end if
+      else
+        cos_b = cos ( BC_beta )
+        sin_b = sin ( BC_beta )
+      end if
+      Sup_Prim(nu) = BC_Mach_local * Sup_Sound * cos_a * cos_b
+      Sup_Prim(nv) = BC_Mach_local * Sup_Sound * sin_a * cos_b
+      Sup_Prim(nw) = BC_Mach_local * Sup_Sound * sin_b
+    end if
     ! specific inputs (nuTilde, k, omega, Rij of ATLAS BCB) times the inlet density
     if (model==2) Sup_Prim(nt:nprim) = Sup_rho * BC_RANS
 
@@ -295,18 +334,30 @@ contains
     real(R8) :: alpha_rad, beta_rad, cos_alpha, cos_beta
 
     ! Resolve 'normal' direction sentinel (parse_dir_tok returns huge(R8) for token 'normal').
-    if (alpha_in >= 0.5_R8 * huge(1.0_R8)) then
+    if (Is_Normal_Dir(alpha_in)) then
       alpha_out = atan(Normal(2) / (Normal(1) + 1d-20))
     else
       alpha_out = alpha_in
     end if
-    if (beta_in >= 0.5_R8 * huge(1.0_R8)) then
+    if (Is_Normal_Dir(beta_in)) then
       beta_out  = atan(Normal(3) / (Normal(1) + 1d-20))
     else
       beta_out  = beta_in
     end if
 
   end subroutine Compute_Inflow_Direction
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Is_Normal_Dir: the flow angle x of an inlet record is the token normal, which parse_dir_tok (IO_BC.f90) reads as
+  ! huge(1.0_R8).
+  pure logical function Is_Normal_Dir ( x )
+    implicit none
+    real(R8), intent(in) :: x
+
+    Is_Normal_Dir = x >= 0.5_R8 * huge(1.0_R8)
+
+  end function Is_Normal_Dir
 
 
 end module ARES_Lib_BC_Fluxes_Inflow

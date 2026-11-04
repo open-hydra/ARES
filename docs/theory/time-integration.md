@@ -121,6 +121,17 @@ $$
 
 approximated with a couple of Jacobi sweeps. The stable CFL limit is amplified by roughly $1+2\varepsilon$; typical $\varepsilon$ (`irs-beta`) is 0.1–0.5. Enable it with `irs = .true.`.
 
+### Steady runs only
+
+The smoothed residual is not the residual of the space discretization, so a run with IRS does not follow the
+transient of the discretized equations: IRS accelerates the convergence of steady (pseudo-time) runs. It is switched
+on by `irs = true` or by `irs-beta > 0` alone, and ARES refuses it at set-up when `time-accurate = true`. The change
+does not vanish as $\Delta t \to 0$: the smoothing turns the semi-discrete system into
+$(I - \varepsilon\,\delta^2)\,d\mathbf{U}/dt = -\mathbf{R}/V$ in each direction, which slows a Fourier mode of
+wavenumber $k$ by $1 + 4\varepsilon\sin^2(k\Delta x/2)$: a change of order $\varepsilon (k\Delta x)^2$ for resolved
+waves and of order one at discontinuities. IRS can only be switched on at set-up, where its work arrays are allocated:
+a reading of `input.ini` during the run that turns it on is ignored, with a warning.
+
 ---
 
 ## Multigrid Acceleration
