@@ -129,6 +129,7 @@ contains
         Stress_Vector => Stress_Vector_Std
       end if
       RANS_Source_Terms => Spalart_Source_Terms
+      RANS_Stiffness_Bound => Spalart_Stiffness_Bound
       RANS_Set_Wall_Values => Spalart_Set_Wall_Values
       RANS_Set_Blowing_Wall => Spalart_Set_Blowing_Wall
       RANS_Extrapolate_Wall => Spalart_Extrapolate_Wall
@@ -144,6 +145,7 @@ contains
         Stress_Vector => Stress_Vector_Std
       end if
       RANS_Source_Terms => Wilcox2006_Source_Terms
+      RANS_Stiffness_Bound => Wilcox2006_Stiffness_Bound
       RANS_Set_Wall_Values => Wilcox2006_Set_Wall_Values
       if ( trim(obj_rans%omega_wall_bc) == 'asymptotic' ) obj_rans%omega_wall_coef = Wilcox2006_omega_wall_asymptotic
       if (obj_rans%blowing_corr) then
@@ -164,6 +166,7 @@ contains
         Stress_Vector => Stress_Vector_Std
       end if
       RANS_Source_Terms => SST_Source_Terms
+      RANS_Stiffness_Bound => SST_Stiffness_Bound
       RANS_Set_Wall_Values => SST_Set_Wall_Values
       if (obj_rans%blowing_corr) then
         RANS_Set_Blowing_Wall => SST_Blowing_Correction
@@ -186,6 +189,7 @@ contains
       end if
       Stress_Vector => Stress_Vector_RSM
       RANS_Source_Terms => SSGLRR_Source_Terms
+      RANS_Stiffness_Bound => SSGLRR_Stiffness_Bound
       RANS_Set_Wall_Values => SSGLRR_Set_Wall_Values
       RANS_Extrapolate_Wall => SSGLRR_Extrapolate_Wall
       RANS_Enforce_Realizability => SSGLRR_Enforce_Realizability

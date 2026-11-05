@@ -14,8 +14,12 @@ contains
     ! accessing allocatable components of a derived type simultaneously.
     !---------------------------------------------------------------------------
     use ARES_Advanced_Types_m
+    use ARES_Config_Types_m, only: obj_rans, obj_sim_param
     implicit none
     type(ARES_domain_type), intent(inout), target :: domain
+
+    ! Connection faces (101, 201): one flux per face, for the two cells
+    call Connection_Fluxes ( domain, obj_sim_param%Sc, obj_rans%Sct, obj_rans%Prt, obj_rans%Prt_correction )
 
     call BC_Fluxes_core ( domain%bc, domain%blk, domain%local_bf_first, domain%local_bf_count, &
                           domain%local_bf_idx, domain%nb, size(domain%bc), size(domain%blk), &
@@ -27,7 +31,7 @@ contains
   subroutine BC_Fluxes_core ( bc, blk, bf_first, bf_count, bf_idx, nb, nbc, nblk, nidx )
     use ARES_Advanced_Types_m
     use ARES_Config_Types_m, only: obj_rans, obj_sim_param, obj_space_scheme, obj_riemann
-    use ARES_Global_m, only: model, np, nrans
+    use ARES_Global_m, only: model, np, nrans, nprim
     use ARES_Mod_MPI, only: is_local_block
     use ARES_Lib_BC_Fluxes_Connection
     use ARES_Lib_BC_Fluxes_Rotational
@@ -50,6 +54,7 @@ contains
     real(R8) :: r_fc(3)
     real(R8) :: Sc, Sct, Prt
     logical  :: Prt_corr
+    real(R8) :: dR(nprim)                            ! Share of a face in the residual of its cell
 
     Sc  = obj_sim_param%Sc
     Sct = obj_rans%Sct
@@ -69,7 +74,7 @@ contains
         lower = bf_first(b,f)
         upper = lower + bf_count(b,f) - 1
 
-        !$omp do schedule ( dynamic ) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, T0, g, pstat, r_fc)
+        !$omp do schedule ( dynamic ) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, T0, g, pstat, r_fc, dR)
         do ii = lower, upper
           i  = bf_idx(ii)
           Bm = bc(i) % b
@@ -79,11 +84,20 @@ contains
           Fm = bc(i) % f
           select case ( bc(i) % type )
 
-            case (101,102,201) ! connection & chimera (101=block connect, 102=chimera)
-              call BC_Connection_Eul ( Im, Jm, Km, Fm, blk(Bm) )
+            case (101,201) ! block connection, periodic connection: the share of the cell in the flux of the face
+              blk(Bm) % R(:,Im,Jm,Km) = blk(Bm) % R(:,Im,Jm,Km) + bc(i) % Fc(:,1)
               if (model>0) &
+                blk(Bm) % R(:,Im,Jm,Km) = blk(Bm) % R(:,Im,Jm,Km) + bc(i) % Fc(:,2)
+
+            case (102) ! chimera
+              call BC_Connection_Eul ( Im, Jm, Km, Fm, blk(Bm), dR )
+              blk(Bm) % R(:,Im,Jm,Km) = blk(Bm) % R(:,Im,Jm,Km) + dR
+              if (model>0) then
                 call BC_Connection_Visc ( Im, Jm, Km, Fm, blk(Bm), bc(i) % Mg(1), bc(i) % Pg, &
-                                          Sc, Sct, Prt, Prt_corr )
+                                          Sc, Sct, Prt, Prt_corr, dR )
+                blk(Bm) % R(:,Im,Jm,Km) = blk(Bm) % R(:,Im,Jm,Km) + dR
+              end if
+
             case (103,104) ! multi-Solver coupling (104 = with chimera)
               call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
               blk(Bm) % R(:,Im,Jm,Km) = blk(Bm) % R(:,Im,Jm,Km) + bc(i) % ext_flux
@@ -145,5 +159,59 @@ contains
     enddo blocks
 
   end subroutine BC_Fluxes_core
+
+
+  !> One flux per connection face (101, 201). Computed by each block for its
+  !> own cell, the flux of a face between blocks was the same on the two sides
+  !> only when their inputs had the same bits (the nodes of the common face, the
+  !> index directions of the two blocks). Here the record that owns the face
+  !> (Pair_Connections: the cell on the low-index side of the face, as on an
+  !> interior face) computes it, inviscid and viscous, for its cell, and gives it
+  !> with the opposite sign to the record of the other cell: in the same process
+  !> directly, between processes through exchange_connection_flux. BC_Fluxes then
+  !> adds to each cell its share, in the order of the records, as before.
+  subroutine Connection_Fluxes ( domain, Sc, Sct, Prt, Prt_corr )
+    use ARES_Advanced_Types_m
+    use ARES_Global_m, only: model, nprim
+    use ARES_Mod_MPI, only: mpi_size_
+    use ARES_Mod_GhostExchange, only: exchange_connection_flux
+    use ARES_Lib_BC_Fluxes_Connection
+    implicit none
+    type(ARES_domain_type), intent(inout) :: domain
+    real(R8), intent(in) :: Sc, Sct, Prt
+    logical, intent(in)  :: Prt_corr
+    ! Local
+    integer  :: ii, i, p, Bm
+    real(R8) :: dR(nprim)
+
+    !$omp do schedule (dynamic) private(ii, i, p, Bm, dR)
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 101 .and. domain % bc(i) % type /= 201) cycle
+      if (.not. domain % bc(i) % owner) cycle
+      Bm = domain % bc(i) % b
+      p  = domain % bc(i) % partner
+      call BC_Connection_Eul ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
+                               domain % blk(Bm), dR )
+      domain % bc(i) % Fc(:,1) = dR
+      domain % bc(p) % Fc(:,1) = -dR
+      if (model>0) then
+        call BC_Connection_Visc ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
+                                  domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
+                                  Sc, Sct, Prt, Prt_corr, dR )
+        domain % bc(i) % Fc(:,2) = dR
+        domain % bc(p) % Fc(:,2) = -dR
+      end if
+    enddo
+
+    ! Faces whose other cell is on another process (MPI calls from the primary thread)
+    if (mpi_size_ > 1) then
+      !$omp master
+      call exchange_connection_flux ( domain )
+      !$omp end master
+      !$omp barrier
+    end if
+
+  end subroutine Connection_Fluxes
 
 end module ARES_Mod_BC_Fluxes

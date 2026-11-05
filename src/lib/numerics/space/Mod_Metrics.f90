@@ -66,8 +66,14 @@ contains
             Ks = domain % bc(i) % ks
             call Yn_Connection ( Im, Jm, Km, Fm, domain % blk(Bm), &
                                  Is, Js, Ks, domain % blk(Bs) )
-          case(102) ! chimera: first ghost cell from the donor cells
-            call Yn_Chimera ( domain % nb, domain % blk, domain % bc(i) )
+          case(102) ! chimera: no donor copy, extend the receiver
+            Bm = domain % bc(i) % b
+            if (.not. is_local_block(Bm)) cycle
+            Im = domain % bc(i) % i
+            Jm = domain % bc(i) % j
+            Km = domain % bc(i) % k
+            Fm = domain % bc(i) % f
+            call Yn_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm) )
         end select
       enddo
       !$omp end parallel

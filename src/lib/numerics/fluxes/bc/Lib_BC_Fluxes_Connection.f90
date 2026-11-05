@@ -10,14 +10,18 @@ module ARES_Lib_BC_Fluxes_Connection
 
 contains
 
-  subroutine BC_Connection_Eul ( Im, Jm, Km, Fm, Blk )
+  !> Inviscid flux of a face between the cell (Im,Jm,Km) and its ghost across
+  !> face Fm, from the four-cell stencil across the face; returns the share of
+  !> the residual of the cell, dR (the caller adds it).
+  subroutine BC_Connection_Eul ( Im, Jm, Km, Fm, Blk, dR )
     use ARES_Lib_Reconstruction, only : reconstruction
     use ARES_Mod_Riemann
     use FLINT_Lib_Thermodynamic
-    
+
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
-    type(ARES_block_type), intent(inout) :: Blk
+    type(ARES_block_type), intent(in) :: Blk
+    real(R8), intent(out) :: dR(nprim)
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, Dirm, Face_i, Face_j, Face_k
     integer :: I1, J1, K1, I2, J2, K2
@@ -92,14 +96,16 @@ contains
 
     if (model==2) &
       Flux(nt:nprim) = Fmass*(sel_L*Prim_L(nt:nprim)/rho_L - sel_R*Prim_R(nt:nprim)/rho_R)
-    
-    ! Residual update
-    Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + Flux * modfm2
+
+    ! Share of the residual of the cell
+    dR = Flux * modfm2
 
   end subroutine BC_Connection_Eul
 
 
-  subroutine BC_Connection_Visc ( Im, Jm, Km, Fm, Blk, Mg, Pg, Sc, Sct, Prt, Prt_corr )
+  !> Viscous flux of a face between the cell (Im,Jm,Km) and its ghost across
+  !> face Fm; returns the share of the residual of the cell, dR (the caller adds it).
+  subroutine BC_Connection_Visc ( Im, Jm, Km, Fm, Blk, Mg, Pg, Sc, Sct, Prt, Prt_corr, dR )
     use ARES_Lib_RANS
     use FLINT_Lib_Thermodynamic
     use ARES_Lib_Diffusive
@@ -110,7 +116,8 @@ contains
     real(kind=8), intent(in)              :: Pg(nprim,6)
     real(R8), intent(in) :: Sc, Sct, Prt
     logical, intent(in)  :: Prt_corr
-    type(ARES_block_type), intent(inout)  :: Blk
+    type(ARES_block_type), intent(in)     :: Blk
+    real(R8), intent(out)                 :: dR(nprim)
     ! Local
     integer :: dir, modfm2, Face_i, Face_j, Face_k
     integer :: Ig, Jg, Kg, i
@@ -131,7 +138,13 @@ contains
     Kg = Km - guide(Fm,3)
     Normal = blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     area = blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
-    M = 0.5d0 * ( Blk % M(Im,Jm,Km) % c + Blk % M(Ig,Jg,Kg) % c )
+    ! Metric tensor at the connection face: the mean of the two inverse metrics
+    ! (cell edge vectors), inverted, so that the one-index difference across the
+    ! face is divided by the centre-to-centre distance. Averaging M itself divides
+    ! it by the mean of 1/h instead: with a large size jump across the connection
+    ! (86:1 gives 22x) the normal gradient is far too steep and the explicit
+    ! diffusion number on the big cell exceeds 1, although its own dt is fine.
+    M = Face_Metric ( Blk % M(Im,Jm,Km) % c, Blk % M(Ig,Jg,Kg) % c )
     Waldis = 0.5d0 * ( Blk % yn(Im,Jm,Km) + Blk % yn(Ig,Jg,Kg) )
     Rough = 0.5d0 * ( Blk%ks(Im,Jm,Km) + Blk%ks(Ig,Jg,Kg) )
 
@@ -185,9 +198,9 @@ contains
     call Compute_Diffusive_Flux ( Prim, Gradient_loc, Area, Normal, Waldis, Rough, Flux_loc, Sc, Sct, Prt, Prt_corr )
     call Compute_Diffusive_Flux ( Prim, Gradient_ghost, Area, Normal, Waldis, Rough, Flux_ghost, Sc, Sct, Prt, Prt_corr )
 
-    ! Residual update
-    Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) - 0.5d0 * modfm2 * (Flux_loc + Flux_ghost)
-    
+    ! Share of the residual of the cell
+    dR = - 0.5d0 * modfm2 * (Flux_loc + Flux_ghost)
+
     contains
 
       subroutine Visc_Variables ( Prim, Visc )

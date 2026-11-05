@@ -32,15 +32,19 @@ contains
     use ARES_Advanced_Types_m
     use ARES_Global_m
     use ARES_Mod_MPI, only: is_local_block
-    use ARES_Config_Types_m, only: obj_rans
+    use ARES_Config_Types_m, only: obj_rans, obj_time_scheme, obj_sim_param
 
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: k_energy_coupling
-    
+    logical :: k_energy_coupling, point_implicit
+
     k_energy_coupling = obj_rans%k_energy_coupling
+    ! The point-implicit factor serves steady runs only: in time-accurate runs (time-accurate, or a time-accurate
+    ! HYDRA coupling) the sources are explicit and their stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. &
+                     .not. ( obj_time_scheme%time_accurate .or. obj_sim_param%HYDRA_time_accurate )
 
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
@@ -52,7 +56,7 @@ contains
                         domain % blk(b) % dtlocal, &
                         domain % blk(b) % dim,     &
                         k_energy_coupling,         &
-                        obj_rans%point_implicit )
+                        point_implicit )
     
     end do
 
@@ -173,17 +177,30 @@ contains
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
 
-      ! Point-implicit (Patankar) treatment of the destruction terms.
+      ! Point-implicit factors of steady runs. Each multiplies the whole increment of its row: the fluxes already in
+      ! Res (Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
+      ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
+      ! T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
+      ! With k in the total energy (k_energy_coupling) the energy row has the source -Source(1), whose derivative in rho k
+      ! is +beta* omega. The point-implicit system of the k and energy rows, D = [[1 + dt beta* omega, 0],
+      ! [-dt beta* omega, 1]], gives the energy row its own increment plus dt beta* omega times that of the k row: before
+      ! the factor, the energy row takes dt beta* omega fk = 1 - fk times the residual of the k row, and below the source
+      ! with the factor. The row of E_m + k then has the fluxes alone at every stage, and the steady state, where the
+      ! energy fluxes balance -Source(1) Volume, does not depend on the step. Written 1 - fk, the line shares no product
+      ! with the line of fk (Lib_SST.f90). Without the factor (fk = 1) the line does not run
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
         fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
         fw = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * beta * ome )
+        if (k_energy_coupling) Res(nh,i,j,k) = Res(nh,i,j,k) + ( 1d0 - fk ) * Res(nt,i,j,k)
+        Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
+        Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw
       end if
 
       Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
       Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
-      ! With k in the total energy (k_energy_coupling) the mean-flow energy gives up the source of k with the same
-      ! point-implicit factor as the k row, so that E_m + k has the fluxes alone
+      ! With k in the total energy (k_energy_coupling) the mean-flow energy gives up the source of k, with the factor of
+      ! the k row (see above)
       if (k_energy_coupling) Res(nh,i,j,k) = Res(nh,i,j,k) + Source(1) * Volume(i,j,k) * fk
 
     enddo ; enddo ; enddo ! (i, j, k) loop
@@ -217,6 +234,22 @@ contains
     mi_t = rkw(1) / w_hat
 
   end subroutine Wilcox2006_Eddy_Viscosity
+
+
+  !> Bound of the stiffness of the destruction terms, beta* rho k omega and beta rho omega^2: their derivatives with
+  !> respect to k and omega are beta* omega and 2 beta omega, and beta = beta_0 f_beta with f_beta = (1 + 85 chi)/
+  !> (1 + 100 chi) <= 1, so d <= max(beta*, 2 beta_0) omega: from the cell alone, without f_beta, which takes the
+  !> velocity gradient; exact in 2-D, where chi_omega = 0.
+  pure function Wilcox2006_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use ARES_Global_m
+    implicit none
+    real(kind=8), intent(in), dimension(nRANS) :: rans_variables  ! : rho k, rho omega
+    real(kind=8), intent(in)                   :: rho, walldist, k_rough
+    real(kind=8)                               :: stiff
+
+    stiff = max ( beta_star, 2d0 * beta_0 ) * max ( rans_variables(2) / rho, 0d0 )
+
+  end function Wilcox2006_Stiffness_Bound
 
 
   subroutine Wilcox2006_RANS_Diffusive_Flux ( Flux, rkw, mi_l, vGrad, Gradkw, rho, Area, Normal, Dist )

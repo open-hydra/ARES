@@ -6,7 +6,7 @@ module ARES_Input_Registry
 
   integer, parameter :: TYPE_INT=1, TYPE_REAL=2, TYPE_LOG=3, TYPE_STR=4
 
-  public :: registry_t, Validate_Registry, Save_Values, Restore_Values
+  public :: registry_t, Validate_Registry, Save_Values, Restore_Values, Key_Is_Set
 
   !--------------------------------------------------------
   ! Value container (typed pointers)
@@ -547,6 +547,27 @@ contains
   end do
 
   end subroutine Restore_Values
+
+
+  !> Whether input.ini gives the key name of the section section a value of the type of its parameter (is_set, which
+  !> Load_Ini writes): false for a key that the file leaves out, whose parameter keeps its default, and for a key that is
+  !> not in the registry
+  logical function Key_Is_Set(section, name)
+
+  implicit none
+
+  character(len=*), intent(in) :: section, name
+  integer :: i
+
+  Key_Is_Set = .false.
+  do i = 1, reg%size
+    if (reg%params(i)%section == section .and. reg%params(i)%name == name) then
+      Key_Is_Set = reg%params(i)%is_set
+      return
+    end if
+  end do
+
+  end function Key_Is_Set
 
 
   !> The key i of input.ini, as the messages of Validate_Registry give it: the file, the section, the key and the value as

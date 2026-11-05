@@ -62,7 +62,7 @@ contains
 
   subroutine SST_Source_Terms ( domain )
     use ARES_Advanced_Types_m
-    use ARES_Config_Types_m, only: obj_rans
+    use ARES_Config_Types_m, only: obj_rans, obj_time_scheme, obj_sim_param
     use ARES_Lib_SpalartShur, only : compute_velocity_gradient, compute_rc_terms
     use ARES_Mod_MPI, only: is_local_block
 
@@ -70,10 +70,14 @@ contains
     type(ARES_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: SpalartShur, k_energy_coupling
-      
+    logical :: SpalartShur, k_energy_coupling, point_implicit
+
     SpalartShur       = obj_rans%SpalartShur
     k_energy_coupling = obj_rans%k_energy_coupling
+    ! The point-implicit factor serves steady runs only: in time-accurate runs (time-accurate, or a time-accurate
+    ! HYDRA coupling) the sources are explicit and their stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. &
+                     .not. ( obj_time_scheme%time_accurate .or. obj_sim_param%HYDRA_time_accurate )
 
     if ( SpalartShur ) then
       call compute_velocity_gradient ( domain )
@@ -94,7 +98,7 @@ contains
                      domain % blk(b) % dtlocal,      &
                      domain % blk(b) % dim,          &
                      SpalartShur, k_energy_coupling, &
-                     obj_rans%point_implicit, obj_rans%sst_compressible )
+                     point_implicit, obj_rans%sst_compressible )
 
     end do
 
@@ -216,20 +220,36 @@ contains
       Source(1) = Prod(1) - Diss(1)
       Source(2) = Prod(2) - Diss(2) + Diff
 
-      ! Point-implicit (Patankar) treatment of the destruction terms.
+      ! Point-implicit factors of steady runs. Each multiplies the whole increment of its row: the fluxes already in
+      ! Res (Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not depend
+      ! on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1;
+      ! T. H. Pulliam, AIAA Paper 93-3360, eq. 8).
       ! For omega, the cross-diffusion is included only when destabilizing:
       ! dDiff/d(rho*w) = -Diff/(rho*w), negative (hence admissible in the
       ! Patankar denominator) only for Diff > 0.
+      ! With k in the total energy (k_energy_coupling) the energy row has the source -Source(1), whose derivative in rho k
+      ! is +beta* omega. The point-implicit system of the k and energy rows, D = [[1 + dt beta* omega, 0],
+      ! [-dt beta* omega, 1]], gives the energy row its own increment plus dt beta* omega times that of the k row: before
+      ! the factor, the energy row takes dt beta* omega fk = 1 - fk times the residual of the k row, and below the source
+      ! with the factor. The row of E_m + k then has the fluxes alone at every stage, and the steady state, where the
+      ! energy fluxes balance -Source(1) Volume, does not depend on the step. Written 1 - fk, the line shares no product
+      ! with the line of fk: written dt beta* omega fk, it can make the compilers round fk otherwise (no longer fusing
+      ! the product with the + 1 in one multiply-add), and the runs without the coupling would change at round-off.
+      ! 1 - fk loses relative digits when dt beta* omega is small, where the term is below the round-off of the energy
+      ! row. Without the factor (fk = 1) the line does not run
       fk = 1d0 ; fw = 1d0
       if ( point_implicit ) then
         fk = 1d0 / ( 1d0 + dt(i,j,k) * beta_star * ome )
         fw = 1d0 / ( 1d0 + dt(i,j,k) * ( 2d0 * beta * ome + Max( Diff, 0d0 ) / ( rho * ome ) ) )
+        if ( k_energy_coupling ) Res(nh,i,j,k) = Res(nh,i,j,k) + ( 1d0 - fk ) * Res(nt,i,j,k)
+        Res(nt,  i,j,k) = Res(nt,  i,j,k) * fk
+        Res(nt+1,i,j,k) = Res(nt+1,i,j,k) * fw
       end if
 
       Res(nt,  i,j,k) = Res(nt,  i,j,k) - Source(1) * Volume(i,j,k) * fk
       Res(nt+1,i,j,k) = Res(nt+1,i,j,k) - Source(2) * Volume(i,j,k) * fw
-      ! With k in the total energy (k_energy_coupling) the mean-flow energy gives up the source of k with the same
-      ! point-implicit factor as the k row, so that E_m + k has the fluxes alone
+      ! With k in the total energy (k_energy_coupling) the mean-flow energy gives up the source of k, with the factor of
+      ! the k row (see above)
       if ( k_energy_coupling ) Res(nh,i,j,k) = Res(nh,i,j,k) + Source(1) * Volume(i,j,k) * fk
 
     enddo ; enddo ; enddo ! (i, j, k) loop
@@ -263,6 +283,22 @@ contains
     mi_t = rho*kap*alpha_1 / Max ( alpha_1*ome, S*F2 )
 
   end subroutine SST_Eddy_Viscosity
+
+
+  !> Bound of the stiffness of the destruction terms, beta* rho k omega and beta rho omega^2: their derivatives with
+  !> respect to k and omega are beta* omega and 2 beta omega, and beta = F1 beta_1 + (1 - F1) beta_2 <=
+  !> max(beta_1, beta_2), so d <= max(beta*, 2 max(beta_1, beta_2)) omega: from the cell alone, without F1, which takes
+  !> gradients.
+  pure function SST_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use ARES_Global_m
+    implicit none
+    real(kind=8), intent(in), dimension(nRANS) :: rans_variables  ! : rho k, rho omega
+    real(kind=8), intent(in)                   :: rho, walldist, k_rough
+    real(kind=8)                               :: stiff
+
+    stiff = max ( beta_star, 2d0 * max ( beta_1, beta_2 ) ) * max ( rans_variables(2) / rho, 0d0 )
+
+  end function SST_Stiffness_Bound
 
 
   subroutine SST_RANS_Diffusive_Flux ( Flux, rkw, mi_l, Gradvel, Gradkw, rho, Area, Normal, Dist )

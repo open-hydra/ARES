@@ -108,12 +108,19 @@ $$
 \tilde\nu_\text{wall} = 0
 $$
 
+The ghost cell behind a viscous wall takes $2\tilde\nu_\text{wall} - \tilde\nu_\text{cell}$
+([Wall ghost cells of the turbulence variables](#wall-ghost-cells-of-the-turbulence-variables)). Negative values are
+clipped: after every stage ARES keeps $\rho\tilde\nu \ge 10^{-10}$ (the realizability floor) and counts the cell
+updates in which a stage made it negative ([Time-accurate runs](#time-accurate-runs-explicit-sources)).
+
 ### SA Variants
 
 - **SA-R (rotation).** Adds $c_\text{rot}\,\min\!\bigl(0,\,\lVert S\rVert-\Omega\bigr)$ to the production ($c_\text{rot}=2$), sensitising the model to system rotation.
 - **SA-RC (rotation/curvature).** The Spalart–Shur correction multiplies the production by a factor $f_{r1}(r^\ast,\tilde r)$, built from the strain/vorticity ratio $r^\ast=S/\Omega$ and from the material derivative of $S_{ij}$. It is the recommended choice for strongly curved and swirling flows. For SA-RC, $f_{r1}$ is not bounded and can be negative (NASA TMR, SA-RC); SST-RC bounds its own to $[0,\,1.25]$.
 
     ARES computes the factor $2r^\ast/(1 + r^\ast)$ of $f_{r1}$ as $2S/(S + \Omega)$: where the vorticity vanishes it takes its limit, 2. Where strain and vorticity are both below $10^{-30}\ \mathrm{s^{-1}}$, in a fluid at rest or a uniform flow, $r^\ast$ is not defined: the velocity gradient there is the $10^{-40}$ that ARES adds to the velocity differences, times the metric of the cell. ARES then takes the value of simple shear, 1, with $\tilde r = 0$. The correction does not act there, and the production is that of SA.
+
+    ARES evaluates the Lagrangian derivative $DS_{ij}/Dt = \partial S_{ij}/\partial t + u_k\,\partial S_{ij}/\partial x_k$ with its convective part only. Without the time term the correction holds for steady flows only: «Without the time term, the model is not correct in a time-dependent flowfield» (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-RC). Time-accurate runs with a `-RC` correction (SA-RC, SST-RC) print a warning at start-up.
 - **SAcomp (compressibility).** Paciorri–Sabetta correction scaling the production with the turbulent-stress ratio $S_\tau = \omega\,\tilde\nu f_{v1}/a^2$, for high-speed shear layers.
 
     !!! warning "Stopped at set-up"
@@ -339,7 +346,7 @@ $$
 \frac{\partial(\rho E_m)}{\partial t} + \dots = \dots - \bigl(P_k - \beta^\ast\rho\,\omega\,k\bigr).
 $$
 
-The sink is the same source as in the $k$ equation, including its point-implicit factor when `point-implicit = .true.`. So $E_m + k$ is conserved.
+The sink is the same source as in the $k$ equation, so $E_m + k$ is conserved. In steady runs with `point-implicit = .true.` the [point-implicit](#steady-runs-point-implicit-factor) factor treats the energy and $k$ equations as one system: the two increments add up to that of the fluxes of $E_m + k$ at every stage, and the steady state does not depend on the time step.
 
 This is the total-energy form of TMR [11] and Wilcox [3], written for $E_m$. Subtracting the $k$ equation from the equation for $E = E_m + k$ leaves exactly this sink, and the diffusion of $k$ cancels between the two equations. The thermodynamic state follows from the mean-flow energy in either case: $k$ is not part of the internal energy.
 
@@ -475,9 +482,31 @@ All models are accessed through **procedure pointers** in `Mod_RANS`, bound at s
 | `RANS_Diffusive_Flux` | Turbulent diffusion of the model variables |
 | `Stress_Vector` | Viscous + Reynolds stress on a face |
 | `RANS_Set_Wall_Values` | Wall boundary conditions for the model variables |
+| `RANS_Extrapolate_Wall` | Ghost-cell value of the model variables at walls, $2Z_\text{wall} - Z_\text{cell}$ |
 | `RANS_Set_Blowing_Wall` | Wall-transpiration (blowing/suction) wall values |
+| `RANS_Stiffness_Bound` | Bound of the stiffness of the destruction terms from the cell alone, for the time step of [time-accurate runs](#time-accurate-runs-explicit-sources) |
 
 This lets the model be switched at run time without recompilation.
+
+### Wall ghost cells of the turbulence variables
+
+Behind a viscous wall (`301`, `302`) the ghost cell of each turbulence variable takes the value that puts the wall
+value on the face,
+
+$$
+Z_\text{ghost} = 2\,Z_\text{wall} - Z_\text{cell}, \qquad Z = \tilde\nu,\ k,\ \omega,\ R_{ij} ,
+$$
+
+with the wall values of the models above (`RANS_Extrapolate_Wall`). It is the rule of CFL3D, «the actual wall boundary
+conditions for the turbulence quantities (unlike the primitive variables) are applied at ghost cells» (S. L. Krist,
+R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual (Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186).
+The wall flux routines set these values at every stage; the source terms read them in the gradients of the wall cells:
+the $c_{b2}$ term of SA and its term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the
+cross-diffusion of SST, the cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of
+the wall cell sees $\partial\tilde\nu/\partial y = a$; a ghost cell that copied the cell would give $a/2$. The other
+primitive variables are copied into the wall ghost cells, with the velocity reversed (`Ghost_Wall_Extrapolation`); the
+fluxes through the first interior faces use the extrapolation of `Fill_Ghost_Cell`. The walls coupled to another solver
+(`103`, `104`) have no wall flux routine of their own: their ghost cells copy the cell, turbulence variables included.
 
 ### Blowing / wall-transpiration correction
 
@@ -486,6 +515,152 @@ The `-blowcorr` suffix activates a correction (`RANS_Set_Blowing_Wall`) that mod
 ### Turbulent transport numbers and corrections
 
 `[ARES-Turbulence]` also sets the turbulent Prandtl ($\mathrm{Pr}_t$, default 0.90) and Schmidt ($\mathrm{Sc}_t$) numbers used in the [effective conductivity](thermo.md#transport-properties), the optional turbulent-kinetic-energy coupling into the energy equation (`k-energy-coupling`), and a wall-roughness Prandtl correction (`Prt-correction`, requires an `-rough` SA model) that adjusts $\mathrm{Pr}_t$ near rough walls.
+
+---
+
+## Numerical treatment of the source terms
+
+The turbulence source terms are added to the residual and advanced with the same explicit
+Runge–Kutta stages as the mean flow. Their destruction parts are stiff near walls: for the
+$k$–$\omega$ models $\omega$ grows like $1/y^2$ towards the wall, and an explicit stage on
+$\dot q = -D(q)$ gives $q - \Delta t\,D = q\,(1 - \Delta t\,D/q)$, negative for $\Delta t\,D/q > 1$. Here
+$q$ is the conserved turbulence variable; the destruction rate $D/q$ is at most $d$, the derivative
+of the destruction ($d/2$ for $\tilde\nu$ and $\omega$, whose destruction is quadratic):
+
+| Model | Equation | $d = \partial D/\partial q$ |
+|-------|----------|------------------------------|
+| SST / Wilcox | $k$ | $\beta^\ast\,\omega$ |
+| SST / Wilcox | $\omega$ | $2\,\beta\,\omega$ |
+| SA | $\tilde\nu$ | $2\,c_{w1}\,f_w\,\tilde\nu/y^2$ |
+
+($y$ the wall distance; $f_w$ is held fixed.) Steady and time-accurate runs treat this
+stiffness in two different ways.
+
+### Steady runs: point-implicit factor
+
+With `point-implicit = .true.` (the default is `.false.`) the increment of each turbulence equation is divided
+by $1 + \Delta t\,d$, with the local time step $\Delta t$ of the cell:
+
+$$
+q^{n+1} = q^n + \frac{\Delta t}{1 + \Delta t\,d}\,\bigl( F(q^n) + S(q^n) \bigr),
+$$
+
+where $F$ stands for the fluxes and $S = P - D$ for the source (in each Runge–Kutta stage, with the
+residual of the stage). For $\omega$ of SST, $d$ also takes the derivative of the cross-diffusion where that term is
+positive, $\max(D_\omega^{cd}, 0)/(\rho\omega)$: there it decreases as $\omega$ grows, and it is the only part of the
+source that the factor can take besides the destruction. This is the point-implicit form of Bussing and Murman,
+$D\,\Delta q = \Delta t\,(F + S)$ with $D = 1 - \Delta t\,\partial S/\partial q$ approximated by its
+destruction part $1 + \Delta t\,d$, in its first-order form, «suitable for steady-state
+calculations» (H. C. Yee, J. L. Shinn, NASA TM-89415, 1986, eq. 3.1). Like any approximation of the
+implicit operator of a delta form, it leaves the steady state where the residual vanishes
+(T. H. Pulliam, *Time Accuracy and the Use of Implicit Methods*, AIAA Paper 93-3360, eq. 8): the
+converged solution is that of $F + S = 0$, whatever the time step, and the factor only lets
+steady runs keep the mean-flow CFL near walls. The residuals of $\tilde\nu$, $k$ and $\omega$ printed during
+the run (the change of the variable over the step) are scaled by the same factor, so near walls they
+are smaller than without it.
+
+With [`k-energy-coupling = true`](#energy-coupling-k-energy-coupling) the energy of the mean flow has
+the sink $-S_k$ of the $k$ equation, whose derivative with respect to $\rho k$ is $+\beta^\ast\omega$, so
+the factor is that of the two equations together: the implicit operator of the $k$ and energy rows
+is $D = \begin{pmatrix} 1 + \Delta t\,\beta^\ast\omega & 0 \\ -\Delta t\,\beta^\ast\omega & 1 \end{pmatrix}$, and the
+energy takes its own increment plus $\Delta t\,\beta^\ast\omega$ times that of $k$,
+
+$$
+\Delta(\rho E_m) = \Delta t\,\bigl(F_E - S_k\bigr) + \Delta t\,\beta^\ast\omega\,\Delta(\rho k), \qquad
+\Delta(\rho k) = \frac{\Delta t}{1 + \Delta t\,\beta^\ast\omega}\,\bigl(F_k + S_k\bigr).
+$$
+
+The two increments add up to $\Delta t\,(F_E + F_k)$, the fluxes of $E_m + k$ alone, at every stage, and
+the converged solution, $F_k + S_k = 0$ and $F_E = S_k$, does not depend on the time step.
+
+```ini
+[ARES-Turbulence]
+point-implicit = .true.   ; point-implicit factor on the turbulence increment, steady runs (default .false.)
+```
+
+### Time-accurate runs: explicit sources
+
+In time-accurate runs (`time-accurate = .true.`, or a time-accurate HYDRA coupling) the factor is not applied,
+whatever `point-implicit` says; when `input.ini` sets `point-implicit = .true.`, a warning at start-up recalls it (a
+run that leaves the key out takes the default and gets no warning). Since
+$(F + S)/(1 + \Delta t\,d) = (F + S)(1 - \Delta t\,d) + O(\Delta t^2)$, the factor would make the turbulence equations,
+and the mean flow through $\mu_t$, first-order accurate in time. With the $k$–$\omega$ models the error of the factor
+would not even vanish when the mesh and the step are refined together, as in an explicit run, whose global step goes as
+$h^2$ in the wall cells: there $\omega \approx 6\nu/(\beta_1 y^2)$ makes $\Delta t\,d$ independent of the mesh, and of
+order ten at the usual `vnn`. With Spalart–Allmaras $\Delta t\,d$ grows with $f_w\,y_1^+$ ($y_1^+$ the height of the
+first cell in wall units): it vanishes as the mesh is refined, but is of order one at the usual heights.
+The sources are explicit, like the fluxes, and the local time step of each cell
+([Time Integration](time-integration.md#stability-conditions)) includes a bound of their stiffness:
+
+$$
+\frac{1}{\Delta t_i} = \frac{1}{\Delta t_i^\text{cfl, vnn}} + \hat d_i ,
+\qquad \hat d_i \ge d_i = \max_q \frac{\partial D_q}{\partial q} ,
+$$
+
+with $\hat d$ a bound of the rates $d$ of the table that the state of the cell at the start of the step gives
+alone, without gradients or ghost cells:
+
+| Model | $\hat d$ | $\hat d / d$ |
+|-------|----------|--------------|
+| SST | $\max(\beta^\ast, 2\max(\beta_1, \beta_2))\,\omega$ | $\beta = F_1\beta_1 + (1 - F_1)\beta_2$, and $F_1$ takes gradients: $\beta_2/\beta_1 = 1.10$ where $F_1 = 1$ (next to walls), 1 where $F_1 = 0$ |
+| Wilcox 2006 | $\max(\beta^\ast, 2\beta_0)\,\omega$ | $\beta = \beta_0 f_\beta$, and $f_\beta \le 1$ takes the velocity gradient: $1/f_\beta$, 1 in 2-D ($\chi_\omega = 0$), at most $1/0.85$ |
+| SA | $2\,c_{w1}\,(1 + c_{w3}^6)^{1/6}\,\tilde\nu/y^2$ | $f_w = g\,[(1 + c_{w3}^6)/(g^6 + c_{w3}^6)]^{1/6}$ grows with $g \ge 0$ towards $(1 + c_{w3}^6)^{1/6} = 2.005$: $2.005/f_w$, 1 where $r$ reaches its cap of 10, about 2 where $r \approx 1$ (an equilibrium boundary layer, where the destruction is slow against the diffusion) |
+
+($y$ the wall distance of the source, moved below a rough wall with SA-rough.) The Reynolds-stress model SSG/LRR
+takes no bound: none was derived for its sources, and its $\hat d$ is zero. Then
+$\Delta t\,d \le \Delta t\,\hat d \le 1$: a forward-Euler stage cannot make
+$\tilde\nu$, $k$ or $\omega$ negative through their destruction, and neither can RK2 (Heun) and RK3, whose
+stages are convex combinations of forward-Euler stages (W. Hundsdorfer, *Numerical Solution of
+Advection–Diffusion–Reaction Equations*, lecture notes, 2000, §6.2, Theorem 6.4; C.-W. Shu,
+S. Osher, *J. Comput. Phys.* 77, 1988, Proposition 2.1 of its report version, ICASE Report 87-33).
+The destruction of $\tilde\nu$ and of $\omega$ is quadratic, $D = (d/2)\,q$, which leaves them a
+margin of 2. Where the destruction is faster than the transport, as in the wall cells of fine
+meshes, above all with SST, the step is smaller than the convective and diffusive limits.
+
+The bound covers the destruction only. Three sinks stay outside it: the cross-diffusion of SST,
+$2(1-F_1)\,\rho\,\sigma_{\omega 2}\,\nabla k\cdot\nabla\omega/\omega$, negative where $\nabla
+k\cdot\nabla\omega < 0$ (Wilcox 2006 switches its cross-diffusion off there); with `sst-production =
+compressible`, the dilatation part of the production of SST, $-\tfrac23\rho k\,\nabla\cdot\mathbf{u}$
+and $-\tfrac23\gamma\rho\omega\,\nabla\cdot\mathbf{u}$, negative where the flow expands; and the
+production of SA-R and SA-RC, which can be negative («the SA-RC production term can be negative»,
+NASA Turbulence Modeling Resource). Like the transport, they can make a stage negative, and the count
+at the end of the run shows it.
+
+The convex combination keeps the bound of the forward-Euler stage only where that bound holds on the
+state each stage starts from: Shu and Osher assume that the forward-Euler step keeps the property,
+under one step restriction, for every state it is applied to (ICASE Report 87-33, (2.7) and
+Proposition 2.1), while here the restriction depends on the state through $d$, and the rates are
+those of the state at the start of the step. A stage from a state where the rate is $d_s$ takes
+$q_s - \Delta t\,(d_s/2)\,q_s$ through a quadratic destruction, positive while $\Delta t\,d_s < 2$; with
+$\Delta t\,\hat d \le 1$ this holds as long as $d_s < 2\,\hat d$. The margin of 2 of $\tilde\nu$ and $\omega$
+therefore covers a rate that grows within the step up to twice the bound at the start, and no more; $k$, whose
+destruction is linear, keeps only the margin by which its rate $\beta^\ast\omega$ lies below $\hat d$. An
+impulsive start of a $k$–$\omega$ model from a state far from the wall value of $\omega$ goes beyond
+that: during the first step the wall condition raises $\omega$ in the wall cells by orders of
+magnitude, and with the full step the explicit destruction overshoots ($\omega < 0$, then the floor
+and a very large $\mu_t$). Start such runs with the CFL ramp (`cfl-rise-threshold`).
+
+At the end of a RANS run (one- and two-equation models) in which a stage made $\tilde\nu$, $k$ or $\omega$ negative
+before the realizability floor, ARES prints how many cell updates had such a stage; a run in which none did prints no
+such line:
+
+```text
+ Turbulence variables below zero after a stage (set to the floor): <n>
+```
+
+In a steady run the count covers the whole run: the start, and the fronts of $k$ that the fluxes
+push below zero where $k$ is about zero, which can last to the last iteration; it is a total, which
+convergence does not bring back to zero.
+
+### Relation to under-relaxation
+
+Point-implicit damping is a *physically weighted, automatic* form of
+under-relaxation: the effective relaxation factor $1/(1+\Delta t\,d)$ is
+large (≈1) where the source is mild and small only where the destruction is
+stiff, and it scales with the local time step. A constant global
+under-relaxation factor on the turbulence update achieves a similar
+stabilising effect but is blunter: it slows convergence everywhere and must be
+hand-tuned per case and grid.
 
 ---
 

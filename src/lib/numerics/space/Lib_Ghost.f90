@@ -152,7 +152,11 @@ contains
     enddo
 
     ! Chimera Pg(:,3:6): reads the ghost columns written just above, so it
-    ! must stay a separate loop (implicit barrier in between)
+    ! must stay a separate loop (implicit barrier in between). Each entry
+    ! writes its own Pg only: beyond the edges of a block face the ghost row
+    ! is extrapolated into Pg, not written in the block (Fill_BC_Ghost_Chimera),
+    ! so the entries of two chimera faces of a block that meet at an edge write
+    ! no common location, and one loop over all the entries has no data race
     !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm)
     do ii = 1, domain % n_local_bc
       i = domain % local_bc_idx(ii)
@@ -460,84 +464,87 @@ contains
   end subroutine Fill_BC_Ghost_Connection
 
 
+  !> Pg(:,3:6) of a chimera face: the tangential neighbours of its ghost cell, for the viscous stencil of the face
+  !> (BC_Connection_Visc), which takes on the side of the ghost cells the central differences along the face of the row of
+  !> the ghost cells, as on the side of the cell those of the row of the cell. Pg(:,3:4) are the lower and the upper
+  !> neighbour in the first tangential direction of the face, Pg(:,5:6) in the second (j and k for faces 1-2, i and k for
+  !> 3-4, i and j for 5-6). Within the block face a neighbour is the ghost cell of the row, filled from the donors
+  !> (Ghost_Chimera). Beyond an edge of the block face the row has no ghost cell: the neighbour is extrapolated linearly
+  !> along the row, in the variables whose differences the stencil takes, so that the central difference there is the
+  !> one-sided one, exact for a linear field as that of the row of the cell is (the ghost cell copied there halves it, and
+  !> the face takes 3/4 of the derivative of a linear field along that direction). A block one cell wide in a direction has
+  !> no row to extrapolate along: in the k direction of a 2-D mesh the neighbour is the ghost cell turned by the wedge
+  !> angle, as the k neighbours of a cell are (Ghost_Axysimmetry; no turn on a plane mesh), elsewhere the ghost cell
+  !> itself. Nothing is written in the block: two chimera faces that meet at an edge of a block share no written location.
   subroutine Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, blk, Pg )
+    use ARES_Lib_Metrics, only: delthe
     implicit none
-    integer, intent(in) :: Im, Jm, Km, Fm
-    type(ARES_block_type), intent(inout) :: blk
-    real(R8), intent(inout)              :: Pg(nprim,6)
+    integer, intent(in)               :: Im, Jm, Km, Fm
+    type(ARES_block_type), intent(in) :: blk
+    real(R8), intent(inout)           :: Pg(nprim,6)
     ! Local
-    integer :: i1, j1, k1, i2, j2, k2, i3, j3, k3, i4, j4, k4
-    integer :: dim(3), Ig, Jg, Kg
+    integer :: c(3), g(3), e(3), t(2), n, s, m
 
-    dim = blk % dim
-    Ig = Im - guide(Fm,1)
-    Jg = Jm - guide(Fm,2)
-    Kg = Km - guide(Fm,3)
-
+    c = [ Im, Jm, Km ]
+    g = c - guide(Fm,:)
     select case (Fm)
-      case(1:2)
-        if ( Jm == 1 )      blk % P (:,Ig, Jm-1, Km) = blk % P (:,Ig, Jm, Km)
-        if ( Jm == dim(2) ) blk % P (:,Ig, Jm+1, Km) = blk % P (:,Ig, Jm, Km)
-        if ( Km == 1 )      blk % P (:,Ig, Jm, Km-1) = blk % P (:,Ig, Jm, Km)
-        if ( Km == dim(3) ) blk % P (:,Ig, Jm, Km+1) = blk % P (:,Ig, Jm, Km)
-      case(3:4)
-        if ( Im == 1 )      blk % P (:,Im-1, Jg, Km) = blk % P (:,Im, Jg, Km)
-        if ( Im == dim(1) ) blk % P (:,Im+1, Jg, Km) = blk % P (:,Im, Jg, Km)
-        if ( Km == 1 )      blk % P (:,Im, Jg, Km-1) = blk % P (:,Im, Jg, Km)
-        if ( Km == dim(3) ) blk % P (:,Im, Jg, Km+1) = blk % P (:,Im, Jg, Km)
-      case(5:6)
-        if ( Im == 1 )      blk % P (:,Im-1, Jm, Kg) = blk % P (:,Im, Jm, Kg)
-        if ( Im == dim(1) ) blk % P (:,Im+1, Jm, Kg) = blk % P (:,Im, Jm, Kg)
-        if ( Jm == 1 )      blk % P (:,Im, Jm-1, Kg) = blk % P (:,Im, Jm, Kg)
-        if ( Jm == dim(2) ) blk % P (:,Im, Jm+1, Kg) = blk % P (:,Im, Jm, Kg)
+      case (1:2)
+        t = [ 2, 3 ]
+      case (3:4)
+        t = [ 1, 3 ]
+      case default
+        t = [ 1, 2 ]
     end select
 
-    select case(Fm)
-      case(1:2)
-        i1 = Im
-        j1 = Jm - 1
-        k1 = Km
-        i2 = Im
-        j2 = Jm + 1
-        k2 = Km
-        i3 = Im
-        j3 = Jm
-        k3 = Km - 1
-        i4 = Im
-        j4 = Jm
-        k4 = Km + 1
-      case(3:4)
-        i1 = Im - 1
-        j1 = Jm
-        k1 = Km
-        i2 = Im + 1
-        j2 = Jm
-        k2 = Km
-        i3 = Im
-        j3 = Jm
-        k3 = Km - 1
-        i4 = Im
-        j4 = Jm
-        k4 = Km + 1
-      case(5:6)
-        i1 = Im - 1
-        j1 = Jm
-        k1 = Km
-        i2 = Im + 1
-        j2 = Jm
-        k2 = Km
-        i3 = Im
-        j3 = Jm - 1
-        k3 = Km
-        i4 = Im
-        j4 = Jm + 1
-        k4 = Km
-    end select
+    do n = 1, 2
+      e = 0
+      e(t(n)) = 1
+      do s = -1, 1, 2
+        m = 2*n + 1 + (s+1)/2   ! Pg(:,3) and Pg(:,4) for n = 1, Pg(:,5) and Pg(:,6) for n = 2
+        if ( c(t(n)) + s >= 1 .and. c(t(n)) + s <= blk % dim(t(n)) ) then
+          ! Within the block face: the ghost cell of the row
+          Pg(:,m) = blk % P (:,g(1)+s*e(1),g(2)+s*e(2),g(3)+s*e(3))
+        elseif ( blk % dim(t(n)) > 1 ) then
+          ! Beyond an edge of the block face: extrapolated along the row
+          Pg(:,m) = Visc_Extrapolated ( blk % P (:,g(1),g(2),g(3)), blk % P (:,g(1)-s*e(1),g(2)-s*e(2),g(3)-s*e(3)) )
+        else
+          ! One cell in this direction: the ghost cell, in the k direction of a 2-D mesh turned by the wedge angle as by
+          ! Ghost_Axysimmetry beyond face 5 (s = -1) or face 6 (s = 1)
+          Pg(:,m) = blk % P (:,g(1),g(2),g(3))
+          if ( t(n) == 3 .and. ndir < 3 ) then
+            Pg(nv,m) = blk % P (nv,g(1),g(2),g(3)) * cos(delthe) - s * blk % P (nw,g(1),g(2),g(3)) * sin(delthe)
+            Pg(nw,m) = blk % P (nv,g(1),g(2),g(3)) * sin(delthe) * s + blk % P (nw,g(1),g(2),g(3)) * cos(delthe)
+          end if
+        end if
+      enddo
+    enddo
 
-    Pg (:,3) = blk % P (:,i1,j1,k1)
-    Pg (:,4) = blk % P (:,i2,j2,k2)
-    Pg (:,5) = blk % P (:,i3,j3,k3)
-    Pg (:,6) = blk % P (:,i4,j4,k4)
+  contains
+
+    !> The state whose viscous variables (velocity, temperature, and the turbulence variables per unit mass: those of
+    !> Visc_Variables in BC_Connection_Visc) are twice those of the state a minus those of the state b. The state is
+    !> taken at the pressure of a, which is not a viscous variable: the enthalpy of the extrapolated temperature at that
+    !> pressure, and the turbulence variables times the density of that state
+    function Visc_Extrapolated ( a, b ) result ( q )
+      use FLINT_Lib_Thermodynamic
+      implicit none
+      real(R8), intent(in) :: a(nprim), b(nprim)
+      real(R8)             :: q(nprim)
+      ! Local
+      real(R8) :: rho_a, rho_b, rho_q, temperature
+
+      rho_a = ph2vars( a(np), a(nh), rho_tab )
+      rho_b = ph2vars( b(np), b(nh), rho_tab )
+      temperature = 2d0 * ph2vars( a(np), a(nh), T_tab ) - ph2vars( b(np), b(nh), T_tab )
+      q(np)    = a(np)
+      q(nu:nw) = 2d0 * a(nu:nw) - b(nu:nw)
+      q(nh)    = pT2h( q(np), temperature )
+      if ( nprim > nh ) then
+        rho_q = ph2vars( q(np), q(nh), rho_tab )
+        q(nt:nprim) = ( 2d0 * a(nt:nprim) / rho_a - b(nt:nprim) / rho_b ) * rho_q
+      end if
+
+    end function Visc_Extrapolated
 
   end subroutine Fill_BC_Ghost_Chimera
 
@@ -568,12 +575,19 @@ contains
       if ( Is_Wall( domain%bc(i)%type ) ) then
         ! Invert the velocity components
         domain%blk(bm)%P (nu:nw,ig,jg,kg) = - domain%blk(bm)%P (nu:nw,im,jm,km)
-        ! NOTE: the extrapolation of the turbulence variables is done in BC routines, due
-        ! to the fact that omega_wall needs to be set to extrapolate its value in ghost cell
 
-        ! Other variables copied
+        ! Other variables copied, but not the turbulence variables (the last nrans):
+        ! the wall flux routines set their ghost values from the wall values,
+        ! Z_ghost = 2 Z_wall - Z_cell (RANS_Extrapolate_Wall; S. L. Krist, R. T. Biedron,
+        ! C. L. Rumsey, CFL3D User's Manual 5.0, NASA/TM-1998-208444, eq. H-186), and
+        ! the source terms of the wall cells must see those
         domain%blk(bm)%P (np,ig,jg,kg) = domain%blk(bm)%P (np,im,jm,km)
-        domain%blk(bm)%P (nh:nprim,ig,jg,kg) = domain%blk(bm)%P (nh:nprim,im,jm,km)
+        domain%blk(bm)%P (nh:nprim-nrans,ig,jg,kg) = domain%blk(bm)%P (nh:nprim-nrans,im,jm,km)
+        ! The walls coupled to another solver (103, 104) have no such routine (BC_Fluxes gives
+        ! them the inviscid wall flux and the flux of the other solver only): their turbulence
+        ! variables are copied from the cell, as the other variables
+        if ( domain%bc(i)%type == 103 .or. domain%bc(i)%type == 104 ) &
+          domain%blk(bm)%P (nprim-nrans+1:nprim,ig,jg,kg) = domain%blk(bm)%P (nprim-nrans+1:nprim,im,jm,km)
       endif
     enddo
 

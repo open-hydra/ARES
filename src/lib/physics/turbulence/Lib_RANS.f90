@@ -11,6 +11,7 @@ module ARES_Lib_RANS
   procedure(RANS_Extrapolate_Wall_if),      pointer, public :: RANS_Extrapolate_Wall
   procedure(RANS_Enforce_Realizability_if), pointer, public :: RANS_Enforce_Realizability
   procedure(RANS_Set_Blowing_Wall_if),      pointer, public :: RANS_Set_Blowing_Wall
+  procedure(RANS_Stiffness_Bound_if),       pointer, public :: RANS_Stiffness_Bound
 
   !> Abstract interface relative to the eddy viscosity computation procedure.
   abstract interface
@@ -96,6 +97,22 @@ module ARES_Lib_RANS
       real(R8), intent(in)                     :: rho, mil, mdot, dist
       real(R8), intent(in), dimension(3)       :: tau
     end subroutine RANS_Set_Blowing_Wall_if
+  end interface
+
+  !> Abstract interface of a bound d >= max_q dD_q/dq of the stiffness of the destruction terms of the turbulence
+  !> equations, from the state of the cell alone (no gradient, no ghost cell): the time step of time-accurate runs
+  !> takes it (Compute_dt), so that dt d <= 1.
+  abstract interface
+    pure function RANS_Stiffness_Bound_if ( rans_variables, rho, walldist, k_rough ) result ( d )
+      use iso_fortran_env, only: I4 => int32, R8 => real64
+      use ARES_Global_m
+      implicit none
+      real(R8), intent(in), dimension(nRANS) :: rans_variables  ! : RANS variables of the cell (rho times each)
+      real(R8), intent(in)                   :: rho             ! : density
+      real(R8), intent(in)                   :: walldist        ! : distance from the nearest wall
+      real(R8), intent(in)                   :: k_rough         ! : sand-grain roughness of that wall (0 = smooth)
+      real(R8)                               :: d               ! : bound of the stiffness [1/s]
+    end function RANS_Stiffness_Bound_if
   end interface
 
 contains

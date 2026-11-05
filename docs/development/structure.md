@@ -126,18 +126,19 @@ sequenceDiagram
 
 Each `Explicit_Step` performs one time step:
 
-1. **Compute Δt** — local/global steps from the CFL and VNN conditions (preconditioned signal speed when `prec` is active).
+1. **Compute Δt** — local/global steps from the CFL and VNN conditions (preconditioned signal speed when `prec` is active; in time-accurate RANS runs also the stiffness of the turbulence sources).
 2. **Runge–Kutta loop** (`n_RK` stages):
     - Fill ghost cells (boundary + inter-block).
     - Evaluate convective fluxes (reconstruction → Riemann solver).
     - Evaluate diffusive fluxes.
-    - Apply boundary fluxes.
-    - Add RANS source terms (if turbulent).
+    - Apply boundary fluxes: first one flux per face between blocks (`Connection_Fluxes`), then every boundary record.
+    - Add RANS source terms (if turbulent), after the wall ghost cells of the mean flow (`Ghost_Wall_Extrapolation`).
     - Update state via `Newstate` (optional IRS smoothing + RK combination + thermo inversion).
 3. **Compute residual** (pressure residual) and write diagnostics.
 
 The RK stages run inside one OpenMP parallel region. The MPI calls made inside it (the halo
-exchange in `Fill_Ghost_Cell`, the residual exchange of the implicit residual smoothing) are made
+exchange in `Fill_Ghost_Cell`, the flux of the faces between blocks whose two cells are on different
+ranks in `Connection_Fluxes`, the residual exchange of the implicit residual smoothing) are made
 by the primary thread only, in `!$omp master` blocks (OpenMP 5.1 added the `masked`
 construct and deprecated `master`), each followed by an explicit
 `!$omp barrier` wherever the other threads use its result. ARES initialises MPI with

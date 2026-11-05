@@ -84,8 +84,9 @@ contains
     else
       dPrt = 0.00d0
     end if
-    kt = mit*cp/(obj_rans%Prt+dPrt) 
-    Gradient(nh,Dir) = -Heat_Flux / ( 2d0*(kl+kt)*dot_product( M(Dir,:), normal ) ) * modfm2
+    kt = mit*cp/(obj_rans%Prt+dPrt)
+    ! Heat_Flux is positive into the fluid on every face: the wall is hotter than the cell when it heats the fluid
+    Gradient(nh,Dir) = -Heat_Flux / ( 2d0*(kl+kt)*dot_product( M(Dir,:), normal ) )
 
     ! Wall variables
     Twall = temp - Gradient(nh,Dir)
@@ -101,7 +102,7 @@ contains
     ! Fluxes
     Flux(np) = 0d0 
     Flux(nu:nw) = Stress * Area
-    Flux(nh) = Area * Heat_Flux
+    Flux(nh) = Area * Heat_Flux * modfm2   ! k grad T . n: Heat_Flux on faces 2, 4, 6, -Heat_Flux on 1, 3, 5
 
     if (model==2) then
       call RANS_Diffusive_Flux ( flux=Flux(nt:nprim), &
@@ -121,7 +122,10 @@ contains
     ! Residual update
     Blk % r (:,Im,Jm,Km) = Blk % r (:,Im,Jm,Km) - modfm2 * Flux
 
-    if (present(Ovar)) call Compute_Wall_Properties(stress=Stress, pw=prim(np), qw=Heat_Flux, &
+    ! qw given as k grad T . n along the face normal of the solver, as the other walls (Heat_Flux is positive into the
+    ! gas): the wall output writes Heat_Flux itself on every face
+    if (present(Ovar)) call Compute_Wall_Properties(stress=Stress, pw=prim(np), into=-modfm2, &
+                                                    qw=modfm2 * Heat_Flux,                    &
                                                     y=blk%dl(im,jm,km)%c(dir)*0.5d0,          &
                                                     Tw=Twall, rhow=rho_wall, mu=mil, exit_array=Ovar)
 

@@ -265,7 +265,7 @@ module ARES_Config_Types_m
     logical :: SAcomp, SpalartShur, SAR, rough
     logical :: QCR2000, blowing_corr
     logical :: k_energy_coupling = .false. ! k in the total energy (k-energy-coupling, two-equation models)
-    logical :: point_implicit  ! Point-implicit (Patankar) treatment of turbulence destruction source terms
+    logical :: point_implicit  ! Point-implicit factor on the increment of the turbulence equations (steady runs)
     character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
     character(len=llen) :: sst_production ! SST production: 'incompressible' or 'compressible'
     logical :: Prt_correction   ! Turbulent Prandtl correction for wall roughness

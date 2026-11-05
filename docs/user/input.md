@@ -71,6 +71,17 @@ These are read by ARES and validated against the registry.
 | `[ARES-Probes]` | Point probes for time-history recording | [→](registry.md#ares-probes) |
 | `[ARES-Multigrid]` | Per-level multigrid iteration counts | [→](registry.md#ares-multigrid) |
 
+!!! note "Turbulence sources in time-accurate runs"
+    In time-accurate RANS runs (`time-accurate = .true.`, or a time-accurate HYDRA coupling) the turbulence sources
+    are explicit and the local time step includes their stiffness, with no parameter: near walls, where the
+    destruction of $k$, $\omega$ or $\tilde\nu$ is fast, the step can be smaller than the convective and diffusive
+    limits ([theory](../theory/turbulence.md#time-accurate-runs-explicit-sources)). `point-implicit` serves steady
+    runs only: a `point-implicit = .true.` written in `input.ini` is not applied there, and a warning at start-up says
+    so. With SST or Wilcox 2006, a time-accurate start far from the wall value of $\omega$ (100 times or more below it,
+    in wall cells where diffusion sets the step) needs the CFL ramp `cfl-rise-threshold`: without it the first step
+    can make $\omega$ negative. At the end of a RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative,
+    one line gives how many cell updates had such a stage.
+
 !!! note "Same layout as MOSE"
     The flow regime is set in `[ARES-Physics]` with the keys of `[MOSE-Physics]`: `equations` = `euler` · `navier-stokes`, and `turbulence` = the RANS model (default `none`). `navier-stokes` with `turbulence = none` is a laminar run; `euler` takes no turbulence model. The options of the model are in `[ARES-Turbulence]`, as in `[MOSE-Turbulence]`.
 

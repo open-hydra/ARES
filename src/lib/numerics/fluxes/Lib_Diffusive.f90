@@ -3,7 +3,7 @@ module ARES_Lib_Diffusive
 
   implicit none
   private
-  public :: Diffusive_Flux, Compute_Diffusive_Flux
+  public :: Diffusive_Flux, Compute_Diffusive_Flux, Face_Metric, Inverse3
 
 contains
 
@@ -59,6 +59,42 @@ contains
       Res2 = Res2 + Flux
 
     end subroutine Diffusive_Flux
+
+
+    !> Metric tensor at the face between two cells of metrics M1 and M2:
+    !> inverse of the mean of the inverse metrics (edge vectors dx/dxi).
+    pure function Face_Metric ( M1, M2 ) result ( M )
+      implicit none
+      real(R8), intent(in) :: M1(3,3), M2(3,3)
+      real(R8)             :: M(3,3)
+
+      M = Inverse3 ( 0.5d0 * ( Inverse3 ( M1 ) + Inverse3 ( M2 ) ) )
+
+    end function Face_Metric
+
+
+    !> Inverse of a 3x3 matrix by its adjugate (transposed cofactors). Works for M
+    !> as stored by Compute_Metric_Tensor (cofactors/det = transposed inverse of the
+    !> edge vectors): transposition commutes with averaging and inversion.
+    pure function Inverse3 ( A ) result ( B )
+      implicit none
+      real(R8), intent(in) :: A(3,3)
+      real(R8)             :: B(3,3)
+      real(R8) :: det
+
+      B(1,1) =  ( A(2,2)*A(3,3) - A(2,3)*A(3,2) )
+      B(1,2) = -( A(1,2)*A(3,3) - A(1,3)*A(3,2) )
+      B(1,3) =  ( A(1,2)*A(2,3) - A(1,3)*A(2,2) )
+      B(2,1) = -( A(2,1)*A(3,3) - A(2,3)*A(3,1) )
+      B(2,2) =  ( A(1,1)*A(3,3) - A(1,3)*A(3,1) )
+      B(2,3) = -( A(1,1)*A(2,3) - A(1,3)*A(2,1) )
+      B(3,1) =  ( A(2,1)*A(3,2) - A(2,2)*A(3,1) )
+      B(3,2) = -( A(1,1)*A(3,2) - A(1,2)*A(3,1) )
+      B(3,3) =  ( A(1,1)*A(2,2) - A(1,2)*A(2,1) )
+      det = A(1,1)*B(1,1) + A(1,2)*B(2,1) + A(1,3)*B(3,1)
+      B = B / det
+
+    end function Inverse3
 
 
     subroutine Tangential_Gradient ( Prim1, Prim2, Prim3, Prim4, Gradient )

@@ -120,7 +120,7 @@ contains
     ! Residual update
     Blk % r (:,Im,Jm,Km) = Blk % r (:,Im,Jm,Km) - modfm2 * Flux
 
-    if (present(Ovar)) call Compute_Wall_Properties(stress=Stress, pw=prim(np), Tw=T_wall,          &
+    if (present(Ovar)) call Compute_Wall_Properties(stress=Stress, pw=prim(np), into=-modfm2, Tw=T_wall, &
                                                     rhow=rho_wall, mu=mil,                          &
                                                     y=blk%dl(im,jm,km)%c(dir)*0.5d0,                &
                                                     qw=(kl+kt) * dot_product ( Gradient(nh,:), Normal ), &
