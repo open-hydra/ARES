@@ -4,19 +4,26 @@
 ! Variabili primitive: (p, h, u, v, w).  Lo stato termodinamico completo
 ! e' calcolato direttamente dalle tabelle 2D (p,h) del gas reale (FLINT).
 !
-! Uso:  extract1d  field.tec  wall.tec  1d.dat  INPUT_folder
+! Uso:  extract1d  field.tec  wall.tec  1d.dat  INPUT_folder  [input.ini]
+!       (default: OUTPUT/field.tec OUTPUT/wall.tec OUTPUT/1d.dat INPUT input.ini)
+!       Codice d'uscita 0 se 1d.dat e' stato scritto, 1 altrimenti.
+! Legge field.tec e wall.tec di ARES sia nel formato meno recente
+! (VARIABLES ="x" "y" ...) sia in quello attuale (VARIABLES = x y ...,
+! SOLUTIONTIME < 0 per le soluzioni stazionarie, DATASETAUXDATA dopo le zone).
 !===============================================================================
 module Mod_Extract1D
   implicit none
   private
 
   integer, parameter, public :: dp = selected_real_kind(15,307)
-  integer, parameter :: MAXVAR = 80, LLEN = 1024
+  integer, parameter :: MAXVAR = 80, LLEN = 1024, HLEN = 16384
 
   ! ---------- Tipi Tecplot ----------
   type, public :: tec_zone_t
     character(len=64) :: name = ''
     integer :: ni=0, nj=0, nk=0, nx=0, ny=0, nz=0
+    logical :: block = .true.          ! DATAPACKING=BLOCK (POINT non e' supportato)
+    logical :: cellcentered = .false.  ! VARLOCATION con variabili CELLCENTERED
     real(dp), allocatable :: xn(:,:,:), yn(:,:,:), zn(:,:,:)
     real(dp), allocatable :: v(:,:,:,:)
   end type
@@ -25,6 +32,14 @@ module Mod_Extract1D
     integer :: nzones=0, nvar=0
     character(len=64) :: varname(MAXVAR)
     type(tec_zone_t), allocatable :: zone(:)
+  end type
+
+  ! Lettore sequenziale dei numeri di un file Tecplot ASCII: uno o piu' valori
+  ! per riga, separati da spazi, tabulazioni o virgole.  Le righe che non
+  ! iniziano con un numero (VARIABLES, ZONE, DATASETAUXDATA, ...) sono saltate.
+  type :: tec_reader_t
+    integer :: iu = 0, pos = 1, last = 0
+    character(len=LLEN) :: line = ''
   end type
 
   ! ---------- Tabelle EOS 2D gas reale ----------
@@ -49,39 +64,180 @@ contains
 
   ! ===========================  TECPLOT READER  ============================
 
-  subroutine read_next_float(iu, val, ierr)
-    integer, intent(in) :: iu
-    real(dp), intent(out) :: val
-    integer, intent(out) :: ierr
-    character(len=LLEN) :: line
-    character :: c
-    integer :: ios, p
-    do
-      read(iu,'(A)',iostat=ios) line
-      if (ios /= 0) then; ierr=1; return; endif
-      ! Find first non-blank character; skip lines that cannot be numeric data
-      p=1; do while (p<=len_trim(line).and.line(p:p)==' '); p=p+1; end do
-      if (p>len_trim(line)) cycle          ! blank line
-      c=line(p:p)
-      if (.not.(c=='+'.or.c=='-'.or.c=='.'.or.(c>='0'.and.c<='9'))) cycle
-      read(line,*,iostat=ios) val
-      if (ios == 0) then; ierr=0; return; endif
+  pure logical function is_sep(c)
+    character, intent(in) :: c
+    is_sep = (c==' ' .or. c==',' .or. c==char(9))
+  end function
+
+  pure logical function is_num_start(c)
+    character, intent(in) :: c
+    is_num_start = (c=='+' .or. c=='-' .or. c=='.' .or. (c>='0' .and. c<='9'))
+  end function
+
+  pure logical function is_word_char(c)
+    character, intent(in) :: c
+    is_word_char = ((c>='A' .and. c<='Z') .or. (c>='a' .and. c<='z') .or. &
+                    (c>='0' .and. c<='9') .or. c=='_')
+  end function
+
+  ! Prima parola (lettere, cifre, '_') della riga, in maiuscolo; '' se la riga
+  ! e' vuota o inizia con un altro carattere (virgolette, numero, '#', ...).
+  function first_word(line) result(w)
+    character(len=*), intent(in) :: line
+    character(len=32) :: w
+    integer :: p, e, L
+    w = ''; L = len_trim(line)
+    p = verify(line(1:L), ' '//char(9)); if (p == 0) return
+    e = p
+    do while (e <= L)
+      if (.not.is_word_char(line(e:e))) exit
+      e = e+1
     end do
+    if (e > p) w = line(p:min(e-1,p+31))
+    call to_upper(w)
+  end function
+
+  ! Numero reale da un token; accetta anche l'esponente a tre cifre senza 'E'
+  ! (0.1234-100) di alcuni formati Fortran.
+  subroutine parse_real(tok, val, ios)
+    character(len=*), intent(in) :: tok
+    real(dp), intent(out) :: val
+    integer, intent(out) :: ios
+    integer :: k
+    character(len=len(tok)+1) :: buf
+    read(tok,*,iostat=ios) val
+    if (ios == 0) return
+    if (scan(tok,'EeDd') > 0) return
+    k = scan(tok(2:),'+-',back=.true.)       ! segno dell'esponente in tok(k+1:)
+    if (k == 0) return
+    buf = tok(1:k)//'E'//tok(k+1:)
+    read(buf,*,iostat=ios) val
   end subroutine
 
+  ! Prossimo numero dei dati (ierr: 1 = fine file, 3 = token non numerico,
+  ! 4 = riga piu' lunga di LLEN caratteri).
+  subroutine read_next_float(rd, val, ierr)
+    type(tec_reader_t), intent(inout) :: rd
+    real(dp), intent(out) :: val
+    integer, intent(out) :: ierr
+    integer :: ios, p, e
+    do
+      do while (rd%pos <= rd%last)
+        if (.not.is_sep(rd%line(rd%pos:rd%pos))) exit
+        rd%pos = rd%pos+1
+      end do
+      if (rd%pos <= rd%last) exit
+      read(rd%iu,'(A)',iostat=ios) rd%line
+      if (ios /= 0) then; ierr=1; return; endif
+      rd%last = len_trim(rd%line); rd%pos = 1
+      if (rd%last >= LLEN) then
+        write(*,'(A,I0,A)') ' ERRORE: riga di dati piu'' lunga di ',LLEN,' caratteri'
+        ierr=4; return
+      endif
+      p = verify(rd%line(1:rd%last), ' '//char(9))
+      if (p == 0) then; rd%last = 0; cycle; endif                   ! riga vuota
+      if (.not.is_num_start(rd%line(p:p))) then; rd%last = 0; cycle; endif   ! intestazione
+      rd%pos = p
+    end do
+    e = rd%pos
+    do while (e <= rd%last)
+      if (is_sep(rd%line(e:e))) exit
+      e = e+1
+    end do
+    call parse_real(rd%line(rd%pos:e-1), val, ios)
+    if (ios /= 0) then
+      write(*,'(3A)') ' ERRORE: valore non numerico "',rd%line(rd%pos:e-1),'"'
+      ierr=3; return
+    endif
+    rd%pos = e; ierr = 0
+  end subroutine
+
+  ! Nomi della dichiarazione VARIABLES (testo dopo '='), in tutte le forme di
+  ! Tecplot e di ARES:
+  !   "x" "y" "z"   "x","y","z"   'x' 'y'   "a""b" (due nomi)   x y z   x, y, z
+  ! nn conta tutti i nomi, anche quelli oltre MAXVAR (che non sono salvati).
   subroutine parse_varnames(line, names, nn)
     character(len=*), intent(in) :: line
     character(len=64), intent(out) :: names(MAXVAR)
     integer, intent(out) :: nn
-    integer :: i, i1, ie, L
+    integer :: i, e, L
+    character :: q
     nn = 0; L = len_trim(line); i = 1
     do while (i <= L)
-      if (line(i:i) == '"') then
-        i1 = i+1; ie = index(line(i1:),'"')
-        if (ie > 0) then
-          ie = i1+ie-2; nn = nn+1; names(nn) = line(i1:ie); i = ie+2
-        else; exit; endif
-      else; i = i+1; endif
+      q = line(i:i)
+      if (is_sep(q)) then
+        i = i+1
+      else if (q == '"' .or. q == "'") then
+        e = index(line(i+1:L), q)
+        if (e == 0) e = L-i+1                  ! virgolette non chiuse: fino a fine riga
+        call add_name(line(i+1:i+e-1))
+        i = i+e+1
+      else
+        e = i
+        do while (e <= L)
+          if (is_sep(line(e:e)) .or. line(e:e)=='"' .or. line(e:e)=="'") exit
+          e = e+1
+        end do
+        call add_name(line(i:e-1))
+        i = e
+      endif
+    end do
+  contains
+    subroutine add_name(s)
+      character(len=*), intent(in) :: s
+      nn = nn+1
+      if (nn <= MAXVAR) names(nn) = s
+    end subroutine
+  end subroutine
+
+  ! Valore della parola chiave key in una riga d'intestazione Tecplot
+  ! (KEY=valore, KEY = valore, KEY="valore con spazi"); la chiave e' una parola
+  ! intera, maiuscole e minuscole indifferenti.  found=.false. se manca.
+  subroutine keyword_value(line, key, val, found)
+    character(len=*), intent(in)  :: line, key
+    character(len=*), intent(out) :: val
+    logical, intent(out) :: found
+    character(len=len(line)) :: ul
+    character(len=len(key))  :: uk
+    integer :: p, q, s, L, lk
+    character :: c
+    val = ''; found = .false.
+    ul = line; call to_upper(ul); uk = key; call to_upper(uk)
+    L = len_trim(ul); lk = len_trim(uk); s = 1
+    do
+      if (s > L) return
+      p = index(ul(s:L), uk(1:lk)); if (p == 0) return
+      p = s+p-1; s = p+1
+      if (p > 1) then
+        if (is_word_char(ul(p-1:p-1))) cycle
+      endif
+      q = p+lk
+      do while (q <= L)
+        if (ul(q:q) /= ' ') exit
+        q = q+1
+      end do
+      if (q > L) return
+      if (ul(q:q) /= '=') cycle
+      q = q+1
+      do while (q <= L)
+        if (ul(q:q) /= ' ') exit
+        q = q+1
+      end do
+      found = .true.
+      if (q > L) return
+      c = line(q:q)
+      if (c == '"' .or. c == "'") then
+        p = index(line(q+1:L), c)
+        if (p == 0) then; val = line(q+1:L); else; val = line(q+1:q+p-1); endif
+      else
+        p = q
+        do while (p <= L)
+          if (line(p:p)==',' .or. line(p:p)==' ' .or. line(p:p)==')') exit
+          p = p+1
+        end do
+        val = line(q:p-1)
+      endif
+      return
     end do
   end subroutine
 
@@ -111,102 +267,167 @@ contains
     end do
   end subroutine
 
-  subroutine parse_zone_header(line, zname, ni, nj, nk)
+  ! Intestazione di zona: nome (T, anche tra virgolette), I, J, K, DATAPACKING
+  ! (o il piu' vecchio F=) e VARLOCATION.
+  subroutine parse_zone_header(line, z)
     character(len=*), intent(in) :: line
-    character(len=64), intent(out) :: zname
-    integer, intent(out) :: ni, nj, nk
-    integer :: p1, p2
-    character(len=LLEN) :: ul
-    zname=''; ni=1; nj=1; nk=1; ul=line; call to_upper(ul)
-    p1=index(line,'T='); if(p1==0) p1=index(line,'T =')
-    if (p1>0) then
-      p1=index(line(p1:),'=')+p1; p2=index(line(p1:),',')
-      if (p2>0) then; zname=adjustl(line(p1:p1+p2-2))
-      else; zname=adjustl(line(p1:)); endif
-      zname=trim(adjustl(zname))
-    endif
-    call extract_int(ul,'I=',ni); call extract_int(ul,'J=',nj); call extract_int(ul,'K=',nk)
+    type(tec_zone_t), intent(inout) :: z
+    character(len=256) :: val
+    character(len=len(line)) :: ul
+    logical :: found
+    integer :: ios, n
+    z%name=''; z%ni=1; z%nj=1; z%nk=1
+    call keyword_value(line,'T',val,found); if (found) z%name = adjustl(val)
+    call keyword_value(line,'I',val,found)
+    if (found) then; read(val,*,iostat=ios) n; if (ios==0) z%ni = n; endif
+    call keyword_value(line,'J',val,found)
+    if (found) then; read(val,*,iostat=ios) n; if (ios==0) z%nj = n; endif
+    call keyword_value(line,'K',val,found)
+    if (found) then; read(val,*,iostat=ios) n; if (ios==0) z%nk = n; endif
+    call keyword_value(line,'DATAPACKING',val,found)
+    if (.not.found) call keyword_value(line,'F',val,found)
+    call to_upper(val)
+    z%block = .not.(found .and. index(val,'POINT')>0)
+    ul = line; call to_upper(ul)
+    z%cellcentered = index(ul,'CELLCENTERED')>0
   end subroutine
 
-  subroutine read_block_flat(iu, arr, nn, ierr)
-    integer, intent(in) :: iu, nn
+  subroutine read_block_flat(rd, arr, nn, ierr)
+    type(tec_reader_t), intent(inout) :: rd
+    integer, intent(in) :: nn
     real(dp), intent(inout) :: arr(*)
     integer, intent(out) :: ierr
     integer :: i
-    do i=1,nn; call read_next_float(iu,arr(i),ierr); if(ierr/=0) return; end do
+    ierr = 0
+    do i=1,nn; call read_next_float(rd,arr(i),ierr); if(ierr/=0) return; end do
   end subroutine
 
-  subroutine read_var_block(iu, varr, nv, sv, n1, n2, n3, ierr)
-    integer, intent(in) :: iu, nv, sv, n1, n2, n3
+  subroutine read_var_block(rd, varr, nv, sv, n1, n2, n3, ierr)
+    type(tec_reader_t), intent(inout) :: rd
+    integer, intent(in) :: nv, sv, n1, n2, n3
     real(dp), intent(inout) :: varr(nv,n1,n2,n3)
     integer, intent(out) :: ierr
     integer :: i, j, k
+    ierr = 0
     do k=1,n3; do j=1,n2; do i=1,n1
-      call read_next_float(iu,varr(sv,i,j,k),ierr); if(ierr/=0) return
+      call read_next_float(rd,varr(sv,i,j,k),ierr); if(ierr/=0) return
     end do; end do; end do
   end subroutine
 
+  ! Righe d'intestazione che non continuano la lista VARIABLES
+  logical function is_header_keyword(w)
+    character(len=*), intent(in) :: w
+    select case (trim(w))
+    case ('ZONE','TITLE','FILETYPE','DATASETAUXDATA','VARAUXDATA','AUXDATA', &
+          'TEXT','GEOMETRY','CUSTOMLABELS','DATASET')
+      is_header_keyword = .true.
+    case default
+      is_header_keyword = .false.
+    end select
+  end function
+
+  ! Tecplot ASCII strutturato, DATAPACKING=BLOCK, coordinate nodali e variabili
+  ! CELLCENTERED, come lo scrive ARES (field.tec, wall.tec).  Sono letti sia il
+  ! formato meno recente (VARIABLES ="x" "y" ..., SOLUTIONTIME > 0, STRANDID = 0)
+  ! sia quello attuale (VARIABLES = x y ..., SOLUTIONTIME < 0 per le soluzioni
+  ! stazionarie, record DATASETAUXDATA dopo le zone).
+  ! ierr: 1 apertura, 2 intestazione, 3-4 dati (vedi read_next_float),
+  !       5 formato non supportato.
   subroutine read_tec_ascii(filename, tec, ierr)
     character(len=*), intent(in) :: filename
     type(tec_file_t), intent(out) :: tec
     integer, intent(out) :: ierr
     integer :: iu,ios,iz,sv,n,ndir,ni,nj,nk,nx,ny,nz,nnode
-    character(len=LLEN) :: line, varline
-    character(len=64) :: allnames(MAXVAR)
-    integer :: nall
+    character(len=HLEN) :: line, varline
+    character(len=32) :: w
+    character(len=64) :: allnames(MAXVAR), uname
+    integer :: nall, p
     logical :: fv
+    type(tec_reader_t) :: rd
 
     ierr=0
     open(newunit=iu,file=trim(filename),status='old',action='read',iostat=ios)
     if (ios/=0) then; write(*,'(2A)') ' ERRORE: ',trim(filename); ierr=1; return; endif
 
+    ! 1a passata: dichiarazione VARIABLES (anche su piu' righe) e numero di zone
     tec%nzones=0; fv=.false.; varline=''
     do
       read(iu,'(A)',iostat=ios) line; if(ios/=0) exit
+      w = first_word(line)
+      if (w == 'ZONE') then
+        tec%nzones = tec%nzones+1; cycle
+      endif
+      if (tec%nzones > 0) cycle
       if (.not.fv) then
-        if (index(line,'VARIABLES')>0 .or. index(line,'variables')>0 &
-            .or. index(line,'Variables')>0) then
-          n=index(line,'='); if(n>0) varline=trim(varline)//' '//trim(line(n+1:))
-          fv=.true.; cycle
+        if (w == 'VARIABLES') then
+          n = index(line,'='); if (n>0) varline = line(n+1:)
+          fv = .true.
+        endif
+      else
+        ! seguito della lista: righe di nomi, tra virgolette o no
+        p = verify(line, ' '//char(9))
+        if (p > 0) then
+          if (line(p:p)=='"' .or. line(p:p)=="'" .or. &
+              (len_trim(w)>0 .and. .not.is_header_keyword(w))) &
+            varline = trim(varline)//' '//trim(line)
         endif
       endif
-      if (fv .and. tec%nzones==0) then
-        if (index(line,'ZONE')==0 .and. index(line,'Zone')==0 &
-            .and. index(line,'zone')==0 .and. index(line,'"')>0) then
-          varline=trim(varline)//' '//trim(line); cycle
-        endif
-      endif
-      if (index(line,'ZONE')>0 .or. index(line,'Zone')>0 .or. index(line,'zone')>0) &
-        tec%nzones = tec%nzones+1
     end do
-    if (tec%nzones==0) then; ierr=2; close(iu); return; endif
+    if (.not.fv) then
+      write(*,'(2A)') ' ERRORE: dichiarazione VARIABLES assente in ',trim(filename)
+      ierr=2; close(iu); return
+    endif
+    if (tec%nzones==0) then
+      write(*,'(2A)') ' ERRORE: nessuna ZONE in ',trim(filename)
+      ierr=2; close(iu); return
+    endif
 
     call parse_varnames(varline, allnames, nall)
+    if (nall > MAXVAR) then
+      write(*,'(A,I0,A,I0,A)') ' ERRORE: ',nall,' variabili, al massimo ',MAXVAR,' (MAXVAR)'
+      ierr=2; close(iu); return
+    endif
     ndir=0
     do n=1,min(nall,3)
-      if (allnames(n)=='x'.or.allnames(n)=='y'.or.allnames(n)=='z' &
-          .or.allnames(n)=='X'.or.allnames(n)=='Y'.or.allnames(n)=='Z') then
+      uname = allnames(n); call to_upper(uname)
+      if (uname=='X' .or. uname=='Y' .or. uname=='Z') then
         ndir=ndir+1
       else; exit; endif
     end do
     if (ndir==0) ndir=3
+    if (nall < ndir) then
+      write(*,'(2A)') ' ERRORE: VARIABLES senza coordinate in ',trim(filename)
+      ierr=2; close(iu); return
+    endif
     tec%nvar = nall-ndir
     do n=1,tec%nvar; tec%varname(n)=allnames(ndir+n); end do
 
+    ! 2a passata: intestazioni di zona
     allocate(tec%zone(tec%nzones)); rewind(iu); iz=0
     do
       read(iu,'(A)',iostat=ios) line; if(ios/=0) exit
-      if (index(line,'ZONE')>0 .or. index(line,'Zone')>0 .or. index(line,'zone')>0) then
+      if (first_word(line) == 'ZONE') then
         iz=iz+1
-        call parse_zone_header(line,tec%zone(iz)%name, &
-          tec%zone(iz)%ni,tec%zone(iz)%nj,tec%zone(iz)%nk)
+        call parse_zone_header(line, tec%zone(iz))
         tec%zone(iz)%nx=max(tec%zone(iz)%ni-1,1)
         tec%zone(iz)%ny=max(tec%zone(iz)%nj-1,1)
         tec%zone(iz)%nz=max(tec%zone(iz)%nk-1,1)
+        if (.not.tec%zone(iz)%block) then
+          write(*,'(3A)') ' ERRORE: zona ',trim(tec%zone(iz)%name), &
+            ' con DATAPACKING=POINT: e'' letto solo BLOCK'
+          ierr=5
+        else if (tec%nvar>0 .and. .not.tec%zone(iz)%cellcentered) then
+          write(*,'(3A)') ' ERRORE: zona ',trim(tec%zone(iz)%name), &
+            ' senza variabili CELLCENTERED (VARLOCATION): le variabili nodali non sono lette'
+          ierr=5
+        endif
       endif
     end do
+    if (ierr/=0) then; close(iu); return; endif
 
+    ! 3a passata: dati
     rewind(iu)
+    rd%iu = iu; rd%pos = 1; rd%last = 0
     do iz=1,tec%nzones
       ni=tec%zone(iz)%ni; nj=tec%zone(iz)%nj; nk=tec%zone(iz)%nk
       nx=tec%zone(iz)%nx; ny=tec%zone(iz)%ny; nz=tec%zone(iz)%nz
@@ -215,18 +436,21 @@ contains
       allocate(tec%zone(iz)%yn(ni,nj,nk))
       allocate(tec%zone(iz)%zn(ni,nj,nk))
       if (tec%nvar>0) allocate(tec%zone(iz)%v(tec%nvar,nx,ny,nz))
-      call read_block_flat(iu,tec%zone(iz)%xn,nnode,ierr); if(ierr/=0) return
+      call read_block_flat(rd,tec%zone(iz)%xn,nnode,ierr); if(ierr/=0) exit
       if (ndir>=2) then
-        call read_block_flat(iu,tec%zone(iz)%yn,nnode,ierr); if(ierr/=0) return
+        call read_block_flat(rd,tec%zone(iz)%yn,nnode,ierr); if(ierr/=0) exit
       else; tec%zone(iz)%yn=0; endif
       if (ndir>=3) then
-        call read_block_flat(iu,tec%zone(iz)%zn,nnode,ierr); if(ierr/=0) return
+        call read_block_flat(rd,tec%zone(iz)%zn,nnode,ierr); if(ierr/=0) exit
       else; tec%zone(iz)%zn=0; endif
       do sv=1,tec%nvar
-        call read_var_block(iu,tec%zone(iz)%v,tec%nvar,sv,nx,ny,nz,ierr)
-        if(ierr/=0) return
+        call read_var_block(rd,tec%zone(iz)%v,tec%nvar,sv,nx,ny,nz,ierr)
+        if(ierr/=0) exit
       end do
+      if(ierr/=0) exit
     end do
+    if (ierr/=0) write(*,'(4A)') ' ERRORE: dati incompleti nella zona ', &
+      trim(tec%zone(iz)%name),' di ',trim(filename)
     close(iu)
   end subroutine
 
@@ -659,9 +883,11 @@ contains
 
   ! ========================  EXTRACT_1D  ===================================
 
-  subroutine extract_1d(field_file, wall_file, output_file, input_folder, ini_file)
+  ! istat = 0 se 1d.dat e' stato scritto, /= 0 altrimenti.
+  subroutine extract_1d(field_file, wall_file, output_file, input_folder, ini_file, istat)
     character(len=*), intent(in) :: field_file, wall_file, output_file, input_folder
     character(len=*), intent(in) :: ini_file
+    integer, intent(out) :: istat
 
     type(tec_file_t) :: fld, wall
     type(eos_t) :: eos
@@ -676,7 +902,7 @@ contains
     ! indici variabili parete (it_sc = magnitudine scalare tau come fallback)
     integer :: it1, it2, it3, it_sc, iTw, iqw, ihs
     ! zone wall
-    integer :: iw3,iw4,iw5,iw6
+    integer :: iw3,iw4,iw5,iw6, iwz(4)
 
     real(dp) :: Area, Vol, portata, ds, slung, sign_i
     real(dp) :: p_sum, h_sum, h0_sum, T_sum
@@ -704,6 +930,8 @@ contains
     real(dp) :: p_fac, nf_ref(3), C_cent(3), v1_pf(3), v2_pf(3), cp_pf(3), cn_pf, dn_pf, delta_phi
 
     real(dp), parameter :: tol=1e-5_dp, damp=0.5_dp
+
+    istat = 1
 
     ! ---------- 1) Lettura tabelle EOS ----------
     write(*,'(2A)') ' Tabelle EOS da: ', trim(input_folder)
@@ -746,12 +974,15 @@ contains
     iT_f = find_var(fld,'T');    isnd = find_var(fld,'sound')
     write(*,'(A,5I4)') '   Indici mil,kl,rho,T,sound: ',imil,ikl,irho,iT_f,isnd
 
-    ! ---------- 3) Lettura wall.tec (opzionale) ----------
+    ! ---------- 3) Lettura wall.tec (opzionale: se manca, grandezze di parete = 0) ----------
     have_wall=.false.; inquire(file=trim(wall_file),exist=have_wall)
+    if (.not.have_wall) write(*,'(3A)') '   AVVISO: ',trim(wall_file), &
+      ' non trovato: tau, qw, Tw, hs e perimetro bagnato saranno 0'
     if (have_wall) then
       write(*,'(2A)') ' Lettura: ', trim(wall_file)
       call read_tec_ascii(wall_file, wall, ierr)
-      if (ierr/=0) then; have_wall=.false.
+      if (ierr/=0) then
+        write(*,'(A)') ' ERRORE lettura wall.'; return
       else
         write(*,'(A,I0,A)') '   ',wall%nzones,' zone wall trovate:'
         do iter=1,wall%nzones
@@ -815,6 +1046,17 @@ contains
         iw3=find_wall_zone(wall,ib,3); iw4=find_wall_zone(wall,ib,4)
         iw5=find_wall_zone(wall,ib,5); iw6=find_wall_zone(wall,ib,6)
         write(*,'(A,4I4)') '   Wall zones (3,4,5,6): ',iw3,iw4,iw5,iw6
+        ! le stazioni di parete sono le celle I del blocco
+        iwz = (/iw3,iw4,iw5,iw6/)
+        do iter=1,4
+          kc = iwz(iter)
+          if (kc == 0) cycle
+          if (wall%zone(kc)%nx /= nx) then
+            write(*,'(3A,I0,A,I0)') ' ERRORE: zona wall ',trim(wall%zone(kc)%name), &
+              ' con ',wall%zone(kc)%nx,' celle in I, il blocco ne ha ',nx
+            close(iu, status='delete'); return
+          endif
+        end do
       endif
 
       ! Segno normale I-face (convenzione ARES: verso i crescenti)
@@ -1077,6 +1319,7 @@ contains
 
     close(iu)
     write(*,'(2A)') ' Scritto: ', trim(output_file)
+    istat = 0
   end subroutine extract_1d
 
 end module Mod_Extract1D
@@ -1087,6 +1330,7 @@ program Extract1D_main
   use Mod_Extract1D
   implicit none
   character(len=256) :: f_field, f_wall, f_out, f_input, f_ini
+  integer :: istat
 
   f_field='OUTPUT/field.tec'; f_wall='OUTPUT/wall.tec'
   f_out='OUTPUT/1d.dat';      f_input='INPUT'
@@ -1098,5 +1342,6 @@ program Extract1D_main
   if (command_argument_count()>=4) call get_command_argument(4,f_input)
   if (command_argument_count()>=5) call get_command_argument(5,f_ini)
 
-  call extract_1d(trim(f_field), trim(f_wall), trim(f_out), trim(f_input), trim(f_ini))
+  call extract_1d(trim(f_field), trim(f_wall), trim(f_out), trim(f_input), trim(f_ini), istat)
+  if (istat /= 0) stop 1          ! codice d'uscita /= 0: 1d.dat non scritto
 end program Extract1D_main
