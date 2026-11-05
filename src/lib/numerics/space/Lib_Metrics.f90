@@ -536,33 +536,23 @@ contains
   end subroutine Yn_Connection
 
 
-  subroutine Yn_Chimera ( nb, blk, bc )
+  subroutine Yn_Chimera ( Im, Jm, Km, Fm, blk )
     implicit none
-    integer, intent(in)                  :: nb
-    type(ARES_block_type), intent(inout) :: blk(nb)
-    type(ARES_bc_type), intent(in)       :: bc
+    integer, intent(in) :: Im, Jm, Km, Fm
+    type(ARES_block_type), intent(inout) :: blk
     ! Local
-    integer  :: Ig, Jg, Kg, Bs, Is, Js, Ks, c
-    real(R8) :: yng, ksg
+    integer :: Ig, Jg, Kg
 
     ! Ghost cell coordinates
-    Ig = bc % i - guide(bc % f,1)
-    Jg = bc % j - guide(bc % f,2)
-    Kg = bc % k - guide(bc % f,3)
+    Ig = Im - guide(Fm,1)
+    Jg = Jm - guide(Fm,2)
+    Kg = Km - guide(Fm,3)
 
-    ! First ghost row: donor values blended with the volume fractions, as the primitives
-    yng = 0d0
-    ksg = 0d0
-    do c = 1, bc % ni(1)
-      Bs = bc % donorID(c,1)
-      Is = bc % donorID(c,2)
-      Js = bc % donorID(c,3)
-      Ks = bc % donorID(c,4)
-      yng = yng + blk(Bs) % yn(Is,Js,Ks) * bc % volume_fraction(c)
-      ksg = ksg + blk(Bs) % ks(Is,Js,Ks) * bc % volume_fraction(c)
-    enddo
-    blk(bc % b) % yn(Ig,Jg,Kg) = yng
-    blk(bc % b) % ks(Ig,Jg,Kg) = ksg
+    ! The chimera ghost cell extends the receiver grid (as its metrics do), so it
+    ! takes the wall distance and roughness of the adjacent receiver cell.
+    ! Zeroth order on purpose: linear extrapolation can reach yn <= 0 near walls.
+    blk % yn(Ig,Jg,Kg) = blk % yn(Im,Jm,Km)
+    blk % ks(Ig,Jg,Kg) = blk % ks(Im,Jm,Km)
 
   end subroutine Yn_Chimera
 

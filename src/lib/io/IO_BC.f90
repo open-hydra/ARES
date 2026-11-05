@@ -54,6 +54,8 @@ contains
       !! Phase 2: Read
       call Read_BCfile ( domain(m) % bc, domain(m) % n_bf, m )
 
+      call Pair_Connections ( domain(m), m )
+
       ! A face of type 200 takes what lies beyond it from the other k face of its block
       call Check_Rotational_Faces ( domain(m) )
 
@@ -228,6 +230,8 @@ contains
           if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, [ bc(i)%bs, bc(i)%is, bc(i)%js, bc(i)%ks, bc(i)%fs, &
                                         bc(i)%d11, bc(i)%d12, bc(i)%d21, bc(i)%d22 ], 'bs is js ks fs d11 d12 d21 d22' )
           allocate ( bc(i) % Pg (nprim, 6) )
+          allocate ( bc(i) % Fc (nprim, 2) )
+          bc(i) % Fc = 0d0
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Chimera overlap BC (102) and coupled multi-solver chimera (104)
@@ -444,6 +448,155 @@ contains
         ' coupled walls carry no roughness: treated as smooth (ks = 0) by the rough-wall model'
 
   end subroutine Print_BC_Summary
+
+
+  !> Pairs the two records of each connection face (101, 201): the record of the
+  !> same face seen from the other block (partner), and which of the two computes
+  !> the flux of the face for both cells (owner, BC_Fluxes). The owner is the
+  !> record whose face is the high-index one of its cell (2, 4, 6) when the
+  !> other is a low-index one, as on an interior face, where the flux between
+  !> cells n and n+1 is computed once. When the two faces have the same parity
+  !> (blocks that meet with their index directions permuted), the owner is the
+  !> record with the smaller (block, face, k, j, i): a choice that does not
+  !> depend on the order of the records in bc.txt. A record whose partner does
+  !> not point back at it, or that points at itself, is an error.
+  !> The search goes through a map, per block face, from the two indices of the
+  !> cell along the face to its connection record: one pass over the records,
+  !> in any order.
+  !> The gc ghost cells of a connection face are the first gc cells of the
+  !> block across it (Ghost_Connection), and their metrics come from its first
+  !> gc node planes past the face (BC_Connect_Metrics). That block must have at
+  !> least gc cells across its face, at every multigrid level (level): with
+  !> fewer, a ghost cell would be a ghost cell of that block, which another
+  !> record fills at the same time, and a node plane would lie outside the
+  !> block. A record whose block across has fewer cells is an error; the
+  !> directions along the face, and those of blocks with no connection, need
+  !> nothing.
+  subroutine Pair_Connections ( domain, level )
+    use ARES_Advanced_Types_m
+    use ARES_Config_Types_m, only: obj_io_bc
+    use ARES_Global_m,       only: gc
+    use IR_Precision, only: str
+    implicit none
+    type(ARES_domain_type), intent(inout) :: domain
+    integer, intent(in)                   :: level
+    ! Local
+    type :: face_records_type
+      integer, allocatable :: r(:,:)
+    end type face_records_type
+    type(face_records_type), allocatable :: rec(:,:)
+    integer :: b, f, i, p, nt(2), t(2), n
+    character(len=32) :: at_level
+
+    allocate ( rec(domain % nb, 6) )
+
+    ! Map of the connection records of each block face
+    do i = 1, domain % nbound
+      if ( domain % bc(i) % type /= 101 .and. domain % bc(i) % type /= 201 ) cycle
+      b = domain % bc(i) % b
+      f = domain % bc(i) % f
+      if ( .not. allocated(rec(b,f) % r) ) then
+        nt = Tangential ( f, domain % blk(b) % dim(1), domain % blk(b) % dim(2), domain % blk(b) % dim(3) )
+        allocate ( rec(b,f) % r(nt(1), nt(2)) )
+        rec(b,f) % r = 0
+      end if
+      t = Tangential ( f, domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k )
+      rec(b,f) % r(t(1), t(2)) = i
+    end do
+
+    ! Partner and owner of each connection record
+    do i = 1, domain % nbound
+      if ( domain % bc(i) % type /= 101 .and. domain % bc(i) % type /= 201 ) cycle
+      b = domain % bc(i) % bs
+      f = domain % bc(i) % fs
+      p = 0
+      if ( b >= 1 .and. b <= domain % nb .and. f >= 1 .and. f <= 6 ) then
+        if ( allocated(rec(b,f) % r) ) then
+          t = Tangential ( f, domain % bc(i) % is, domain % bc(i) % js, domain % bc(i) % ks )
+          if ( all(t >= 1) .and. all(t <= shape(rec(b,f) % r)) ) p = rec(b,f) % r(t(1), t(2))
+        end if
+      end if
+      if ( p == 0 ) then
+        obj_io_bc % error_message = '[ERROR] Connection record '//trim(str(.true.,i))// &
+                                    ': no connection record at the cell and face it points at'
+        exit
+      end if
+      if ( p == i ) then
+        obj_io_bc % error_message = '[ERROR] Connection record '//trim(str(.true.,i))// &
+                                    ' points at its own cell and face'
+        exit
+      end if
+      if ( domain % bc(p) % type /= domain % bc(i) % type .or. domain % bc(p) % bs /= domain % bc(i) % b .or. &
+           domain % bc(p) % fs /= domain % bc(i) % f .or. domain % bc(p) % is /= domain % bc(i) % i .or. &
+           domain % bc(p) % js /= domain % bc(i) % j .or. domain % bc(p) % ks /= domain % bc(i) % k ) then
+        obj_io_bc % error_message = '[ERROR] Connection records '//trim(str(.true.,i))//' and '//trim(str(.true.,p))// &
+                                    ' do not point at each other'
+        exit
+      end if
+      n = domain % blk(b) % dim((f + 1) / 2)
+      if ( n < gc ) then
+        at_level = ''
+        if ( level > 1 ) at_level = ' at multigrid level '//trim(str(.true.,level))
+        obj_io_bc % error_message = '[ERROR] Connection record '//trim(str(.true.,i))//' (block '// &
+          trim(str(.true.,domain % bc(i) % b))//', face '//trim(str(.true.,domain % bc(i) % f))//'): block '// &
+          trim(str(.true.,b))//' across it has '//trim(str(.true.,n))//' cell across its face '//trim(str(.true.,f))// &
+          trim(at_level)//', fewer than the '//trim(str(.true.,gc))//' a connection needs'
+        exit
+      end if
+      domain % bc(i) % partner = p
+      if ( mod(domain % bc(i) % f, 2) == 0 .and. mod(domain % bc(p) % f, 2) == 1 ) then
+        domain % bc(i) % owner = .true.
+      else if ( mod(domain % bc(i) % f, 2) == 1 .and. mod(domain % bc(p) % f, 2) == 0 ) then
+        domain % bc(i) % owner = .false.
+      else
+        domain % bc(i) % owner = Key_Less ( domain % bc(i) % b, domain % bc(i) % f, domain % bc(i) % k, &
+                                            domain % bc(i) % j, domain % bc(i) % i, &
+                                            domain % bc(p) % b, domain % bc(p) % f, domain % bc(p) % k, &
+                                            domain % bc(p) % j, domain % bc(p) % i )
+      end if
+    end do
+
+    contains
+
+      !> Whether the record (b1, f1, k1, j1, i1) comes before (b2, f2, k2, j2, i2):
+      !> block, then face, then k, j, i. Every record has its own key, so the two
+      !> records of a face always tell which of them is first, whatever their
+      !> order in bc.txt.
+      pure logical function Key_Less ( b1, f1, k1, j1, i1, b2, f2, k2, j2, i2 )
+        implicit none
+        integer, intent(in) :: b1, f1, k1, j1, i1, b2, f2, k2, j2, i2
+        integer :: key1(5), key2(5), n
+
+        key1 = [ b1, f1, k1, j1, i1 ]
+        key2 = [ b2, f2, k2, j2, i2 ]
+        Key_Less = .false.
+        do n = 1, 5
+          if ( key1(n) /= key2(n) ) then
+            Key_Less = key1(n) < key2(n)
+            return
+          end if
+        end do
+
+      end function Key_Less
+
+      !> The two indices of a cell (or the two dimensions of a block) along the face f
+      pure function Tangential ( f, i, j, k ) result ( t )
+        implicit none
+        integer, intent(in) :: f, i, j, k
+        integer :: t(2)
+
+        select case ( f )
+          case (1:2)
+            t = [ j, k ]
+          case (3:4)
+            t = [ i, k ]
+          case default
+            t = [ i, j ]
+        end select
+
+      end function Tangential
+
+  end subroutine Pair_Connections
 
 
   !> Checks the records of type 200 against the rule of the type, which joins the two k faces of one block. Beyond a

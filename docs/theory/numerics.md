@@ -148,6 +148,54 @@ Velocity and temperature gradients for the viscous flux are computed at each int
 
 The resulting computational-space gradient $(\xi,\eta,\zeta)$ is mapped to Cartesian $(x,y,z)$ with the **face-metric tensor** $M_{3\times3}$, taken as the average $M = \tfrac12(M_1 + M_2)$ of the two adjacent cells' metrics, computed from the grid geometry and stored per face. The same metric provides the physical spacing $\Delta l$ used in the MUSCL reconstruction.
 
+Block-connection (`101`, `201`) and chimera (`102`) faces use the inverse mean instead, $M_f = \left[\tfrac12\left(M_1^{-1} + M_2^{-1}\right)\right]^{-1}$, the inverse of the mean of the two cell edge vectors (`Face_Metric`): the one-index difference across the face is then divided by the centre-to-centre distance. The mean of $M$ divides it by the mean of $1/h$ instead: across a large cell-size jump at a block interface (86:1 makes it 22 times too steep) the normal gradient is far too steep and the explicit diffusion on the large cell becomes unstable, although its own time step is fine.
+
+The viscous flux of a chimera face is the mean of two fluxes: one with the
+central differences along the face of the row of the cell, one with those of
+the row of the ghost cells, filled from the donors. With a stress linear in the
+gradient (laminar, Spalart–Allmaras) the mean is the flux of the mean gradient,
+whose differences along the face are the mean of those of the two rows, as on
+an interior face (Vinokur 1986, NASA CR-177416, eqs. 90–91, p. 23). Beyond the
+edges of the block face the row of the ghost cells is extrapolated linearly, in
+the variables whose differences the stencil takes (velocity, temperature and the
+turbulence variables per unit mass, at the pressure of the ghost cell): the
+difference there is the one-sided one, exact for a linear field (a copy of the
+ghost cell would halve it, and the face would take 3/4 of the derivative of a
+linear field along the edge). In the k direction of a 2-D mesh the neighbours of
+a ghost cell are the ghost cell turned by the wedge angle, as those of a cell
+are; across a block one cell wide in another direction they are the ghost cell
+itself. The ghost cells of a chimera face take the wall distance and the
+roughness of their receiver cell (zeroth order on purpose: a linear extrapolation
+can reach $y_n \le 0$ next to walls).
+
+---
+
+## Faces Between Blocks
+
+A face shared by two blocks (block connection `101`, periodic connection `201`)
+has one flux, computed once and given to both cells with opposite signs, as an
+interior face. Of the two boundary records of the face, the one of the cell on
+the low-index side (whose face is 2, 4 or 6 while the other is 1, 3 or 5)
+computes the inviscid and the viscous flux. When the two faces have the same
+parity, as where blocks meet with their index directions permuted, the record
+with the smaller (block, face, $k$, $j$, $i$) computes it, so that the result
+does not depend on the order of the records in `bc.txt`. The face therefore
+conserves mass, momentum and energy exactly, whatever the Riemann solver and the
+preconditioning, on any number of MPI ranks; between ranks the other cell's
+share travels in one more message per Runge–Kutta stage. The two records of a
+face must point at each other, and the block across a face must have at least
+two cells across it at every multigrid level: otherwise the run stops at set-up.
+
+The inviscid flux of a face between blocks is, bit for bit, that of the same
+face in the unsplit mesh when the index directions of the two blocks agree
+across the face and the two blocks store the nodes of the common face with the
+same bits (the ghost cell takes its geometry from the nodes of the other block,
+so nodes that differ in the last digits give a slightly different face). This
+is an identity of the fluxes, not of the solution: in 2-D and 3-D a cell next to
+the cut adds the flux of the face between blocks after those of its interior
+faces, so its sum is taken in another order than in the unsplit mesh and the two
+solutions differ at round-off.
+
 ---
 
 ## References

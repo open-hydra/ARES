@@ -72,6 +72,8 @@ module ARES_Mod_GhostExchange
     real(R8), allocatable :: P_recv_buf(:)   !< (nprim*gc * n_recv)
     real(R8), allocatable :: Pg_send_buf(:)  !< (nprim*4  * n_send)
     real(R8), allocatable :: Pg_recv_buf(:)  !< (nprim*4  * n_recv)
+    real(R8), allocatable :: Fc_send_buf(:)  !< (nprim*2 * n_send): flux of the connection faces owned here
+    real(R8), allocatable :: Fc_recv_buf(:)  !< (nprim*2 * n_recv)
     integer, allocatable  :: send_req(:)     !< (n_send_ranks)
     integer, allocatable  :: recv_req(:)     !< (n_recv_ranks)
     integer, allocatable  :: mpi_stat(:,:)   !< (MPI_STATUS_SIZE, max(n_send_ranks, n_recv_ranks))
@@ -109,7 +111,7 @@ module ARES_Mod_GhostExchange
   ! the order they were started (MPI 4.1, Sec. 3.7.4), so the k-th receive from a
   ! rank takes the k-th block that rank sends. All are below 32767, the least
   ! MPI_TAG_UB the MPI standard allows.
-  integer, parameter :: TAG_P = 0, TAG_PG = 1, TAG_CHIMERA = 2, TAG_R = 3
+  integer, parameter :: TAG_P = 0, TAG_PG = 1, TAG_CHIMERA = 2, TAG_R = 3, TAG_FC = 4
   integer, parameter, public :: TAG_IO = 5
 
   public :: allocate_exchange_schedules, set_active_mg_level
@@ -123,6 +125,7 @@ module ARES_Mod_GhostExchange
   public :: exchange_ghost_P_wait_send
   public :: exchange_ghost_R
   public :: exchange_ghost_Pg
+  public :: exchange_connection_flux
   public :: exchange_ghost_chimera_post_recv, exchange_ghost_chimera_pack
   public :: exchange_ghost_chimera_post_send, exchange_ghost_chimera_wait_recv
   public :: exchange_ghost_chimera_unpack, exchange_ghost_chimera_wait_send
@@ -264,6 +267,8 @@ contains
         allocate(ghost_sched%P_recv_buf(nprim*gc * max(nr,1)))
         allocate(ghost_sched%Pg_send_buf(nprim*4 * max(ns,1)))
         allocate(ghost_sched%Pg_recv_buf(nprim*4 * max(nr,1)))
+        allocate(ghost_sched%Fc_send_buf(nprim*2 * max(ns,1)))
+        allocate(ghost_sched%Fc_recv_buf(nprim*2 * max(nr,1)))
         allocate(ghost_sched%send_req(max(ghost_sched%n_send_ranks,1)))
         allocate(ghost_sched%recv_req(max(ghost_sched%n_recv_ranks,1)))
         allocate(ghost_sched%mpi_stat(MPI_STATUS_SIZE, max_ranks))
@@ -1308,6 +1313,27 @@ contains
   end subroutine exchange_ghost_Pg
 
 
+  !> Flux of the connection faces between ranks (BC 101, 201). The record that
+  !> owns a face (Pair_Connections) computes its flux for both cells; this sends
+  !> the share of the cell of the other block, bc(partner)%Fc, to the rank of
+  !> that block. Send and receive lists are those of the ghost exchange: the
+  !> sender takes its send entries (records of remote blocks whose source cell
+  !> is local) whose partner it owns, the receiver its receive entries that it
+  !> does not own, both in the order of the lists. Call from the primary thread.
+  subroutine exchange_connection_flux(domain)
+    use ARES_Advanced_Types_m
+
+    implicit none
+    type(ARES_domain_type), intent(inout) :: domain
+
+    if (mpi_size_ <= 1) return
+    call set_active_mg_level(domain%mg_level)
+#ifdef USE_MPI
+    call exchange_Fc_field(domain)
+#endif
+  end subroutine exchange_connection_flux
+
+
   !> Chimera donor-cell exchange, split like the P exchange so that packing
   !> and unpacking run over the whole thread team:
   !>   post_recv (master) -> pack (omp do) -> post_send (master)
@@ -1393,6 +1419,80 @@ contains
 
 
 #ifdef USE_MPI
+  !> Internal: the flux of the connection faces owned here, to the ranks of the cells of the other blocks.
+  subroutine exchange_Fc_field(domain)
+    use ARES_Advanced_Types_m
+    use ARES_Global_m, only: nprim
+    use mpi
+
+    implicit none
+    type(ARES_domain_type), intent(inout) :: domain
+    ! Local
+    integer :: i, r, n, ierr, bc_idx, buf_pos, start, entry_size
+
+    if (ghost_sched%n_send == 0 .and. ghost_sched%n_recv == 0) return
+    entry_size = nprim * 2
+
+    ! Receives: the entries of each rank group whose face is owned by the other rank
+    start = 1
+    do r = 1, ghost_sched%n_recv_ranks
+      n = 0
+      do i = ghost_sched%recv_groups(r)%offset, &
+             ghost_sched%recv_groups(r)%offset + ghost_sched%recv_groups(r)%count - 1
+        if (.not. domain%bc(ghost_sched%recv_list(i)%bc_idx)%owner) n = n + 1
+      end do
+      call MPI_IRECV(ghost_sched%Fc_recv_buf(start), n * entry_size, MPI_DOUBLE_PRECISION, &
+                     ghost_sched%recv_groups(r)%rank, TAG_FC, MPI_COMM_WORLD, ghost_sched%recv_req(r), ierr)
+      call check_mpi_error(ierr)
+      start = start + n * entry_size
+    end do
+
+    ! Sends: the entries of each rank group whose face is owned here (by the partner record of the entry)
+    start = 1
+    do r = 1, ghost_sched%n_send_ranks
+      n = 0
+      do i = ghost_sched%send_groups(r)%offset, &
+             ghost_sched%send_groups(r)%offset + ghost_sched%send_groups(r)%count - 1
+        bc_idx = ghost_sched%send_list(i)%bc_idx
+        if (.not. domain%bc(domain%bc(bc_idx)%partner)%owner) cycle
+        buf_pos = start - 1 + n * entry_size
+        ghost_sched%Fc_send_buf(buf_pos+1       : buf_pos+  nprim) = domain%bc(bc_idx)%Fc(:,1)
+        ghost_sched%Fc_send_buf(buf_pos+nprim+1 : buf_pos+2*nprim) = domain%bc(bc_idx)%Fc(:,2)
+        n = n + 1
+      end do
+      call MPI_ISEND(ghost_sched%Fc_send_buf(start), n * entry_size, MPI_DOUBLE_PRECISION, &
+                     ghost_sched%send_groups(r)%rank, TAG_FC, MPI_COMM_WORLD, ghost_sched%send_req(r), ierr)
+      call check_mpi_error(ierr)
+      start = start + n * entry_size
+    end do
+
+    if (ghost_sched%n_recv_ranks > 0) then
+      call MPI_WAITALL(ghost_sched%n_recv_ranks, ghost_sched%recv_req, &
+                       ghost_sched%mpi_stat(:,1:ghost_sched%n_recv_ranks), ierr)
+      call check_mpi_error(ierr)
+    end if
+
+    ! Unpack, in the order of the receive list
+    buf_pos = 0
+    do r = 1, ghost_sched%n_recv_ranks
+      do i = ghost_sched%recv_groups(r)%offset, &
+             ghost_sched%recv_groups(r)%offset + ghost_sched%recv_groups(r)%count - 1
+        bc_idx = ghost_sched%recv_list(i)%bc_idx
+        if (domain%bc(bc_idx)%owner) cycle
+        domain%bc(bc_idx)%Fc(:,1) = ghost_sched%Fc_recv_buf(buf_pos+1       : buf_pos+  nprim)
+        domain%bc(bc_idx)%Fc(:,2) = ghost_sched%Fc_recv_buf(buf_pos+nprim+1 : buf_pos+2*nprim)
+        buf_pos = buf_pos + entry_size
+      end do
+    end do
+
+    if (ghost_sched%n_send_ranks > 0) then
+      call MPI_WAITALL(ghost_sched%n_send_ranks, ghost_sched%send_req, &
+                       ghost_sched%mpi_stat(:,1:ghost_sched%n_send_ranks), ierr)
+      call check_mpi_error(ierr)
+    end if
+  end subroutine exchange_Fc_field
+
+
   !> Internal: exchange Pg(:,3:6) stencil using aggregated messaging.
   subroutine exchange_Pg_field(domain)
     use ARES_Advanced_Types_m

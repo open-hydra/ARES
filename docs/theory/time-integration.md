@@ -98,6 +98,22 @@ $$
 \Delta t^{(d)}_{\text{VNN},i} = \frac{\rho\,(\Delta x_d)^2}{\mu_\ell + \mu_t}\times\text{VNN}.
 $$
 
+### Stiffness of the turbulence sources (time-accurate RANS)
+
+In time-accurate RANS runs the turbulence sources are explicit, and each local step also includes
+a bound $\hat d_i$ of their stiffness, the derivative $d_i$ of the destruction terms, from the state of the cell at
+the start of the step alone: $1/\Delta t_i$ gains the term $\hat d_i$,
+
+$$
+\frac{1}{\Delta t_i} = \frac{1}{\min_d\bigl(\Delta t^{(d)}_{\text{CFL},i},\ \Delta t^{(d)}_{\text{VNN},i}\bigr)} + \hat d_i ,
+$$
+
+so that $\Delta t\,d_i \le \Delta t\,\hat d_i \le 1$ and no stage makes $\tilde\nu$, $k$ or $\omega$ negative through
+their destruction ([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)). The Reynolds-stress model SSG/LRR
+has no such bound: its $\hat d_i$ is zero. Steady runs take no such term: there the stiffness is handled, when
+`point-implicit = .true.`, by the point-implicit factor
+([Turbulence](turbulence.md#steady-runs-point-implicit-factor)).
+
 ### Global time step
 
 $$
@@ -107,7 +123,7 @@ $$
 for a steady (`time-accurate = false`) run with a single global step; in time-accurate mode the same minimum sets the physical step.
 
 !!! tip "CFL ramp-up"
-    `cfl-rise-threshold` linearly ramps the CFL from a low starting value to the target over the given number of iterations, improving robustness when the initial condition is far from steady state.
+    `cfl-rise-threshold` linearly ramps the CFL from a low starting value to the target over the given number of iterations, improving robustness when the initial condition is far from steady state. With SST or Wilcox 2006, a time-accurate start far from the wall value of $\omega$ (100 times or more below it, in wall cells where diffusion sets the step) needs it: without the ramp the first step can make $\omega$ negative ([Turbulence](turbulence.md#time-accurate-runs-explicit-sources)).
 
 ---
 

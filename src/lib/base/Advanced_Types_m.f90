@@ -28,6 +28,11 @@ module ARES_Advanced_Types_m
     type(ARES_vector_3D_type)  :: dlg(2)                                    ! Ghost cell average cell length
     real(R8)                   :: volg(2)                                   ! Ghost cell volume
     real(R8), allocatable      :: Pg(:,:)                                   ! Ghost cell primitive stencil
+    ! BC 101/201: record of the same face seen from the other block
+    integer                    :: partner = 0
+    logical                    :: owner = .false.                           ! BC 101/201: this record computes the flux of the face
+    ! BC 101/201: residual of the face for this record's cell, (:,1) inviscid, (:,2) viscous
+    real(R8), allocatable      :: Fc(:,:)
     integer                    :: ni(2)                                     ! BC chimera
     integer, allocatable       :: donorID(:,:)                              ! BC chimera
     real(R8), allocatable      :: volume_fraction(:)                        ! BC chimera

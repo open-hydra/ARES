@@ -30,7 +30,7 @@ contains
 
   subroutine Spalart_Source_Terms ( domain )
     use ARES_Advanced_Types_m
-    use ARES_Config_Types_m, only: obj_rans
+    use ARES_Config_Types_m, only: obj_rans, obj_time_scheme, obj_sim_param
     use ARES_Lib_Fluid, only : Vorticity_Vector, Vorticity_Tensor
     use ARES_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use ARES_Mod_MPI, only: is_local_block
@@ -39,12 +39,16 @@ contains
     type(ARES_domain_type), intent(inout) :: domain
     ! Local
     integer :: b
-    logical :: SpalartShur, SAR, SAcomp, rough
+    logical :: SpalartShur, SAR, SAcomp, rough, point_implicit
 
     SpalartShur = obj_rans%SpalartShur
     SAR         = obj_rans%SAR
     SAcomp      = obj_rans%SAcomp
     rough       = obj_rans%rough
+    ! The point-implicit factor serves steady runs only: in time-accurate runs (time-accurate, or a time-accurate
+    ! HYDRA coupling) the source is explicit and its stiffness enters the time step (Compute_dt)
+    point_implicit = obj_rans%point_implicit .and. &
+                     .not. ( obj_time_scheme%time_accurate .or. obj_sim_param%HYDRA_time_accurate )
 
     if ( SpalartShur ) then
       call compute_velocity_gradient ( domain )
@@ -66,7 +70,7 @@ contains
                            domain % blk(b) % dtlocal,      &
                            domain % blk(b) % dim,          &
                            SpalartShur, SAR, SAcomp, rough,&
-                           obj_rans%point_implicit         )
+                           point_implicit                  )
     
     end do
 
@@ -201,10 +205,15 @@ contains
       if ( SAcomp ) call Compressibility_Correction &
       ( nitilde, rho, chi, Prim(nh,i,j,k), Prim(np,i,j,k), Om, Production )
 
-      ! Point-implicit (Patankar) treatment of the SA destruction term
+      ! Point-implicit factor of steady runs. It multiplies the whole increment of the row: the fluxes already in
+      ! Res(nt) (Fluxes, BC_Fluxes) here, the source below. The steady state, zero residual, then does not
+      ! depend on the step (point-implicit form of Bussing and Murman: H. C. Yee, J. L. Shinn, NASA TM-89415, 1986,
+      ! eq. 3.1; T. H. Pulliam, AIAA Paper 93-3360, eq. 8)
       fnu = 1d0
-      if ( point_implicit ) &
+      if ( point_implicit ) then
         fnu = 1d0 / ( 1d0 + dt(i,j,k) * 2d0 * cw1 * fw * nitilde / ynlocal**2 )
+        Res(nt,i,j,k) = Res(nt,i,j,k) * fnu
+      end if
 
       ! Source multiplied by rho since the SA equation is integrated in conservative form
       Source = rho * ( Production + Diffusion - Destruction ) * vol(i,j,k) * fnu
@@ -213,6 +222,28 @@ contains
     enddo ; enddo ; enddo ! (i, j, k) loop
 
   end subroutine SA_Source_Blk
+
+
+  !> Bound of the stiffness of the destruction term, cw1 fw (nu~/d)^2: its derivative with respect to nu~ at fixed fw
+  !> is 2 cw1 fw nu~/d^2, and fw = g ((1 + cw3^6)/(g^6 + cw3^6))^(1/6) grows with g >= 0 towards (1 + cw3^6)^(1/6) =
+  !> 2.005, so d <= 2 cw1 (1 + cw3^6)^(1/6) nu~/d^2: from the cell alone, exact where fw is near its limit (r at its cap
+  !> of 10: nu~ far above its equilibrium), larger by 2.005/fw where fw is smaller (about 2 in an equilibrium boundary
+  !> layer, r near 1). d is the wall distance of the source, moved below a rough wall (SA-rough: the caller gives
+  !> k_rough = 0 on a smooth wall, as SA_Source_Blk takes it).
+  pure function Spalart_Stiffness_Bound ( rans_variables, rho, walldist, k_rough ) result ( stiff )
+    use ARES_Global_m
+    implicit none
+    real(R8), intent(in), dimension(nRANS) :: rans_variables  ! : rho nu~
+    real(R8), intent(in)                   :: rho, walldist, k_rough
+    real(R8)                               :: stiff
+    ! Local
+    real(R8) :: d
+
+    d = walldist
+    if ( k_rough > 0d0 ) d = d + 0.03_R8 * k_rough
+    stiff = 2d0 * cw1 * ( 1d0 + cw3**6 )**(1d0/6d0) * max ( rans_variables(1) / rho, 0d0 ) / d**2
+
+  end function Spalart_Stiffness_Bound
 
 
   function func (yy,rr) result (result)

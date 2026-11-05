@@ -104,13 +104,15 @@ blocks = 1 1         ; source / destination block
 faces  = 3 4         ; source / destination face
 ```
 
+The two records of a connection face (`101`, `201`) in `bc.txt` must point at each other (each one's `bs is js ks fs` is the other's block, cell and face, not its own); ARES stops at set-up otherwise. The block across a connection face must have at least two cells across that face, at every multigrid level: the two ghost cells of the face are its first two cells, and their metrics come from its first two node planes past the face. A record whose block across has one cell stops the run at set-up, with the message that names the record, the block and its cells; blocks one cell thick across a connection are not supported. The flux of the face is computed once, by the record of the cell on the low-index side (between faces of the same parity, by the record with the smaller block, face, k, j, i, whatever the order of the records in the file), and given with the opposite sign to the other cell, also across MPI ranks (see [Spatial Discretization](../theory/numerics.md#faces-between-blocks)).
+
 ### Walls
 
 `type = wall` is the viscous no-slip wall. The keys present select the thermal treatment; roughness `ks` (0 = smooth) and emissivity `eps` are optional add-ons:
 
 | Keys present | Wall condition |
 |--------------|----------------|
-| `q` (`= 0` ⇒ adiabatic) | Prescribed **heat flux** |
+| `q` (`= 0` ⇒ adiabatic) | Prescribed **heat flux**, positive into the fluid on every face |
 | `T` | **Isothermal** wall |
 | *(none)* | Inviscid **slip** wall (same as `symmetry`) |
 
@@ -132,6 +134,11 @@ type = wall
 q    = 0.0
 ks   = 1.0e-4        ; equivalent sand-grain roughness height [m]
 ```
+
+The wall output, `OUTPUT/wall.tec`, writes the same quantities on every face of every wall, oriented into the gas: the
+stress `tauX`, `tauY`, `tauZ` is the traction of the gas on the wall, $\boldsymbol{\tau}\cdot\mathbf{n}$ with
+$\mathbf{n}$ the unit normal into the gas (along the flow under an attached boundary layer); the heat flux `qw` is
+positive into the gas, as `q` (a heat-flux wall writes its `q`, an isothermal wall the heat it conducts into the gas).
 
 ### Inlets
 
@@ -265,7 +272,7 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 | `200` | `axisymmetric`  | Rotational periodicity of a wedge or sector: the two k faces (5 and 6) of one block | — |
 | `201` | `periodic`      | Periodic face pair (dispatched as a connection) | — |
 | `300` | `symmetry` / `wall` (no data) | Symmetry plane / inviscid slip wall | — |
-| `301` | `wall` (`q`)    | No-slip wall, prescribed heat flux `qw` (`0` = adiabatic) | `q, ks, eps` |
+| `301` | `wall` (`q`)    | No-slip wall, prescribed heat flux `qw`, positive into the fluid on every face (`0` = adiabatic) | `q, ks, eps` |
 | `302` | `wall` (`T`)    | No-slip wall, prescribed temperature `Tw` (isothermal) | `T, ks, eps` |
 | `400` | `extrapolation` | Zeroth-order extrapolation (supersonic outflow / far-field) | — |
 | `404` | `inlet` (`g`,`T`) | Subsonic inlet: mass flux + static temperature | `T, g, α, β, rel[, turb]` |

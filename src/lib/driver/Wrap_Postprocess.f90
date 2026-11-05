@@ -26,6 +26,7 @@ contains
     use ARES_Read_Ini,       only: Read_Inifile_Runtime
     use ARES_Mod_MPI,        only: mpi_is_root
     use ARES_Mod_Timers,     only: timer_summary
+    use ARES_Lib_Newstate,   only: Report_Negative_Turbulence
     use IR_precision
     implicit none
     type(ARES_simulation_type), intent(inout) :: simulation
@@ -132,6 +133,9 @@ contains
 
       ! Timing summary (collective — every rank contributes its accumulators)
       call timer_summary()
+
+      ! Negative turbulence variables after a stage, over the run (collective)
+      call Report_Negative_Turbulence()
 
       ! Write output solution (collective — all ranks participate in gather)
       call Write_Solution ( simulation%domain(1), simulation%IOfield(1), solfile )
