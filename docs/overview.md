@@ -115,8 +115,9 @@ See [Low-Mach Preconditioning](theory/preconditioning.md).
 
 | Library | Role | Source |
 |---------|------|--------|
-| [FLINT](https://github.com/MarcoGrossi92/FLINT) | Real-fluid thermodynamic & transport tables | Bundled submodule |
-| [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O — Tecplot, VTK, Plot3D | Bundled submodule |
+| [FLINT](https://github.com/MarcoGrossi92/FLINT) | Real-fluid thermodynamic & transport tables | Release 2.0 or a later 2.x, fetched by the configure |
+| [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O — Tecplot, VTK, Plot3D | Release 2.1 or a later 2.x, fetched by the configure |
+| [OSLO](https://github.com/MarcoGrossi92/OSLO) | ODE solvers, required by FLINT | Release 1.1 or a later 1.x, fetched by the configure |
 | [FiNeR](https://github.com/szaghi/FiNeR) | INI configuration file parser | Bundled submodule |
 
 ### Optional libraries

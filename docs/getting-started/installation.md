@@ -16,14 +16,24 @@ Before building ARES make sure your system provides the following tools and comp
 
 **ifx 2024.1 and IPO.** ifx 2024.1 (tested: 2024.1.0, build 20240308) compiles a loop of the ghost metrics wrongly at `-O2` and `-O3` without interprocedural optimization: a minimal program in standard Fortran gives wrong values at `-O2` and `-O3`, also at the default level with no `-O` option, and the right ones at `-O0`, `-O1` and with `-ipo`. `BC_Extrapolate_Metrics` of ARES has that loop: ARES built so can stop at set-up on a negative volume, or run with wrong ghost metrics. CMake therefore refuses ifx 2024.1 at `-O2` or above without IPO, with a message: a RELEASE build with `-DUSE_IPO=OFF` (`--no-ipo`), or whose toolchain cannot do IPO, and the TESTING build. The RELEASE build with IPO (the default) and the DEBUG build (`-O0`) are accepted. Other versions of ifx have not been tested. The check runs only when ARES is built on its own: a project that embeds ARES (Hydra) sets its own flags.
 
+### ORION, OSLO and FLINT
+
+ARES requires these three libraries by a range of releases, as FLINT and ATLAS do (`cmake/SemVerDeps.cmake`). The configure checks the release out in `lib/`.
+
+| Path | Repository | Releases | Purpose |
+|------|------------|----------|---------|
+| `lib/ORION` | `github.com/MarcoGrossi92/ORION` | 2.1 or a later 2.x | I/O routines (Tecplot, VTK, Plot3D, …) |
+| `lib/OSLO` | `github.com/MarcoGrossi92/OSLO` | 1.1 or a later 1.x | ODE solvers, required by FLINT |
+| `lib/FLINT` | `github.com/MarcoGrossi92/FLINT` | 2.0 or a later 2.x | Real-fluid thermodynamic & transport tables |
+
+The first configure needs the network: it lists the tags of each library (`git ls-remote`, https) and clones the newest release that satisfies the range. `deps.lock`, in the source root and not tracked, keeps the releases selected: the next configures use them without the network (`-DFETCHCONTENT_FULLY_DISCONNECTED=ON` works then). `-DSEMVER_UPDATE=ALL` (`./install.sh build --update-deps`) selects the newest releases again; `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>` (`--include-orion|flint|oslo=<path>`) builds a local checkout instead. When a project embeds ARES (Hydra), that project chooses the releases.
+
 ### Git submodules
 
-ARES depends on several repositories included as Git submodules.
+The other dependencies are Git submodules.
 
 | Path | Repository | Purpose |
 |------|------------|---------|
-| `lib/FLINT` | `github.com/MarcoGrossi92/FLINT` | Real-fluid thermodynamic & transport tables |
-| `lib/ORION` | `github.com/MarcoGrossi92/ORION` | I/O routines (Tecplot, VTK, Plot3D, …) |
 | `lib/third_party/FiNeR` | `github.com/szaghi/FiNeR` | INI file parser (v2.3.0) |
 | `lib/third_party/PENF`, `FACE`, `FLAP`, `BeFoR64`, `StringiFor` | `github.com/szaghi/<name>` | Libraries of FiNeR, at their release tags (PENF v2.0.1, FACE v1.1.17, FLAP v2.5.3, BeFoR64 v1.2.4, StringiFor v1.8.0) |
 
@@ -42,6 +52,8 @@ cd ARES
 
 !!! note "An existing clone"
     After pulling new commits into an existing clone, run `git submodule update --init --recursive`: a submodule checked out at an older commit is not updated by the build. If FiNeR is older than v2.1.0, the first version that reads a comment line holding `=` as a comment (CMake reads the version from its `VERSION` file, which FiNeR has since v2.0.7), CMake stops and gives this command.
+
+    `lib/ORION` and `lib/FLINT` were submodules before they were taken by release: git leaves the two folders in place after that pull. The configure moves each one to its release when it is a detached checkout without changes, and otherwise stops and names the folder.
 
 To install ARES you may either use the bundled install script or invoke CMake manually. The script is the preferred route for most users.
 
@@ -77,10 +89,11 @@ Options accepted by `build`:
 * `--use-sundials` – build and link the bundled SUNDIALS library (requires a C compiler).
 * `--use-cantera` – build and link Cantera (requires a C++ compiler).
 * `--no-ipo` – disable interprocedural (link-time) optimization in the RELEASE build.
-* `--include-orion=PATH` – use an external ORION tree instead of the submodule.
+* `--include-orion=PATH` – build a local ORION checkout instead of a release (`-DFETCHCONTENT_SOURCE_DIR_ORION`).
 * `--include-flint=PATH` – same for FLINT.
 * `--include-oslo=PATH` – same for OSLO.
-* `--include-finer=PATH` – same for FiNeR.
+* `--include-finer=PATH` – use an external FiNeR tree instead of the submodule.
+* `--update-deps` – select again the newest releases of ORION, OSLO and FLINT (`-DSEMVER_UPDATE=ALL`, this build only).
 
 After a successful build, a `CMakePresets.json` file is written in the source root so that subsequent compilations can reuse the configuration.
 
@@ -93,7 +106,7 @@ After a successful build, a `CMakePresets.json` file is written in the source ro
 ./install.sh compile
 ```
 
-**`update` command** — synchronises the Git submodules. By default it checks out the commit recorded in `.gitmodules`; `--remote` fetches the latest commit from each remote branch.
+**`update` command** — synchronises the Git submodules (FiNeR and its libraries). By default it checks out the commit recorded in `.gitmodules`; `--remote` fetches the latest commit from each remote branch.
 
 ```bash
 ./install.sh update            # sync to recorded commit
@@ -111,9 +124,9 @@ cmake .. \
     -DCMAKE_Fortran_COMPILER=gfortran \  # or ifx
     -DUSE_OPENMP=ON \                    # or OFF
     -DUSE_MPI=OFF \
-    -DORION_PATH=/path/to/ORION \        # optional
-    -DFLINT_PATH=/path/to/FLINT \        # optional
-    -DFINER_PATH=/path/to/FiNeR          # optional
+    -DFETCHCONTENT_SOURCE_DIR_ORION=/path/to/ORION \  # optional
+    -DFETCHCONTENT_SOURCE_DIR_FLINT=/path/to/FLINT \  # optional
+    -DFINER_PATH=/path/to/FiNeR                       # optional
 cmake --build . --parallel
 ```
 
