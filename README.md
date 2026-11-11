@@ -43,7 +43,7 @@ ARES is the real-fluid solver of the **[Hydra](https://github.com/open-hydra)** 
 git clone https://github.com/open-hydra/ARES.git
 cd ARES
 
-# initialise the submodule dependencies
+# initialise the submodule dependencies (ORION, OSLO and FLINT are fetched by the first build)
 ./install.sh update
 
 # Build with GNU compilers and OpenMP
@@ -70,12 +70,13 @@ See the [Quick Start](https://open-hydra.github.io/ARES/getting-started/quick-st
 
 ## Dependencies
 
-ARES is built on top of several companion libraries, included as Git submodules:
+ARES is built on top of several companion libraries: ORION, OSLO and FLINT by release range (the configure checks the newest release that satisfies the range out in `lib/` and keeps it in `deps.lock`), FiNeR as a Git submodule:
 
 | Library | Role |
 |---|---|
-| [FLINT](https://github.com/MarcoGrossi92/FLINT) | Real-fluid thermodynamic & transport tables |
-| [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O (Tecplot, VTK, Plot3D) |
+| [FLINT](https://github.com/MarcoGrossi92/FLINT) | Real-fluid thermodynamic & transport tables (2.0 or a later 2.x) |
+| [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O (Tecplot, VTK, Plot3D) (2.1 or a later 2.x) |
+| [OSLO](https://github.com/MarcoGrossi92/OSLO) | ODE solvers, required by FLINT (1.1 or a later 1.x) |
 | [FiNeR](https://github.com/szaghi/FiNeR) | INI configuration file parser |
 
 Optional external libraries: **OpenMP**, **MPI**, **TecIO**.
@@ -90,7 +91,7 @@ ARES/
 │   ├── app/           # Main application (solver entry point + doc generator)
 │   ├── lib/           # Solver library (base, config, numerics, physics, io, parallel, driver, diagnostic)
 │   └── test/          # Unit-test scaffold
-├── lib/               # Git submodule dependencies (FLINT, ORION, FiNeR)
+├── lib/               # Dependencies (FLINT, ORION, OSLO releases; FiNeR submodule)
 ├── test/              # Verification & validation cases
 │   ├── Flat_Plate_SA/        #   turbulent flat plate — Spalart–Allmaras
 │   ├── Flat_Plate_SST/       #   turbulent flat plate — Menter SST

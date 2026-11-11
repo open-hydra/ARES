@@ -34,10 +34,11 @@ ARES/
 │   │       └── Lib_Prt_Correction.f90
 │   └── test/                # Unit-test scaffold (built with BASIC_TEST=ON; currently empty)
 │
-├── lib/                     # External dependencies (git submodules)
-│   ├── FLINT/               #   Real-fluid thermodynamic tables (bundles the OSLO ODE library)
-│   ├── ORION/               #   Structured-grid I/O library
-│   └── third_party/
+├── lib/                     # External dependencies
+│   ├── FLINT/               #   Real-fluid thermodynamic tables (release checked out by the configure)
+│   ├── ORION/               #   Structured-grid I/O library (release checked out by the configure)
+│   ├── OSLO/                #   ODE solver library, required by FLINT (release checked out by the configure)
+│   └── third_party/         #   Git submodules
 │       └── FiNeR/           #   INI file parser
 │
 ├── test/                    # Validation test suite (flat plates, HTD, Prt-correction, common/ tooling)
@@ -50,15 +51,18 @@ ARES/
 
 ## Dependencies
 
-**Required submodules** (always linked, located in `lib/`):
+**Required libraries** (always linked, located in `lib/`):
 
 | Library | Purpose |
 |---------|---------|
-| `FLINT` | Real-fluid thermodynamic & transport tables (ships the OSLO ODE solver library under `lib/FLINT/lib/OSLO`) |
-| `ORION` | Structured multi-block grid I/O |
-| `FiNeR` | INI file parser |
+| `FLINT` | Real-fluid thermodynamic & transport tables (release 2.0 or a later 2.x) |
+| `ORION` | Structured multi-block grid I/O (release 2.1 or a later 2.x) |
+| `OSLO` | ODE solver library, required by FLINT (release 1.1 or a later 1.x) |
+| `FiNeR` | INI file parser (submodule) |
 
-Optional compile-time dependencies (TecIO, SUNDIALS, Cantera) are enabled via the `install.sh build` flags (`--use-tecio`, `--use-sundials`, `--use-cantera`), which record the corresponding cache variables in `CMakePresets.json` for the submodule builds.
+ORION, OSLO and FLINT are required by release range with `semver_dependency` (`cmake/SemVerDeps.cmake`): the configure checks the newest release that satisfies the range out in `lib/` and records it in `deps.lock` (see [Installation](../getting-started/installation.md#orion-oslo-and-flint)).
+
+Optional compile-time dependencies (TecIO, SUNDIALS, Cantera) are enabled via the `install.sh build` flags (`--use-tecio`, `--use-sundials`, `--use-cantera`), which record the corresponding cache variables in `CMakePresets.json` for the library builds.
 
 ---
 
@@ -389,9 +393,10 @@ External library paths are set via CMake cache variables (or written automatical
 
 | Variable | Default | Library |
 |----------|---------|---------|
-| `ORION_PATH` | `lib/ORION/` | ORION I/O |
-| `FLINT_PATH` | `lib/FLINT/` | FLINT real-fluid tables |
-| `OSLO_PATH` | `lib/FLINT/lib/OSLO/` | OSLO (FLINT dependency) |
+| `FETCHCONTENT_SOURCE_DIR_ORION` | empty: the release, in `lib/ORION/` | ORION I/O |
+| `FETCHCONTENT_SOURCE_DIR_FLINT` | empty: the release, in `lib/FLINT/` | FLINT real-fluid tables |
+| `FETCHCONTENT_SOURCE_DIR_OSLO` | empty: the release, in `lib/OSLO/` | OSLO (FLINT dependency) |
+| `SEMVER_UPDATE` | `OFF` | `ALL`: select the newest releases of the three again, once |
 | `FINER_PATH` | `lib/third_party/FiNeR/` | FiNeR INI parser |
 
 ---
