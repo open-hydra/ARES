@@ -19,6 +19,7 @@ contains
     use ARES_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use ARES_IO_BC,                only: Setup_BC
     use ARES_Mod_Metrics,          only: Setup_Metrics
+    use ARES_Mod_Fluxes,           only: Setup_Quasi2D_W
     use ARES_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
     use ARES_IO_Wall,              only: Initialize_Wall_File, IOwall
     use ARES_Lib_Ghost,            only: Fill_Ghost_Cell
@@ -114,6 +115,10 @@ contains
     do m = 1, obj_multigrid%MGL
       call Setup_Metrics ( simulation%domain(m) )
     end do
+
+    ! Quasi-2D case with symmetry k faces: w = 0 and the z momentum is not integrated (needs ndir, the BC types
+    ! and the initial field; before the ghost cells and the coarse multigrid levels are filled)
+    call Setup_Quasi2D_W ( simulation%domain(1) )
 
     ! Free heavy arrays on non-local blocks to save memory
     do m = 1, obj_multigrid%MGL
@@ -560,12 +565,14 @@ contains
 
 
     subroutine Print_Shell_Info()
-      use IR_Precision,   only: str  
+      use IR_Precision,   only: str
       use ARES_IO_BC,     only: Print_BC_Summary
       use ARES_IO_Probes, only: nprobes
+      use ARES_Lib_Metrics, only: delthe
       implicit none
       ! Local
       character(llen) :: eosword
+      character(len=16) :: angle
       integer :: b, total_cells, k
 
       ! ----- Domain topology -----
@@ -583,6 +590,26 @@ contains
       write(*,'(A,T35,I0)') '   Blocks', simulation%domain(1)%nb
       write(*,'(A,T35,I0)') '   Cells', total_cells
       write(*,'(A,T35,I0)') '   Boundary faces', simulation%domain(1)%nbound
+      ! The type of the mesh, which Check_Mesh_Type takes from the nodes. delthe exactly zero (no wedge, no sector) is
+      ! written as two ordered comparisons, as in the rest of the code: the same result as == 0, also for -0 and NaN,
+      ! with no compiler warning on the equality of reals
+      write(angle,'(F16.6)') delthe * 180d0 / acos ( -1d0 )
+      select case ( ndir )
+        case ( 1 )
+          write(*,'(A,T35,A)') '   Mesh type', '1-D'
+        case ( 2 )
+          if ( delthe >= 0d0 .and. delthe <= 0d0 ) then
+            write(*,'(A,T35,A)') '   Mesh type', '2-D, plane'
+          else
+            write(*,'(A,T35,A)') '   Mesh type', '2-D, axisymmetric wedge of '//trim(adjustl(angle))//' degrees'
+          end if
+        case default
+          if ( delthe >= 0d0 .and. delthe <= 0d0 ) then
+            write(*,'(A,T35,A)') '   Mesh type', '3-D'
+          else
+            write(*,'(A,T35,A)') '   Mesh type', '3-D, sectors of '//trim(adjustl(angle))//' degrees (type 200)'
+          end if
+      end select
       if ( obj_multigrid%MGL > 1 ) &
         write(*,'(A,T35,I0)') '   Multigrid levels', obj_multigrid%MGL
 
@@ -610,10 +637,16 @@ contains
         write(*,'(A,T35,A)') '   Viscous model', 'Laminar'
       elseif (model==2) then
         write(*,'(A,T35,A)') '   Viscous model', 'Turbulent, '//trim(obj_rans%model)
-        if (obj_rans%point_implicit) &
-          write(*,'(A,T35,A)') '   Point-implicit', 'ON (Patankar destruction source terms)'
+        if (obj_rans%point_implicit) then
+          if (obj_time_scheme%time_accurate .or. obj_sim_param%HYDRA_time_accurate) then
+            write(*,'(A,T35,A)') '   Point-implicit', 'not applied (time-accurate run: explicit sources)'
+          else
+            write(*,'(A,T35,A)') '   Point-implicit', 'ON (factor on the increment of the turbulence equations)'
+          end if
+        end if
         if (nRANS == 2 .and. trim(obj_rans%omega_wall_bc) == 'asymptotic') &
-          write(*,'(A,T35,A)') '   Omega wall condition', 'asymptotic (6*nu/(beta1*y^2))'
+          write(*,'(A,T35,A,F0.2,A)') '   Omega wall condition', 'asymptotic (omega = ', obj_rans%omega_wall_coef, &
+                                      ' nu/y^2, 6/beta of the model)'
         if (obj_rans%Prt_correction) &
           write(*,'(A,T35,A)') '   Prt correction', 'ON (rough-wall turbulent Prandtl)'
         if (obj_rans%sst_asymptotic) &

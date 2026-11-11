@@ -221,7 +221,7 @@ contains
 
 
   subroutine Ghost_Axysimmetry ( Im, Jm, Km, Fm, blk )
-    use ARES_Lib_Metrics, only: delthe
+    use ARES_Lib_Metrics, only: cos_delthe, sin_delthe
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     type(ARES_block_type), intent(inout) :: blk
@@ -232,21 +232,18 @@ contains
     Jg = Jm - guide(Fm,2)
     Kg = Km - guide(Fm,3)
 
-    if (ndir < 3) then 
+    if (ndir < 3) then
       ! Rotate v and w of +/- delthe and copy other variables
-      blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Km) * cos(delthe) + &
-                guide(Fm,3) * blk % P (nw,Im,Jm,Km) * sin(delthe)
-      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Km) * sin(delthe) * (-guide(Fm,3)) &
-                            + blk % P (nw,Im,Jm,Km) * cos(delthe)
+      blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Km) * cos_delthe + guide(Fm,3) * blk % P (nw,Im,Jm,Km) * sin_delthe
+      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Km) * sin_delthe * (-guide(Fm,3)) + blk % P (nw,Im,Jm,Km) * cos_delthe
       blk % P (1:nu,Ig,Jg,Kg) = blk % P (1:nu,Im,Jm,Km)
       blk % P (nh:nprim,Ig,Jg,Kg) = blk % P (nh:nprim,Im,Jm,Km)
     else
-      ! cell is connected with opposite K-face, with v/w rotated of +-delthe
+      ! The cell next to the opposite k face, turned about x by -guide(Fm,3)*delthe: back by the
+      ! sector angle behind face 5, forward behind face 6 (the same turn as the 2-D branch above)
       Ks = blk % dim(3) - Km + 1
-      blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * cos(delthe) + &
-                    guide(Fm,3) * blk % P (nw,Im,Jm,Ks) * sin(delthe)
-      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * sin(delthe) + &
-                 (-guide(Fm,3)) * blk % P (nw,Im,Jm,Ks) * cos(delthe)
+      blk % P (nv,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * cos_delthe + guide(Fm,3) * blk % P (nw,Im,Jm,Ks) * sin_delthe
+      blk % P (nw,Ig,Jg,Kg) = blk % P (nv,Im,Jm,Ks) * sin_delthe * (-guide(Fm,3)) + blk % P (nw,Im,Jm,Ks) * cos_delthe
       blk % P (1:nu,Ig,Jg,Kg) = blk % P (1:nu,Im,Jm,Ks)
       blk % P (nh:nprim,Ig,Jg,Kg) = blk % P (nh:nprim,Im,Jm,Ks)
     endif
