@@ -295,7 +295,44 @@ A mass-flux inlet (`g = 80.65 kg/m²s`, `T = 300 K`) compiles to:
 
 The identifier line places the BC on block 1, cell `(1,1,1)`, face 1, with type `404` (inlet: mass flux + static temperature). The data line carries `T`, `g`, the in-plane and out-of-plane flow angles (`normal` = face-normal inflow), and a relaxation factor.
 
+!!! note "Extrapolation (400)"
+    A `400` face needs no data: it takes the flux of the state of its boundary cell, $\mathbf{F}(q_1)\cdot\mathbf{n}\,A$,
+    whatever the direction of the gas. Where the gas of the boundary cell moves into the domain, it enters with the state of that
+    cell: the characteristics that enter take the values of the cell, not data from outside, so a `400` face keeps any uniform
+    inflow going by itself, whether the case wants it (the inlet of a truncated domain whose state outside is that of its
+    boundary cells) or not (a free boundary through which the flow draws gas in, a plenum fed through its outlet). Where the gas
+    outside has a known state, use an inlet (`404`, `405`).
+
+    The run says where the gas enters through `400` faces. The first time it enters through the `400` faces of one face of a
+    block (on each grid level), the run prints one line with the block, the face (and the grid level, with more than one),
+    the iteration, the faces through which the gas enters at that stage and the largest $|w|/a$ among them, $w$ the velocity
+    of the gas of the boundary cell along the normal out of the domain and $a$ its speed of sound. Each time the largest
+    $|w|/a$ of that boundary at a stage is more than 10 times that of its last line, one more line follows, with that value
+    and the faces above 10 times the last one: a boundary has at most one line for each order of magnitude that its inflow
+    grows, not one for each stage. The lines are written at the end of the boundary fluxes of their stage, before the cells
+    are updated, so a run that then stops on an error has them in its output. At the end of a run in which the gas entered
+    through `400` faces, one more line reports the flux evaluations of `400` faces where it entered, over the stages, grid
+    levels and ranks, and the largest $|w|/a$ among them; a run in which no gas entered, and a run that stops on an error, do
+    not print it. The lines do not say whether or when the inflow ends; the end line says how many flux evaluations it lasted.
+    After a restart the lines and the end line count from the restart, with the iteration of the restarted run. $|w|/a$ of
+    about $10^{-9}$ or less: only round-off moves the gas towards the domain, as on the side faces of 1-D cases; from
+    $10^{-6}$ to $10^{-3}$: small motions towards the domain, such as the numerical oscillations next to a shock or a junction
+    between blocks, or a weak flow across the face; from $10^{-2}$ up: the gas really enters, at the inlet of a truncated
+    domain or where the flow draws gas in through a free boundary.
+
 !!! note "Type 200"
+    With one cell in $k$, type `200` on faces 5 and 6 makes the mesh a 2-D axisymmetric wedge: the two faces lie at
+    $\theta = \mp\delta/2$ and the ghost cell across each is the cell rotated by $\mp\delta$ about the $x$ axis. The
+    inviscid flux gives the pressure and centrifugal terms; with the Navier–Stokes equations the viscous stress of the
+    faces is applied as well ($-\tau_{\theta\theta}/r$ in the radial momentum, see
+    [Spatial Discretization](../theory/numerics.md#axisymmetric-wedge)). Keep the wedge thin: the azimuthal
+    derivatives carry an error of order $\delta^2$. With more than one cell in $k$, type `200` is a rotational
+    periodicity: faces 5 and 6 make one interior face of the whole annulus, with its inviscid and viscous fluxes (see
+    [Spatial Discretization](../theory/numerics.md#3-d-sector)). A viscous run on a wedge or a sector whose boundary
+    faces on the axis have zero area stops at set-up, with the block, the cell and the face: so do axis nodes exactly at
+    $r = 0$, and axis nodes at a small radius whose positions on the two $k$ planes coincide. Put the axis nodes at a
+    small radius, $10^{-6}$ of the radial size of the first cell, turned with the other nodes of their $k$ plane.
+
     A face of type `200` takes what lies beyond it from the other $k$ face of its own block, in the same column
     $(i, j)$, turned by the angle of the wedge or of the sector: type `200` joins the two $k$ faces (5 and 6) of one
     block, and a block closed by type `200` holds the whole wedge or sector in $k$. A record of type `200` on a face 1 to

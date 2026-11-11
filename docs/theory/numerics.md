@@ -130,6 +130,100 @@ $\sin\delta$ computed once, with $\delta$, when the mesh is read. The angle
 $\delta$ and the type of the mesh (plane, wedge, sector or translated block)
 come from the nodes of every block ([Running ARES](../user/using.md), note *Mesh type*).
 
+#### Axisymmetric wedge
+
+A 2-D axisymmetric case is a wedge of the 3-D mesh: one cell in $k$, whose two
+$k$ faces lie in the meridional planes $\theta = \mp\delta/2$ and carry the
+boundary type `200`. ARES integrates the 3-D equations on the wedge; there are
+no axisymmetric source terms. The ghost cell across each wedge face is the cell
+itself rotated by $\mp\delta$ about the $x$ axis, so every face flux follows
+from the state of the cell:
+
+- inviscid: the pressure and the momentum carried by the cell state rotated to
+  the face (no Riemann problem). In the radial momentum the two faces give the
+  $+p/r$ and the centrifugal terms of the axisymmetric equations;
+- viscous: the flux of a face between the cell and its rotated image, with the
+  stencil of an interior face (the $i$ and $j$ neighbours of the image rotated
+  in the same way) and the inverse-mean face metric of the cell and its image,
+  as on the faces between blocks (`Face_Metric`), computed once at setup (it
+  depends on the mesh only).
+
+On a planar 2-D mesh (faces 5 and 6 parallel, no wedge angle) type `200` makes
+the image the cell itself, and the fluxes of the two faces cancel.
+
+For an axisymmetric field the mass, energy and turbulence fluxes of the two
+faces are equal and opposite, and only the momentum fluxes are applied. Without
+swirl the viscous traction of each face is the normal stress
+
+$$
+\tau_{\theta\theta} = 2\mu\,\frac{u_r}{r} + \lambda\,\nabla\!\cdot\mathbf{u},
+\qquad \lambda = -\tfrac23\,\mu ,
+$$
+
+with $\mu$ including the eddy viscosity, and the two faces together give the
+$-\tau_{\theta\theta}/r$ of the radial momentum equation [6, 7]; with swirl
+they also carry $\tau_{r\theta}$ and $\tau_{x\theta}$. Near the axis
+$\tau_{\theta\theta}/r$ is as large as the radial stress terms it balances: in
+Homann's stagnation-point flow [8] $\tau_{rr} = \tau_{\theta\theta}$, and
+$\tau_{rr}/r$ and $\tau_{\theta\theta}/r$ cancel exactly while each grows like
+$1/r$ towards the axis.
+
+The azimuthal derivatives of the $i$ and $j$ faces are differences across the
+rotated ghost cells divided by the $k$ edge of the cell, which is a chord: they
+carry a relative error of order $\delta^2$ that the mesh does not reduce
+($\delta^2/12$ of the hoop stress $2\mu u_r/r^2$ in the radial balance,
+$2.5\times10^{-5}$ for $\delta = 1^\circ$). Keep the wedge thin.
+
+Put the axis nodes at a small radius ($10^{-6}$ of the radial size of the first
+cell), turned with the other nodes of their $k$ plane: a viscous run on a wedge
+whose boundary faces on the axis have zero area stops at setup, whether its
+axis nodes are exactly at $r = 0$ or those of the two $k$ planes coincide. On
+such an axis the faces have no normal, so their ghost cells copy the cells, and the wedge faces of the first row of cells, which take
+the derivative in $r$ across the axis with the ghost cell one cell away, would
+see half of $\partial u_r/\partial r$: an error of the hoop stress of those
+cells that refinement does not reduce ($1/6$ of $2\mu u_r/r^2$ in Homann's
+flow). The faces of those cells along the axis would do the same.
+
+Next to the axis the hoop stress also stiffens the explicit step. In the radial
+momentum of the first row of cells, at $r \approx \Delta r/2$, it is a damping
+$(2\mu+\lambda)\,u_r/r^2 \approx \tfrac{16}{3}\,\mu\,u_r/\Delta r^2$ ($\mu$ with
+the eddy viscosity), with couplings to the neighbours through $\lambda\,\nabla\cdot\mathbf{u}$.
+The local time step includes them ([Time Integration](time-integration.md#local-time-step)),
+so the `vnn` limits of the rule hold next to the axis too.
+
+#### 3-D sector
+
+On a 3-D sector (type `200` with more than one cell in $k$) faces 5 and 6
+make one interior face of the whole annulus, computed once, by the record of
+face 6, for the inviscid and for the viscous flux. Beyond face 6 lies the cell
+next to face 5 turned forward by the sector angle, a turn $R$ about $x$: the
+$i$ and $j$ differences of the image row are those of that row turned, the
+metric of the image is that of its cell turned, $M R^{\mathsf T}$ (each row of
+$M = \partial\xi/\partial\mathbf{x}$ is a vector), and the wall distance and
+roughness of the face are the mean of the two cells, as on an interior face.
+The cell next to face 6 takes the flux and the cell next to face 5 the same
+flux with its momentum turned back, $R^{\mathsf T}F$: mass, energy, turbulence
+variables, axial momentum and angular momentum about $x$ are conserved. A
+translated sector (faces 5 and 6 parallel) is the same with $R = I$.
+
+The viscous faces of type `200`, of the wedge and of the sector, take the
+inverse-mean metric of the cell and of its image: their derivatives along the
+face (in $i$ and $j$) are central differences over two cells divided by the
+mean edge of the cell and of its image. Where the cell size grows along the
+face by a ratio $q$ they carry the factor $(1+q)^2/(4q)$, a relative error of
+$(q-1)^2/(4q)$ ($8.3\times10^{-3}$ at $q = 1.2$), and in the first row next to
+an axis with symmetry (`300`), whose ghost cell is the mirror image of the cell,
+$(3+q)/4$, a relative error of $(q-1)/4$ ($5\times10^{-2}$ at $q = 1.2$);
+refinement at a fixed ratio does not reduce them. A linear field is therefore
+not exact at the faces of type `200`: for $u_r = U r$, whose viscous force is
+zero, the radial viscous force of a cell of the wedge is that relative error
+times the hoop term $\tau_{\theta\theta}/r$, on top of the error of order
+$\delta^2$ above. A viscous run on a sector whose boundary faces on the axis
+have zero area stops at setup, as on the wedge: behind faces of zero area the
+periodic faces of the first row of cells would see half of
+$\partial u_r/\partial r$ ($1/6$ of the hoop term in Homann's flow). Put the
+axis nodes at a small radius, turned with the other nodes of their $k$ plane.
+
 ---
 
 ## MUSCL Reconstruction
@@ -250,7 +344,7 @@ Velocity and temperature gradients for the viscous flux are computed at each int
 
 The resulting computational-space gradient $(\xi,\eta,\zeta)$ is mapped to Cartesian $(x,y,z)$ with the **face-metric tensor** $M_{3\times3}$, taken as the average $M = \tfrac12(M_1 + M_2)$ of the two adjacent cells' metrics, computed from the grid geometry and stored per face. The same metric provides the physical spacing $\Delta l$ used in the MUSCL reconstruction.
 
-Block-connection (`101`, `201`) and chimera (`102`) faces use the inverse mean instead, $M_f = \left[\tfrac12\left(M_1^{-1} + M_2^{-1}\right)\right]^{-1}$, the inverse of the mean of the two cell edge vectors (`Face_Metric`): the one-index difference across the face is then divided by the centre-to-centre distance. The mean of $M$ divides it by the mean of $1/h$ instead: across a large cell-size jump at a block interface (86:1 makes it 22 times too steep) the normal gradient is far too steep and the explicit diffusion on the large cell becomes unstable, although its own time step is fine.
+Block-connection (`101`, `201`), chimera (`102`) and type-`200` faces ([Rotational periodicity](#rotational-periodicity-type-200)) use the inverse mean instead, $M_f = \left[\tfrac12\left(M_1^{-1} + M_2^{-1}\right)\right]^{-1}$, the inverse of the mean of the two cell edge vectors (`Face_Metric`): the one-index difference across the face is then divided by the centre-to-centre distance. The mean of $M$ divides it by the mean of $1/h$ instead: across a large cell-size jump at a block interface (86:1 makes it 22 times too steep) the normal gradient is far too steep and the explicit diffusion on the large cell becomes unstable, although its own time step is fine.
 
 ### Metrics of the ghost cells
 
@@ -346,3 +440,6 @@ solutions differ at round-off.
 3. M. Čada, M. Torrilhon, "Compact third-order limiter functions for finite volume methods," *J. Comput. Phys.* 228 (2009).
 4. A. Jameson, W. Schmidt, E. Turkel, "Numerical solution of the Euler equations by finite volume methods using Runge–Kutta time-stepping schemes," AIAA-81-1259, 1981.
 5. M. Vinokur, "An analysis of finite-difference and finite-volume formulations of conservation laws," NASA CR-177416, 1986: pp. 15–16, Eq. (60a) (the area vector of a face of a hexahedron as half the cross product of its diagonals; the shape of each face "precisely defined and consistently used by the two neighboring cells" so that the volumes sum to the total volume; the doubly ruled face); p. 35, Eq. (137)–(138) (first-order one-sided expressions for the geometry at a boundary, as second-order ones can give negative volumes).
+6. R. Vandenhoeck, A. Lani, "Implicit high-order flux reconstruction solver for high-speed compressible flows," arXiv:1811.08666v1, 2018, Appendix A.2, eqs. (A.6)–(A.7) (axisymmetric source $(0, 0, p - \tau_{\theta\theta}, 0)^T$).
+7. Eilmer 4, Gas Dynamics Toolkit, `src/eilmer/fvcell.d`, lines 1213–1228 (viscous source of axisymmetric flow), https://github.com/gdtk-uq/gdtk, commit 826496a; the code is described in N. N. Gibbons, K. A. Damm, P. A. Jacobs, R. J. Gollan, "Eilmer: an open-source multi-physics hypersonic flow solver," *Comput. Phys. Commun.*, 282, 108551, 2023, doi:10.1016/j.cpc.2022.108551.
+8. F. Homann, "Der Einfluss grosser Zähigkeit bei der Strömung um den Zylinder und um die Kugel," *Z. Angew. Math. Mech.*, 16, 153–164, 1936 (not read; as cited by J. Magnaudet and M. Abbas, arXiv:2011.10755v1, 2020). The equation of the flow, f''' + 2ff'' − f'² + 1 = 0 with f(0) = f'(0) = 0, f'(∞) = 1, u_r = a r f'(η), u_x = −2(aν)^{1/2} f(η), as written by P. Rajamanickam, arXiv:2508.17982v4, Eq. (12), and by H. Guo, X. Zhuang, X. Meng, T. Rabczuk, arXiv:2010.05682v1, Eq. (7) with β₀ = 2, β = 1, whose Table 8 gives f''(0) = 1.31194.

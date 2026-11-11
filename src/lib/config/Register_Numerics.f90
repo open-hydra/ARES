@@ -30,8 +30,11 @@ contains
     call reg%add( trim(section), 'time-scheme', obj_time_scheme%solver_type, 'euler', 'Time integration solver', 'euler, RK2, RK3', .true. )
 
     ! Stability coefficients and related options
-    call reg%add( trim(section), 'cfl', obj_time_scheme%cfl, '0.5', 'CFL number', '> 0', .true. )
-    call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', 'VNN parameter', '> 0', .false. )
+    call reg%add( trim(section), 'cfl', obj_time_scheme%cfl, '0.5', &
+                  'CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17)', '> 0', .true. )
+    call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', &
+                  'Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62)', &
+                  '> 0', .false. )
     call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'CFL rise threshold', '>= 0', .false. )
 
     ! Time-accurate switch
@@ -48,6 +51,9 @@ contains
           'Implicit Residual Smoothing (steady runs only; switched on only at setup)', 'logical', .false. )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
           'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
+    call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'all', &
+          'Residuals smoothed by IRS: all (also the RANS equations; for Spalart-Allmaras: the k-omega models can '// &
+          'diverge with all) or flow (mass, momentum, energy)', 'flow, all', .false. )
 
 
     ! Preconditioning (enabled automatically when integration-variables = prec)

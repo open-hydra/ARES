@@ -126,7 +126,7 @@ sequenceDiagram
 
 Each `Explicit_Step` performs one time step:
 
-1. **Compute Δt** — local/global steps from the CFL and VNN conditions (preconditioned signal speed when `prec` is active; in time-accurate RANS runs also the stiffness of the turbulence sources).
+1. **Compute Δt** — local/global steps from one additive rule of the convective (CFL) and diffusive (VNN) rates, summed over the directions (preconditioned signal speed when `prec` is active; on a 2-D wedge also the hoop stress of the wedge faces; in time-accurate RANS runs also the stiffness of the turbulence sources).
 2. **Runge–Kutta loop** (`n_RK` stages):
     - Fill ghost cells (boundary + inter-block).
     - Evaluate convective fluxes (reconstruction → Riemann solver).
@@ -154,7 +154,11 @@ so that the message is written once and the exit code is 1. With symmetry (`300`
 index direction that has fewer than two cells (the $k$ faces of a 2-D case, the $j$ faces of a 1-D case),
 the second layer of ghost cells of each face copies the first layer of the other: `Setup_Metrics` fills
 the ghost layers of the symmetry faces one layer at a time, each after the previous layer of every face,
-so their metrics do not depend on the number or on the order of the threads.
+so their metrics do not depend on the number or on the order of the threads. The viscous flux of a face of
+type `200` (`BC_Rotational_Periodic_Visc`) takes the inverse-mean metric of the cell and of its image, which
+depends on the mesh only: `Setup_Metrics` computes it once (`Rotational_Periodic_Face_Metric`) and stores it in
+the record (`bc%rM`), and `BC_Fluxes` passes it. A viscous run on a wedge or a sector closed by type `200` whose
+boundary faces on the axis have zero area stops there (`Check_Wedge_Axis`).
 
 ---
 
