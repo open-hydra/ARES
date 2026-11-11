@@ -11,7 +11,8 @@ module ARES_Lib_IRS
 contains
 
   !% Compute the Implicit Residual Smooting operator: R* = R + beta*LAPLACE(R*) with Jacobi iterations.
-  subroutine Residual_Smoothing ( domain, beta )
+  ! nsm: the residuals 1:nsm are smoothed (nh: the flow equations, mass, momentum and energy; nprim: all of them).
+  subroutine Residual_Smoothing ( domain, beta, nsm )
     use ARES_Advanced_Types_m
     use ARES_Global_m
     use ARES_Lib_Ghost
@@ -19,6 +20,7 @@ contains
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
     real(R8), intent(in) :: beta
+    integer, intent(in)  :: nsm
     ! Local
     integer :: b, d
 
@@ -31,7 +33,7 @@ contains
         if (.not. is_local_block(b)) cycle
 
         call Residual_Smoothing_Blk ( domain % blk(b) % r, domain % blk(b) % rs1, &
-                                      domain % blk(b) % rs2, domain % blk(b) % dim, d, beta )
+                                      domain % blk(b) % rs2, domain % blk(b) % dim, d, beta, nsm )
 
       enddo ! blocks
     
@@ -40,10 +42,10 @@ contains
   end subroutine Residual_Smoothing
 
 
-  subroutine Residual_Smoothing_Blk ( Res, Res_Star, Res_Star_New, n, Dir, beta )
+  subroutine Residual_Smoothing_Blk ( Res, Res_Star, Res_Star_New, n, Dir, beta, nsm )
     use ARES_Global_m
     implicit none
-    integer, intent(in) :: n(3), Dir
+    integer, intent(in) :: n(3), Dir, nsm
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res, Res_Star, Res_Star_New
     real(R8), intent(in) :: beta
     ! Local
@@ -70,12 +72,13 @@ contains
       do i = 1, n(1)
 
         call Jacobi_Stencil ( i1, j1, k1, i2, j2, k2, i, j, k, Dir )
-        r  = Res (:,i,j,k)
-        rm = Res_Star (:,i1,j1,k1)
-        rp = Res_Star (:,i2,j2,k2)
-            
+        r (1:nsm) = Res (1:nsm,i,j,k)
+        rm(1:nsm) = Res_Star (1:nsm,i1,j1,k1)
+        rp(1:nsm) = Res_Star (1:nsm,i2,j2,k2)
+
         ! Jacobi: r*_New(i) = [ r(i) + e*( r*(i-1) + r*(i+1) ) ] / [ 1 + 2e ]
-        Res_Star_New(:,i,j,k) = ( r + beta * ( rm + rp ) ) / ( 1d0 + 2d0*beta )
+        ! Only the residuals 1:nsm are smoothed; the others are left untouched.
+        Res_Star_New(1:nsm,i,j,k) = ( r(1:nsm) + beta * ( rm(1:nsm) + rp(1:nsm) ) ) / ( 1d0 + 2d0*beta )
 
       enddo; enddo; enddo
 
@@ -84,7 +87,7 @@ contains
       do j = 1, n(2)
       do i = 1, n(1)
 
-        Res_Star(:,i,j,k) = Res_Star_New(:,i,j,k)
+        Res_Star(1:nsm,i,j,k) = Res_Star_New(1:nsm,i,j,k)
 
       enddo; enddo; enddo
 
@@ -96,7 +99,7 @@ contains
     do j = 1, n(2)
     do i = 1, n(1)
 
-      Res(:,i,j,k) = Res_Star(:,i,j,k)
+      Res(1:nsm,i,j,k) = Res_Star(1:nsm,i,j,k)
 
     enddo; enddo; enddo
 

@@ -20,17 +20,19 @@ Local time stepping is a convergence accelerator, not a physical integration: ce
 
 ## The two stability numbers
 
-`cfl` (required) and `vnn` set the convective and viscous limits; the local step is the minimum over directions of both:
+`cfl` (required) and `vnn` set the convective and the diffusive rates of one additive rule for the local step ([theory](../theory/time-integration.md#local-time-step)):
 
 $$
-\Delta t_\text{conv} = \mathrm{CFL}\,\frac{\Delta \ell_d}{|u_d| + a},
-\qquad
-\Delta t_\text{visc} = \mathrm{VNN}\,\frac{\rho\,\Delta \ell_d^2}{\mu_\ell + \mu_t}
+\frac{1}{\Delta t} =
+\frac{1}{\mathrm{CFL}} \sum_d \bigl( |\mathbf u\cdot\nabla\xi_d| + a\,|\nabla\xi_d| \bigr)
++ \frac{D_{\max}}{\mathrm{VNN}} \sum_d |\nabla\xi_d|^2 ,
 $$
 
-With `integration-variables = prec` the convective wave speed in the first expression is itself replaced by its preconditioned counterpart, so the step no longer collapses as the Mach number falls.
+with $|\nabla\xi_d|$ the inverse of the width of the cell across its faces of direction $d$ and $D_{\max}$ the largest diffusivity of the equations (in a gas the energy one, $(k_\ell + \mu_t c_p/\text{Pr}_t)/(\rho c_v)$). The directions and the two rates add up: a cell where both matter takes a step smaller than either limit alone.
 
-On a wall-resolved viscous mesh the near-wall cells are thin, $\Delta\ell^2$ collapses and **the VNN limit dominates** — raising `cfl` alone then buys nothing. If the step seems pinned regardless of `cfl`, `vnn` is what is binding.
+With `integration-variables = prec` the convective wave speed in the first sum is itself replaced by its preconditioned counterpart, so the step no longer collapses as the Mach number falls.
+
+On a wall-resolved viscous mesh the near-wall cells are thin, $|\nabla\xi|^2$ grows and **the VNN term dominates** — raising `cfl` alone then buys nothing. If the step seems pinned regardless of `cfl`, `vnn` is what is binding.
 
 ---
 

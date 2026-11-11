@@ -104,6 +104,8 @@ contains
 
             case (200) ! periodic
               call BC_Rotational_Periodic_Eul ( Im, Jm, Km, Fm, blk(Bm) )
+              if (model>0) &
+                call BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, blk(Bm), bc(i) % rM, Sc, Sct, Prt, Prt_corr )
 
             case (300) ! symmetry
               call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
@@ -123,7 +125,7 @@ contains
               endif
 
             case (400) ! extrapolation
-              call BC_Extrapolation ( Im, Jm, Km, Fm, blk(Bm) )
+              call BC_Extrapolation ( Bm, Im, Jm, Km, Fm, blk(Bm) )
 
             case (404) ! inlet: static temperature T + prescribed mass flux
               call BC_Inlet_MassFlux_T ( Bm, Im, Jm, Km, Fm, blk(Bm), &
@@ -157,6 +159,10 @@ contains
 
       enddo faces
     enddo blocks
+
+    ! The lines of the gas entering through 400 faces at this stage, before the source terms and the update of the cells
+    ! (after the implicit barrier of the last loop above: the loops over the records have no nowait)
+    call Report_400_Entering_Lines ()
 
   end subroutine BC_Fluxes_core
 

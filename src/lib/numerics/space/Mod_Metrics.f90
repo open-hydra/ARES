@@ -10,6 +10,7 @@ contains
     use ARES_Advanced_Types_m
     use ARES_Global_m
     use ARES_Lib_Metrics
+    use ARES_Lib_BC_Fluxes_Rotational, only: Rotational_Periodic_Face_Metric
     use ARES_Mod_MPI, only: is_local_block
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
@@ -51,6 +52,10 @@ contains
       call Compute_Norm_Area ( domain % blk(b) )
     enddo
     call Stop_On_Bad_Metric ( )
+
+    ! A viscous run on the 2-D axisymmetric wedge or on a 3-D sector stops when the axis is exactly at r = 0
+    ! (Check_Wedge_Axis)
+    if ( model > 0 ) call Check_Wedge_Axis ( domain )
 
     if (model>1) then
 
@@ -143,7 +148,83 @@ contains
     ! A degenerate or inverted ghost cell (Compute_Metric_Tensor wrote the first one): every rank stops together
     call Stop_On_Bad_Metric ( )
 
+    ! Type 200: the face metric of the viscous flux depends on the metrics of the cell and of its image (above) only:
+    ! once here, into the record, for the faces of the blocks of this rank (Rotational_Periodic_Face_Metric)
+    if ( model > 0 ) then
+      do i = 1, domain % nbound
+        if ( domain % bc(i) % type /= 200 ) cycle
+        Bm = domain % bc(i) % b
+        if (.not. is_local_block(Bm)) cycle
+        domain % bc(i) % rM = Rotational_Periodic_Face_Metric ( domain % bc(i) % i, domain % bc(i) % j, &
+                                domain % bc(i) % k, domain % bc(i) % f, domain % blk(Bm) )
+      enddo
+    end if
+
   end subroutine Setup_Metrics
+
+
+  !> A viscous run on the 2-D axisymmetric wedge (type 200 on the k faces, one cell in k), or on a 3-D sector closed by
+  !> type 200 on its k faces, stops at setup when a boundary face of a block so closed has zero area, that is when the
+  !> axis is exactly at r = 0, or when its nodes of the two k planes coincide (axis nodes at a small radius that are not
+  !> turned with the other nodes of their k plane). Behind a face of zero area the ghost cell is a copy of the cell
+  !> (Ghost_Symmetry with a zero normal). The faces of type 200 (BC_Rotational_Periodic_Visc) take the derivative in r
+  !> across the axis with the ghost cell one cell away: they see half of d u_r/dr, and the hoop stress of the first row of
+  !> cells is wrong by 1/6 of it in a Homann flow (on the wedge, 32 and 64 cells, and on a sector of four cells of 1
+  !> degree), whatever the cell size. Put the axis nodes at a small radius, 1e-6 of the radial size of the first cell,
+  !> turned with the other nodes of their k plane: there the face on the axis has an area, its ghost cell is the mirror
+  !> image of the cell, and these derivatives are right.
+  subroutine Check_Wedge_Axis ( domain )
+    use ARES_Advanced_Types_m
+    use ARES_Global_m, only: ndir
+    use ARES_Lib_Metrics, only: delthe
+    use ARES_Lib_BC_Fluxes, only: Face_Index
+    use ARES_Mod_MPI, only: is_local_block, mpi_abort_all
+    implicit none
+    type(ARES_domain_type), intent(in) :: domain
+    ! Local
+    integer :: r, b, dir, fi, fj, fk
+    logical, allocatable :: closed(:)
+
+    ! The blocks closed by type 200: none when delthe is exactly zero (two ordered comparisons, as in
+    ! BC_Rotational_Periodic_Visc); in 2-D every block is then a wedge, in 3-D delthe is not zero only with sectors turned
+    ! about the x axis (Check_Mesh_Type), the blocks with a type-200 record on faces 5 and 6, as there
+    if ( delthe >= 0d0 .and. delthe <= 0d0 ) return
+    allocate ( closed(domain % nb) )
+    closed = ( ndir < 3 )
+    if ( ndir == 3 ) then
+      do r = 1, domain % nbound
+        if ( domain % bc(r) % type == 200 .and. domain % bc(r) % f >= 5 ) closed(domain % bc(r) % b) = .true.
+      enddo
+    end if
+    do r = 1, domain % nbound
+      b = domain % bc(r) % b
+      if ( .not. is_local_block(b) .or. .not. closed(b) ) cycle
+      call Face_Index ( domain % bc(r) % f, dir, domain % bc(r) % i, domain % bc(r) % j, domain % bc(r) % k, fi, fj, fk )
+      if ( domain % blk(b) % dir(dir) % f(fi,fj,fk) % a > 0d0 ) cycle
+      if ( ndir == 3 ) then
+        write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
+                                              domain % bc(r) % k, ', face ', domain % bc(r) % f, &
+                                              ': a face of zero area on the 3-D sector (type 200 on the k faces):'
+        write(*,'(A)') ' [ERROR]   the axis nodes are exactly at r = 0, or those of the two k planes coincide (not turned'
+        write(*,'(A)') ' [ERROR]   with the other nodes of their k plane). The ghost cells behind the faces of zero area copy'
+        write(*,'(A)') ' [ERROR]   the cells, and the hoop stress of the first row of cells would be wrong (by 1/6 of it in a'
+        write(*,'(A)') ' [ERROR]   Homann flow). Put the axis nodes at a small radius, 1e-6 of the radial size of the first'
+        write(*,'(A)') ' [ERROR]   cell, turned with the other nodes of their k plane.'
+        call mpi_abort_all ( 'axis of the 3-D sector at r = 0 (see above)' )
+      else
+        write(*,'(A,I0,A,3(1X,I0),A,I0,A)') ' [ERROR] block ', b, ', cell', domain % bc(r) % i, domain % bc(r) % j, &
+                                              domain % bc(r) % k, ', face ', domain % bc(r) % f, &
+                                              ': a face of zero area on the 2-D axisymmetric wedge (type 200):'
+        write(*,'(A)') ' [ERROR]   the axis nodes are exactly at r = 0, or those of the two k planes coincide (not turned'
+        write(*,'(A)') ' [ERROR]   with the other nodes of their k plane). The ghost cells behind the faces of zero area copy'
+        write(*,'(A)') ' [ERROR]   the cells, and the hoop stress of the first row of cells would be wrong (by 1/6 of it in a'
+        write(*,'(A)') ' [ERROR]   Homann flow). Put the axis nodes at a small radius, 1e-6 of the radial size of the first'
+        write(*,'(A)') ' [ERROR]   cell, turned with the other nodes of their k plane.'
+        call mpi_abort_all ( 'axis of the 2-D axisymmetric wedge at r = 0 (see above)' )
+      end if
+    enddo
+
+  end subroutine Check_Wedge_Axis
 
 
   !> A cell is the image of the unit cube by the trilinear map of its eight nodes, and a finite volume needs that map

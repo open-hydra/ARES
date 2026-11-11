@@ -33,6 +33,8 @@ module ARES_Advanced_Types_m
     logical                    :: owner = .false.                           ! BC 101/201: this record computes the flux of the face
     ! BC 101/201: residual of the face for this record's cell, (:,1) inviscid, (:,2) viscous
     real(R8), allocatable      :: Fc(:,:)
+    ! BC 200 (ARES_Lib_BC_Fluxes_Rotational): face metric of the viscous flux, set once (Setup_Metrics)
+    real(R8)                   :: rM(3,3) = 0.0_R8                          ! Rotational_Periodic_Face_Metric
     integer                    :: ni(2)                                     ! BC chimera
     integer, allocatable       :: donorID(:,:)                              ! BC chimera
     real(R8), allocatable      :: volume_fraction(:)                        ! BC chimera

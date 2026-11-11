@@ -18,6 +18,7 @@ contains
     use ARES_Mod_Allocate_Data,    only: Setup_Data_Structure, deallocate_remote_computation_data
     use ARES_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use ARES_IO_BC,                only: Setup_BC
+    use ARES_Lib_BC_Fluxes_Extrapolation, only: Setup_400_Entering
     use ARES_Mod_Metrics,          only: Setup_Metrics
     use ARES_Mod_Fluxes,           only: Setup_Quasi2D_W
     use ARES_IO_Probes,            only: Setup_Probes, Restart_Probes, Drop_Probe_Rows, Drop_Rows_After
@@ -98,6 +99,8 @@ contains
     setup_error = .false.
     if (mpi_is_root) call Check_BC ( setup_error )
     call Stop_Together ( setup_error, 'boundary condition error (see above)' )
+    ! The record of the lines of the gas entering through 400 faces (every rank, for the blocks of every level)
+    call Setup_400_Entering ( simulation%domain, obj_multigrid%MGL )
 
     ! MPI: partition blocks once on finest-level cell counts (restriction and
     ! prolongation are block-local, so a block must live on the same rank at

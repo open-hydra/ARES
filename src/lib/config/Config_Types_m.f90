@@ -139,6 +139,7 @@ module ARES_Config_Types_m
     character(len=llen) :: description
     ! USER-DEFINED INPUTS
     real(R8)  :: beta
+    character(len=llen) :: variables           ! all (also the RANS equations) or flow (mass, momentum, energy)
     ! Useful variables
     logical   :: enabled
     logical   :: at_setup = .false.            ! IRS on at setup: only then are its arrays allocated

@@ -101,6 +101,45 @@ These are read by ARES and validated against the registry.
 
 ---
 
+## Time step: `cfl` and `vnn`
+
+Each cell takes the largest explicit step that keeps it stable, from one rule
+([theory](../theory/time-integration.md#stability-conditions)):
+
+- `cfl` is the Courant number of the **sum over the directions** of the convective
+  spectral radii, $|\mathbf{v}\cdot\nabla\xi_d| + a|\nabla\xi_d|$, measured on the
+  width of the cell across its faces;
+- `vnn` is the diffusion number of the **largest diffusivity** of the equations, also summed
+  over the directions: in air the energy one, $\gamma\nu/\text{Pr} \approx 1.94\,\nu$;
+  with Spalart–Allmaras also $(\nu + \tilde\nu)/\sigma$;
+- the convective and the diffusive rates **add up**: a cell where both matter gets a step
+  smaller than either limit alone;
+- in time-accurate RANS runs the stiffness of the turbulence sources adds up as well, with no
+  parameter (note *Turbulence sources in time-accurate runs* above).
+
+Stability limits of the linearised schemes (MUSCL with upwind fluxes, central diffusion);
+the additive rule stays stable for any `cfl` and `vnn` up to these values:
+
+| `time-scheme` | `cfl` ≤ | `vnn` ≤ |
+|---|---|---|
+| `RK2` (Heun) | 1 | 0.5 |
+| `RK3` | 1.17 | 0.62 |
+| `euler` | 1 with `first-order` reconstruction (unstable with `MUSCL`) | 0.5 |
+
+These are linear limits. With the limiter, positivity (a maximum principle; the scheme is not TVD in more than one
+dimension) is guaranteed only up to `cfl = 0.5` and `vnn = 0.5`, with Heun and with RK3
+([theory](../theory/time-integration.md#local-time-step)), and the `vnn` limits are sharp: a run
+a little beyond them blows up. Suggested values:
+
+- `RK3`: `cfl = 0.8` (above the guaranteed 0.5) and `vnn = 0.5`;
+- `RK2` (Heun): `cfl = 0.5` with moving shocks, up to `cfl = 0.7` where the flow is smooth, and
+  `vnn = 0.4`; never `cfl` ≥ 0.95 or `vnn` ≥ 0.5.
+
+The defaults are `cfl = 0.5` and `vnn = 0.3`; in a viscous time-accurate run raise `vnn` within the limits of the
+table before `cfl`.
+
+---
+
 ## Pre-processing sections (ATLAS)
 
 These define the case and are consumed by **ATLAS** to generate the `INPUT/` data. They are documented here because they live in the same file, but their full semantics belong to the [ATLAS documentation](https://github.com/open-hydra/ATLAS).

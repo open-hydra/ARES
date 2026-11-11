@@ -19,13 +19,14 @@ This page is the reference for every `[ARES-*]` parameter. It mirrors the output
 | Parameter | Default | Allowed | Required | Description |
 |-----------|---------|---------|----------|-------------|
 | time-scheme | euler | euler, RK2, RK3 | **yes** | Time integration solver |
-| cfl | 0.5 | > 0 | **yes** | CFL number |
-| vnn | 0.3 | > 0 | no | Viscous (von Neumann) stability number |
+| cfl | 0.5 | > 0 | **yes** | CFL number of the convective spectral radii summed over the directions (RK2 <= 1, RK3 <= 1.17) |
+| vnn | 0.3 | > 0 | no | Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62) |
 | cfl-rise-threshold | 0 | >= 0 | no | Iterations over which CFL is ramped up |
 | time-accurate | .false. | logical | **yes** | Time-accurate switch (false = march to steady state) |
 | integration-variables | prim | prim, prec | no | Update variables: primitive or preconditioned |
 | irs | .false. | logical | no | Implicit Residual Smoothing (steady runs only; switched on only at setup) |
 | irs-beta | 0.0 | >= 0 | no | IRS smoothing coefficient (> 0 also enables IRS; steady runs only) |
+| irs-variables | all | flow, all | no | Residuals smoothed by IRS: all (also the RANS equations; for Spalart-Allmaras: the k-omega models can diverge with all) or flow (mass, momentum, energy) |
 | preconditioning-Uref | -1.0 |  | no | Reference velocity for preconditioning (< 0 ⇒ use sound speed) |
 | preconditioning-eps-min | -1.0 |  | no | Minimum cut-off $\varepsilon$ for preconditioning (< 0 ⇒ default 0.10) |
 | space-reconstruction | none | MUSCL, first-order, none | **yes** | Space reconstruction method |
