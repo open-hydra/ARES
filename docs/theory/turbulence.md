@@ -508,6 +508,83 @@ primitive variables are copied into the wall ghost cells, with the velocity reve
 fluxes through the first interior faces use the extrapolation of `Fill_Ghost_Cell`. The walls coupled to another solver
 (`103`, `104`) have no wall flux routine of their own: their ghost cells copy the cell, turbulence variables included.
 
+### Wall distance
+
+The distance $y$ of the models (SA, the SST blending functions, the wall
+value of $\omega$) is the minimum distance from the cell centre, the mean of
+its eight nodes, to the wall surface, as the NASA Turbulence Modeling
+Resource requires [13]. It is not the distance to the nearest wall node
+or face centre, which differs from it wherever the grid lines are not normal
+to the wall; next to a convex corner or at the end of a wall it is the
+distance to the corner or the end.
+
+The distance to the centre of the nearest wall face is wrong by a fixed
+fraction in the first cell of a skewed mesh. With the grid lines at an angle
+$\theta$ to the wall normal, the centre of the first cell, at the height
+$d_1$, lies $d_1\tan\theta$ along the wall from the centre of its wall face,
+the nearest face centre while $d_1\tan\theta$ is at most half the face, at
+the distance $d_1/\cos\theta$. The relative error,
+$1/\cos\theta - 1$, does not fall with refinement: 1.5 % at 10°, 6.4 % at 20°,
+15.5 % at 30°, 41 % at 45°. It enters squared the destruction of SA,
+$c_{w1} f_w (\tilde\nu/d)^2$ (a factor $\cos^2\theta$: 0.97, 0.88, 0.75,
+0.50), and the arguments of $F_1$ and $F_2$ and the wall value
+$\omega_w = 60\nu/(\beta_1 d_1^2)$ of SST. That distance is exact only on
+meshes orthogonal to the wall, with the cell centres above the face centres.
+
+- Each face of a wall boundary (types 103, 104, 301, 302) is the bilinear
+  surface through its four nodes, the face of the cells
+  ([Cell volume](numerics.md#cell-volume)):
+  $\mathbf{x}(s,t) = \mathbf{x}_1 + s\mathbf{a} + t\mathbf{b} + st\mathbf{T}$,
+  $\mathbf{a} = \mathbf{x}_2 - \mathbf{x}_1$, $\mathbf{b} = \mathbf{x}_4 - \mathbf{x}_1$,
+  with the twist $\mathbf{T} = \mathbf{x}_1 - \mathbf{x}_2 + \mathbf{x}_3 - \mathbf{x}_4$
+  (corners in cyclic order). The distance to it is its minimum over the face,
+  exact to the rounding of the size of the face and of the distance: a face plane
+  to the resolution of its coordinates (every face of a 2-D mesh) takes the four
+  triangles between its centre and its sides, any other face a certified minimum
+  ([Code Structure](../development/structure.md#wall-distance) gives the
+  algorithm). The four triangles of a twisted face would be wrong by up to
+  $(|\mathbf{T}|/16)/y$, 6 % on a unit face twisted by 0.1 at the height 0.1.
+- On a 2-D axisymmetric wedge (BC 200) the distance is measured in the
+  meridional plane $(x, r)$, $r = \sqrt{y^2+z^2}$, from the cell centre to the
+  wall curve. This is the distance to the wall surface of revolution, and it
+  does not depend on the angle of the wedge. A wall on the faces of the wedge
+  (faces 5–6) stops the run. It is the one exception to the single geometric
+  model of the cells: for the wall distance the wall of the wedge is the
+  surface of revolution of its meridional curve, for the volumes and the fluxes
+  the cells are polyhedra with plane faces; the two differ by
+  $r(1 - \cos(\delta/2)) \approx r\delta^2/8$.
+- The distance and the face that gives it do not depend on the threads or on
+  the ranks.
+- Across periodic boundaries the wall goes on: the distance is the minimum over
+  the periodic images of the wall too. A periodic connection (type 201) gives
+  the translation from its source face to its own face, and on a 3-D mesh
+  without sectors so does a block closed in $k$ by type `200` (its last node
+  plane is the first one translated). The images are the integer combinations of
+  these translations (along $x$ on an axisymmetric wedge). The two sides of a
+  periodic boundary match only to the round-off of the coordinates in the mesh
+  file: translations that
+  differ by at most $10^{-2}$ of the thinnest cell across the periodic
+  boundaries are the same, as in the type of the mesh. The thickness of a
+  cell across a periodic face is the distance from the centre of the face to
+  the centre of the opposite face of the cell, along the normal of the face;
+  for a block closed in $k$ by type `200`, the move of its nodes per cell in
+  $k$. The round-off of a coordinate grows with its size, so a tolerance
+  relative to the size of the coordinates would depend on where the mesh
+  lies; relative to the cells it does not. On a 3-D mesh whose
+  sectors are closed by the rotational periodicity (type `200` on faces 5–6)
+  the images are also the turns by multiples of the sector angle about the
+  $x$ axis, up to half a turn either way. A channel periodic in $x$ and turned by
+  30 degrees about $z$ gives translations that differ by 1.1e-4 of its cells with
+  five significant digits, by 8.8e-4 with four, and by 0.15 with two, which stops
+  the run. Translations that do not form a lattice stop the run: one that is not
+  an integer combination of the others, more than three independent ones, or one
+  not along $x$ on a wedge or with sectors. Only a bounded set of images can hold
+  the nearest wall, and only those are searched: a mesh without periodic
+  boundaries costs nothing more.
+- With SA-rough each cell takes the sand-grain roughness $k_s$ of the face that gives the
+  minimum distance; between faces at the same distance, the first one in the
+  boundary file.
+
 ### Blowing / wall-transpiration correction
 
 The `-blowcorr` suffix activates a correction (`RANS_Set_Blowing_Wall`) that modifies the wall treatment under wall injection or suction. SA uses its own blowing wall values; the $k$–$\omega$ models (SST, Wilcox 2006) switch between the corrected and uncorrected $\omega$ wall BC accordingly.
@@ -678,3 +755,4 @@ hand-tuned per case and grid.
 10. P. E. Smirnov, F. R. Menter, "Sensitization of the SST turbulence model to rotation and curvature by applying the Spalart–Shur correction term," *J. Turbomach.* 131(4), 041010, 2009, doi:10.1115/1.3070573.
 11. NASA Langley Turbulence Modeling Resource, "Implementing turbulence models into the compressible RANS equations," <https://tmbwg.github.io/turbmodels/implementrans.html>.
 12. D. C. Wilcox, "Formulation of the k-ω turbulence model revisited," *AIAA J.* 46(11), pp. 2823–2838, 2008, doi:10.2514/1.36541.
+13. NASA Langley Turbulence Modeling Resource, "The Spalart–Allmaras Turbulence Model," <https://tmbwg.github.io/turbmodels/spalart.html> (formerly turbmodels.larc.nasa.gov/spalart.html): minimum distance to the wall.

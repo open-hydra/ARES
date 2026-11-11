@@ -35,7 +35,7 @@ contains
 
   subroutine BC_Rotational_Periodic_Eul ( Im, Jm, Km, Fm, Blk )
     use ARES_Lib_Reconstruction, only : Reconstruction
-    use ARES_Lib_Metrics, only : delthe
+    use ARES_Lib_Metrics, only : cos_delthe, sin_delthe
     use ARES_Mod_Riemann
     use FLINT_Lib_Thermodynamic
 
@@ -109,21 +109,21 @@ contains
 
       ! Rotation
       if (Fm == 5) then
-        w_rot =  Prim1(nw) * cos(delthe) - Prim1(nv) * sin(delthe) 
-        v_rot =  Prim1(nw) * sin(delthe) + Prim1(nv) * cos(delthe)
+        w_rot =  Prim1(nw) * cos_delthe - Prim1(nv) * sin_delthe 
+        v_rot =  Prim1(nw) * sin_delthe + Prim1(nv) * cos_delthe
         Prim1(nv) = v_rot
         Prim1(nw) = w_rot
-        w_rot =  Prim2(nw) * cos(delthe) - Prim2(nv) * sin(delthe) 
-        v_rot =  Prim2(nw) * sin(delthe) + Prim2(nv) * cos(delthe)
+        w_rot =  Prim2(nw) * cos_delthe - Prim2(nv) * sin_delthe 
+        v_rot =  Prim2(nw) * sin_delthe + Prim2(nv) * cos_delthe
         Prim2(nv) = v_rot
         Prim2(nw) = w_rot
       elseif (Fm == 6) then
-        w_rot =  Prim3(nw) * cos(delthe) + Prim3(nv) * sin(delthe) 
-        v_rot = -Prim3(nw) * sin(delthe) + Prim3(nv) * cos(delthe)
+        w_rot =  Prim3(nw) * cos_delthe + Prim3(nv) * sin_delthe 
+        v_rot = -Prim3(nw) * sin_delthe + Prim3(nv) * cos_delthe
         Prim3(nv) = v_rot
         Prim3(nw) = w_rot
-        w_rot =  Prim4(nw) * cos(delthe) + Prim4(nv) * sin(delthe) 
-        v_rot = -Prim4(nw) * sin(delthe) + Prim4(nv) * cos(delthe)
+        w_rot =  Prim4(nw) * cos_delthe + Prim4(nv) * sin_delthe 
+        v_rot = -Prim4(nw) * sin_delthe + Prim4(nv) * cos_delthe
         Prim4(nv) = v_rot
         Prim4(nw) = w_rot
       end if  
@@ -170,8 +170,8 @@ contains
         ! Flux is in the face-6 frame (θ=delthe). Rotate momentum back to face-5
         ! frame (θ=0) before applying to Ks, so that (v,w) point in the right
         ! Cartesian directions for a cell sitting at θ=0.
-        Flux(nv) = ( F_v * cos(delthe) + F_w * sin(delthe) ) * Area !!!!!!!!!!!!!!!!!!!!
-        Flux(nw) = (-F_v * sin(delthe) + F_w * cos(delthe) ) * Area !!!!!!!!!!!!!!!!!!!!
+        Flux(nv) = ( F_v * cos_delthe + F_w * sin_delthe ) * Area !!!!!!!!!!!!!!!!!!!!
+        Flux(nw) = (-F_v * sin_delthe + F_w * cos_delthe ) * Area !!!!!!!!!!!!!!!!!!!!
         blk % r(:,Im,Jm,Ks) = blk % r(:,Im,Jm,Ks) - Flux
       end if
     end if

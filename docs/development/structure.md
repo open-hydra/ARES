@@ -146,6 +146,16 @@ construct and deprecated `master`), each followed by an explicit
 thread is the primary thread of the region. A `single` block may run on any thread of the team,
 so it must not contain MPI calls.
 
+At set-up `Setup_Metrics` computes the metrics of the cells of the blocks of each rank, and of their
+ghost cells, inside OpenMP parallel regions. A degenerate or inverted cell raises a flag shared by the
+threads (set in a critical section): the first thread of the rank that finds one writes it, and after
+the region every rank stops together (the largest of the flag over the ranks, then the collective stop),
+so that the message is written once and the exit code is 1. With symmetry (`300`) on the two faces of an
+index direction that has fewer than two cells (the $k$ faces of a 2-D case, the $j$ faces of a 1-D case),
+the second layer of ghost cells of each face copies the first layer of the other: `Setup_Metrics` fills
+the ghost layers of the symmetry faces one layer at a time, each after the previous layer of every face,
+so their metrics do not depend on the number or on the order of the threads.
+
 ---
 
 ## Convective Flux Evaluation
@@ -185,6 +195,109 @@ The selection is suffix-based: modifiers are detected with `index()` on the mode
 | `SSGLRR-w2019` | SSG-LRR with the length-scale correction of the $\omega$ equation (`LSC`) |
 
 The separate `Prt-correction` key (in `[ARES-Turbulence]`) requires an SA model with `-rough` active, and is calibrated for `Prt = 0.9`.
+
+### Wall distance
+
+`Wall_Distance_Blk` (`numerics/space/Lib_Metrics.f90`) gives every cell its distance to the wall surface
+that [Turbulence](../theory/turbulence.md#wall-distance) defines, with `Bilinear_Face_Distance` for the
+certified minimum and `Wall_Images` for the periodic images; $\mathbf{x}(s,t)$, $\mathbf{a}$, $\mathbf{b}$ and the
+twist $\mathbf{T}$ of a wall face are those of that page. The distance to a wall face is its minimum over the face,
+in one of two ways:
+
+- **The four triangles** between its centre and its sides, when the face is
+  plane to the resolution of its coordinates: they lie within
+  $g = \min(|\mathbf{T}|/16,\ |\mathbf{T}\cdot\mathbf{n}|/(2|\mathbf{n}|))$ of
+  the face, $\mathbf{n}$ the cross product of its diagonals (the second bound
+  when the face, projected on the plane normal to $\mathbf{n}$, is convex). The
+  face takes this way when a computed bound is within $8uM + \varepsilon$, with
+  $u = 2^{-53}$, $M$ the largest coordinate of its corners in absolute value and
+  $\varepsilon$ a proven bound of the rounding of that computation, which grows
+  with $\kappa_n|\mathbf{T}|$, $\kappa_n$ = 1/sine of the angle between the
+  diagonals. Every face of a 2-D mesh (a parallelogram) takes it, and every
+  convex plane face whose corners are not within $(49 + 30\kappa_n)u$ of a
+  straight or a null angle. Its distance is within $8uM + 2\varepsilon$ of the
+  distance to the face, plus the rounding of the triangles. The distance to a
+  triangle is the distance to its plane when the projection of the point falls
+  inside it, otherwise the distance to the nearest side.
+- **The certified minimum** on any other face: a branch and bound over the
+  rectangles of $(s, t)$, depth first. Upper bounds are points of the face (its
+  sides in closed form, the centre of each piece, projected Newton steps);
+  the lower bound of a piece is the larger of the distance to its two
+  triangles less $|\mathbf{T}_P|/4$, $\mathbf{T}_P$ the twist of the piece, and
+  the distance to the convex hull of its four corners, both less a proven
+  bound of their rounding; a piece is split in two across its longer side in
+  space. The result is within $\tau + 32uS = 288uS$ of the distance,
+  $S = |\mathbf{p} - \mathbf{x}_1| + |\mathbf{a}| + |\mathbf{b}| + |\mathbf{T}|$,
+  $\tau = 256uS$: the rounding of the size of the face and of the distance,
+  not of the coordinates. No case needs a treatment of its own: faces with a
+  collapsed side, three corners on one point, a bowtie, a pinch or a reflex
+  corner are plane or are treated the same way. The coordinates of the face
+  relative to its first corner pass through `VOLATILE` variables, so that the
+  compiler cannot rewrite them in terms of the coordinates themselves (as
+  for the [cell volume](../theory/numerics.md#cell-volume)).
+- A k-d tree over the face centres (`Lib_KDTree`), with the radius of each face, finds the
+  nearest face: the distance is computed only for the faces whose centre lies
+  within the best distance found so far plus their radius. When some face takes
+  the certified minimum, the search makes two passes over the tree: the first
+  finds an upper bound of the distance (the triangles of each face plus the
+  bound of their gap from the face and of the rounding), the second computes the
+  certified minimum only on the faces whose triangles, less that bound, are not
+  farther than it. Each pass gives the minimum of a function of the face alone,
+  so the distance and the face that gives it do not depend on the shape of the
+  tree, on the threads or on the ranks.
+- The distinct translations of the periodic boundaries are reduced
+  to a basis $B_1 \ldots B_n$ of the lattice they generate, shortest first,
+  and then pairwise (Lagrange: $B_j$ becomes $B_j - m B_i$, $m$ the integer
+  nearest to $B_i\cdot B_j / B_i\cdot B_i$, while that shortens it) and, with
+  three translations, by threes ($B_l$ becomes $B_l - m_i B_i - m_j B_j$, with
+  $m_i, m_j$ the integers nearest to the least-squares coefficients of $B_l$ on
+  $B_i, B_j$ or next to them, while that shortens it). Three nearly dependent
+  translations can be reduced pair by pair (no pairwise step shortens them)
+  and still have a short sum: $B_1 = (1, 0, 0)$,
+  $B_2 = (-\tfrac12, \tfrac{\sqrt3}{2}, 0)$,
+  $B_3 = (-\tfrac12, -\tfrac{\sqrt3}{2}, \varepsilon)$ give
+  $B_1 + B_2 + B_3 = (0, 0, \varepsilon)$, which only the step by threes finds.
+  Each step adds to a vector an integer combination of the others, so the
+  lattice is the same, and the bound below holds for any basis of it: the
+  reduction only keeps the number of images small. The
+  images are the integer combinations $\sum_i k_i B_i$ of the basis.
+- Only a bounded set of images can hold the nearest wall, whatever the size of
+  the mesh against its periods. Let $B^*_i$ be the dual basis
+  ($B^*_i\cdot B_j = \delta_{ij}$), $G_{ij} = B_i\cdot B_j$ the Gram matrix,
+  and $w_i = B^*_i\cdot w$ the coordinates of a vector $w$. Every wall face
+  is moved, whole, by the lattice vector that brings its centre $m$ to
+  $|(m - a)_i| \le 1/2$, $a$ the centre of the first wall face, and so is the
+  centre $c$ of every cell before its search: the periodic wall is the same
+  set. Let $p$ be the point of a face nearest to $c$ over all the images, and
+  $s$ the image that holds it: $s$ is a lattice vector closest to $v = c - p$
+  (another one would bring a point of the same face nearer), so $u = v - s$ is
+  not farther from 0 than from $\pm B_j$, $|u\cdot B_j| \le G_{jj}/2$, and
+  since $u_i = \sum_j (G^{-1})_{ij}\, u\cdot B_j$,
+  $|u_i| \le \beta_i = \tfrac12 \sum_j |(G^{-1})_{ij}|\, G_{jj}$ ($1/2$ on
+  an orthogonal basis). Every point of a face is a convex combination of its
+  corners, so $|(p - m)_i| \le \rho_i$, $\rho_i$ the largest
+  $|(q - m)_i|$ of a corner $q$ of a face, and
+  $|v_i| \le |(c - a)_i| + |(m - a)_i| + |(p - m)_i| \le 1 + \rho_i$. The
+  coefficients of $s$ are $k_i = v_i - u_i$: the images searched are
+  $|k_i| \le \lfloor 1 + \rho_i + \beta_i \rfloor$, one on each side
+  ($|k_i| \le 1$) when $\rho_i < 1/2$ on an orthogonal lattice. On a sector
+  every translation lies along $x$, and the turns keep the coordinate along
+  $x$, so the same bound holds for each turn. An image is searched only when
+  the box around the moved wall, seen from the cell moved back by the image,
+  is not farther than the distance found so far, so a mesh without periodic
+  boundaries costs nothing more. Translations that do not form a lattice stop
+  the run: one that is not an integer combination of the others, more than
+  three independent ones, or one not along $x$ on a wedge or with sectors; so
+  does a number of images too large for an integer.
+
+Twisted wall faces in 3-D. The four triangles of a face whose corners are not
+coplanar lie within $|\mathbf{T}|/16$ of it, and with them the distance would be
+wrong by up to $(|\mathbf{T}|/16)/y$: on a unit face twisted by $t = |\mathbf{T}|$,
+at the height $h$, 6 % for $t = h = 0.1$, 62 % for $t = 10^{-2}$ and
+$h = 10^{-3}$, and 62 times the distance for $t = 0.1$ and $h = 10^{-4}$. Such a
+face takes the certified minimum, and its distance is exact to the rounding.
+2-D and axisymmetric meshes are not affected: their wall faces are plane and
+take the four triangles.
 
 ---
 

@@ -193,7 +193,7 @@ contains
       ! (S. R. Allmaras, F. T. Johnson, P. R. Spalart, ICCFD7-1902, 2012, eq. 9). The source below is multiplied by
       ! rho, so the second term enters divided by rho.
       Diffusion = cb2 / sigma * Gradnit2 &
-                - ( nil + nitilde ) * Dot_Product ( Gradrho, Gradnit ) / ( sigma * rho )
+                - ( nil + nitilde ) * Dot_Product ( Gradrho, Gradnit ) / ( sigma * rho ) ! questo è aggiunto rispetto a prima
 
       ! Destruction term computation
       r_Fun = nitilde / ( Stilde * cK**2 * ynlocal**2 )
