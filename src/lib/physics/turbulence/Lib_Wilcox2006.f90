@@ -33,12 +33,15 @@ contains
     use ARES_Global_m
     use ARES_Mod_MPI, only: is_local_block
     use ARES_Config_Types_m, only: obj_rans, obj_time_scheme, obj_sim_param
+    use ARES_Base_Types_m, only: ARES_tensor_3D_type
+    use ARES_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(ARES_domain_type), intent(inout) :: domain
+    type(ARES_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
     logical :: k_energy_coupling, point_implicit
+    type(ARES_tensor_3D_type), pointer :: Mi(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
 
     k_energy_coupling = obj_rans%k_energy_coupling
     ! The point-implicit factor serves steady runs only: in time-accurate runs (time-accurate, or a time-accurate
@@ -49,9 +52,10 @@ contains
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
+      call Source_Metrics ( domain % blk(b), Mi, Mt=Mt )
       call Wilcox_Blk ( domain % blk(b) % P,       &
                         domain % blk(b) % r,       &
-                        domain % blk(b) % M,       &
+                        Mi, Mt,                    &
                         domain % blk(b) % vol,     &
                         domain % blk(b) % dtlocal, &
                         domain % blk(b) % dim,     &
@@ -63,7 +67,7 @@ contains
   end subroutine Wilcox2006_Source_Terms
 
 
-  subroutine Wilcox_Blk ( Prim, Res, M, Volume, dt, n, k_energy_coupling, point_implicit )
+  subroutine Wilcox_Blk ( Prim, Res, M, Mt, Volume, dt, n, k_energy_coupling, point_implicit )
     use ARES_Base_Types_m
     use ARES_Global_m
     use FLINT_Lib_Thermodynamic
@@ -76,7 +80,8 @@ contains
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
-    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M    ! velocity
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variables
     real(kind=8), dimension(n(1), n(2), n(3)), intent(in) :: dt
     ! Local
     integer :: i, j, k, ii, jj, kk
@@ -141,7 +146,7 @@ contains
                       Prim(nt:nt+1,i,j-1,k) / ph2vars( Prim(np,i,j-1,k), Prim(nh,i,j-1,k), rho_tab ) ) * 0.5d0
       Gradkw(:,3) = ( Prim(nt:nt+1,i,j,k+1) / ph2vars( Prim(np,i,j,k+1), Prim(nh,i,j,k+1), rho_tab ) - &
                       Prim(nt:nt+1,i,j,k-1) / ph2vars( Prim(np,i,j,k-1), Prim(nh,i,j,k-1), rho_tab ) ) * 0.5d0
-      Gradkw = Matmul ( Gradkw, M(i,j,k) % c )
+      Gradkw = Matmul ( Gradkw, Mt(i,j,k) % c )
 
       ! Cross Diffusion term
       dkDotdw = Dot_Product ( Gradkw(1,:), Gradkw(2,:) )

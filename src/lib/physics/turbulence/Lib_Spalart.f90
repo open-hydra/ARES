@@ -34,12 +34,15 @@ contains
     use ARES_Lib_Fluid, only : Vorticity_Vector, Vorticity_Tensor
     use ARES_Lib_SpalartShur, only : Compute_Velocity_Gradient, Compute_RC_Terms
     use ARES_Mod_MPI, only: is_local_block
+    use ARES_Base_Types_m, only: ARES_tensor_3D_type
+    use ARES_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(ARES_domain_type), intent(inout) :: domain
+    type(ARES_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
     logical :: SpalartShur, SAR, SAcomp, rough, point_implicit
+    type(ARES_tensor_3D_type), pointer :: Mi(:,:,:), Mc(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
 
     SpalartShur = obj_rans%SpalartShur
     SAR         = obj_rans%SAR
@@ -58,9 +61,10 @@ contains
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
+      call Source_Metrics ( domain % blk(b), Mi, Mc, Mt=Mt )
       call SA_Source_Blk ( domain % blk(b) % P,            &
                            domain % blk(b) % r,            &
-                           domain % blk(b) % M,            &
+                           Mi, Mc, Mt,                     &
                            domain % blk(b) % yn,           &
                            domain % blk(b) % ks,           &
                            domain % blk(b) % vol,          &
@@ -77,7 +81,8 @@ contains
     end subroutine Spalart_Source_Terms
 
 
-  subroutine SA_Source_Blk ( Prim, Res, M, yn, ks, vol, gradv, rc1, rc2, dt, n, SpalartShur, SAR, SAcomp, rough, point_implicit )
+  subroutine SA_Source_Blk ( Prim, Res, M, Mc, Mt, yn, ks, vol, gradv, rc1, rc2, dt, n, SpalartShur, SAR, SAcomp, rough, &
+                             point_implicit )
     use ARES_Base_Types_m
     use ARES_Global_m
     use FLINT_Lib_Thermodynamic
@@ -92,7 +97,9 @@ contains
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: yn
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: ks
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: vol
-    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M    ! velocity
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mc   ! density
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variable
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
@@ -180,13 +187,13 @@ contains
       Gradnit(2) = ( Prim(nt,i,j+1,k) / rho_n(2,2) - Prim(nt,i,j-1,k) / rho_n(1,2) ) * 0.5d0
       Gradnit(3) = ( Prim(nt,i,j,k+1) / rho_n(2,3) - Prim(nt,i,j,k-1) / rho_n(1,3) ) * 0.5d0
 
-      Gradnit = Matmul ( Gradnit, M(i,j,k) % c ) ! ni-tilde gradient
+      Gradnit = Matmul ( Gradnit, Mt(i,j,k) % c ) ! ni-tilde gradient
 
       Gradnit2 = Sum ( Gradnit**2 )              ! ni-tilde gradient squared
 
       ! Density gradient, same differences
       Gradrho(:) = ( rho_n(2,:) - rho_n(1,:) ) * 0.5d0
-      Gradrho = Matmul ( Gradrho, M(i,j,k) % c )
+      Gradrho = Matmul ( Gradrho, Mc(i,j,k) % c )   ! behind a wall the density follows the temperature (Ghost_Wall)
 
       ! Diffusion terms outside the flux div((mu + rho nu~) grad nu~)/sigma: the cb2 term and, with variable density,
       ! -(nu + nu~) grad rho . grad nu~ / sigma, which makes this conservation form equal to the original equation

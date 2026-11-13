@@ -74,6 +74,8 @@ module ARES_Mod_GhostExchange
     real(R8), allocatable :: Pg_recv_buf(:)  !< (nprim*4  * n_recv)
     real(R8), allocatable :: Fc_send_buf(:)  !< (nprim*2 * n_send): flux of the connection faces owned here
     real(R8), allocatable :: Fc_recv_buf(:)  !< (nprim*2 * n_recv)
+    real(R8), allocatable :: Vg_send_buf(:)  !< (9 * n_send): velocity gradient of the source cell (SA-RC)
+    real(R8), allocatable :: Vg_recv_buf(:)  !< (9 * n_recv)
     integer, allocatable  :: send_req(:)     !< (n_send_ranks)
     integer, allocatable  :: recv_req(:)     !< (n_recv_ranks)
     integer, allocatable  :: mpi_stat(:,:)   !< (MPI_STATUS_SIZE, max(n_send_ranks, n_recv_ranks))
@@ -111,7 +113,7 @@ module ARES_Mod_GhostExchange
   ! the order they were started (MPI 4.1, Sec. 3.7.4), so the k-th receive from a
   ! rank takes the k-th block that rank sends. All are below 32767, the least
   ! MPI_TAG_UB the MPI standard allows.
-  integer, parameter :: TAG_P = 0, TAG_PG = 1, TAG_CHIMERA = 2, TAG_R = 3, TAG_FC = 4
+  integer, parameter :: TAG_P = 0, TAG_PG = 1, TAG_CHIMERA = 2, TAG_R = 3, TAG_FC = 4, TAG_VG = 6
   integer, parameter, public :: TAG_IO = 5
 
   public :: allocate_exchange_schedules, set_active_mg_level
@@ -126,6 +128,7 @@ module ARES_Mod_GhostExchange
   public :: exchange_ghost_R
   public :: exchange_ghost_Pg
   public :: exchange_connection_flux
+  public :: exchange_velocity_gradient
   public :: exchange_ghost_chimera_post_recv, exchange_ghost_chimera_pack
   public :: exchange_ghost_chimera_post_send, exchange_ghost_chimera_wait_recv
   public :: exchange_ghost_chimera_unpack, exchange_ghost_chimera_wait_send
@@ -269,6 +272,8 @@ contains
         allocate(ghost_sched%Pg_recv_buf(nprim*4 * max(nr,1)))
         allocate(ghost_sched%Fc_send_buf(nprim*2 * max(ns,1)))
         allocate(ghost_sched%Fc_recv_buf(nprim*2 * max(nr,1)))
+        allocate(ghost_sched%Vg_send_buf(9 * max(ns,1)))
+        allocate(ghost_sched%Vg_recv_buf(9 * max(nr,1)))
         allocate(ghost_sched%send_req(max(ghost_sched%n_send_ranks,1)))
         allocate(ghost_sched%recv_req(max(ghost_sched%n_recv_ranks,1)))
         allocate(ghost_sched%mpi_stat(MPI_STATUS_SIZE, max_ranks))
@@ -1334,6 +1339,25 @@ contains
   end subroutine exchange_connection_flux
 
 
+  !> Velocity gradient of the source cells of the connection faces between ranks
+  !> (BC 101, 201), for the strain-rate gradient of SA-RC (Ghost_Velocity_Gradient):
+  !> the gradient of the source cell of each receive entry goes to the first ghost
+  !> cell of its record, as the P exchange does with the primitive variables. Send
+  !> and receive lists are those of the ghost exchange. Call from the primary thread.
+  subroutine exchange_velocity_gradient(domain)
+    use ARES_Advanced_Types_m
+
+    implicit none
+    type(ARES_domain_type), intent(inout) :: domain
+
+    if (mpi_size_ <= 1) return
+    call set_active_mg_level(domain%mg_level)
+#ifdef USE_MPI
+    call exchange_Vg_field(domain)
+#endif
+  end subroutine exchange_velocity_gradient
+
+
   !> Chimera donor-cell exchange, split like the P exchange so that packing
   !> and unpacking run over the whole thread team:
   !>   post_recv (master) -> pack (omp do) -> post_send (master)
@@ -1567,6 +1591,74 @@ contains
       call check_mpi_error(ierr)
     end if
   end subroutine exchange_Pg_field
+
+
+  !> Internal: the velocity gradient of the source cells (9 reals per entry, one
+  !> message per rank) into the first ghost cell of each receive entry.
+  subroutine exchange_Vg_field(domain)
+    use ARES_Advanced_Types_m
+    use ARES_Parameters_m, only: guide
+    use mpi
+
+    implicit none
+    type(ARES_domain_type), intent(inout) :: domain
+    ! Local
+    integer :: i, r, ierr, buf_pos
+    integer, parameter :: entry_size = 9
+
+    if (ghost_sched%n_send == 0 .and. ghost_sched%n_recv == 0) return
+
+    ! Post one receive per remote rank (aggregated)
+    do r = 1, ghost_sched%n_recv_ranks
+      buf_pos = (ghost_sched%recv_groups(r)%offset - 1) * entry_size + 1
+      call MPI_IRECV(ghost_sched%Vg_recv_buf(buf_pos), &
+                     ghost_sched%recv_groups(r)%count * entry_size, &
+                     MPI_DOUBLE_PRECISION, &
+                     ghost_sched%recv_groups(r)%rank, TAG_VG, &
+                     MPI_COMM_WORLD, ghost_sched%recv_req(r), ierr)
+      call check_mpi_error(ierr)
+    end do
+
+    ! Pack the gradient of the source cell of each entry, then one send per rank
+    do r = 1, ghost_sched%n_send_ranks
+      do i = ghost_sched%send_groups(r)%offset, &
+             ghost_sched%send_groups(r)%offset + ghost_sched%send_groups(r)%count - 1
+        associate ( bc => domain%bc(ghost_sched%send_list(i)%bc_idx) )
+          ghost_sched%Vg_send_buf((i-1)*entry_size+1 : i*entry_size) = &
+            reshape(domain%blk(bc%bs)%vel_gradient(bc%is, bc%js, bc%ks)%c, [entry_size])
+        end associate
+      end do
+      buf_pos = (ghost_sched%send_groups(r)%offset - 1) * entry_size + 1
+      call MPI_ISEND(ghost_sched%Vg_send_buf(buf_pos), &
+                     ghost_sched%send_groups(r)%count * entry_size, &
+                     MPI_DOUBLE_PRECISION, &
+                     ghost_sched%send_groups(r)%rank, TAG_VG, &
+                     MPI_COMM_WORLD, ghost_sched%send_req(r), ierr)
+      call check_mpi_error(ierr)
+    end do
+
+    ! Wait for all receives
+    if (ghost_sched%n_recv_ranks > 0) then
+      call MPI_WAITALL(ghost_sched%n_recv_ranks, ghost_sched%recv_req, &
+                       ghost_sched%mpi_stat(:,1:ghost_sched%n_recv_ranks), ierr)
+      call check_mpi_error(ierr)
+    end if
+
+    ! Unpack into the first ghost cell of each record
+    do i = 1, ghost_sched%n_recv
+      associate ( bc => domain%bc(ghost_sched%recv_list(i)%bc_idx) )
+        domain%blk(bc%b)%vel_gradient(bc%i - guide(bc%f,1), bc%j - guide(bc%f,2), bc%k - guide(bc%f,3))%c = &
+          reshape(ghost_sched%Vg_recv_buf((i-1)*entry_size+1 : i*entry_size), [3, 3])
+      end associate
+    end do
+
+    ! Wait for all sends to complete
+    if (ghost_sched%n_send_ranks > 0) then
+      call MPI_WAITALL(ghost_sched%n_send_ranks, ghost_sched%send_req, &
+                       ghost_sched%mpi_stat(:,1:ghost_sched%n_send_ranks), ierr)
+      call check_mpi_error(ierr)
+    end if
+  end subroutine exchange_Vg_field
 
 
   !> Internal: post one chimera receive per donor-owner rank (aggregated).

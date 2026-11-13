@@ -12,8 +12,8 @@ contains
     use ARES_Config_Types_m
     use ARES_Global_m
     use ARES_Mod_dt,         only: Set_Global_dt, Compute_dt
-    use ARES_Lib_Ghost,      only: Fill_Ghost_Cell, Ghost_Wall_Extrapolation
-    use ARES_Mod_Fluxes,     only: Fluxes, Zero_W_Residual, Zero_V_Residual
+    use ARES_Lib_Ghost,      only: Fill_Ghost_Cell
+    use ARES_Mod_Fluxes,     only: Fluxes, Zero_W_Residual, Zero_V_Residual, Viscous_Variables
     use ARES_Mod_BC_Fluxes,  only: BC_Fluxes
     use ARES_Lib_RANS,       only: RANS_Source_Terms
     use ARES_Lib_SST,        only: SST_Asymptotic_Wall_Omega
@@ -62,15 +62,14 @@ contains
     rk: do i_rk = 1, obj_time_scheme%n_RK
 
       call Fill_Ghost_Cell ( domain(level) )               ! Fill ghost cells
+      if (model>0) call Viscous_Variables ( domain(level) ) ! Viscous variables of the cells, for the viscous fluxes
       call Fluxes ( domain(level) )                        ! Convective and Diffusive fluxes
       call BC_Fluxes ( domain(level) )                     ! Boundary fluxes
 
       call External_Function ( domain(level) )             ! External function (e.g. source terms)
 
-      if (model==2) then
-        call Ghost_Wall_Extrapolation ( domain(level) )    ! Fill ghost cells for RHS of turbulence eqns
-        call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations
-      endif
+      if (model==2) &
+        call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations (the ghost cells of the fluxes)
 
       if (freeze_w) call Zero_W_Residual ( domain(level) ) ! Quasi-2D, symmetry k faces: w not integrated
       if (freeze_v) call Zero_V_Residual ( domain(level) ) ! 1-D, symmetry j faces: v not integrated

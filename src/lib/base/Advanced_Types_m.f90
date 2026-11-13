@@ -13,6 +13,10 @@ module ARES_Advanced_Types_m
     real(R8), allocatable                  :: vol(:,:,:)       ! Cell volume
     type(ARES_vector_3D_type), allocatable :: node(:,:,:)      ! Mesh grid points (including ghost)
     type(ARES_tensor_3D_type), allocatable :: M(:,:,:)         ! Metric transformation tensor
+    type(ARES_tensor_3D_type), allocatable :: Ms(:,:,:)        ! Cell metric of the RANS source terms, diffusive-metric = stencil (velocity)
+    type(ARES_tensor_3D_type), allocatable :: Msc(:,:,:)       ! the same for the density
+    type(ARES_tensor_3D_type), allocatable :: Msa(:,:,:)       ! the same for the velocity gradients of SA-RC, with their ghost cells
+    type(ARES_tensor_3D_type), allocatable :: Mst(:,:,:)       ! the same for the turbulence variables, where it is not Ms
     type(ARES_vector_3D_type), allocatable :: dl(:,:,:)        ! Average cell length (in i/j/k direction). eg: dl%c(1) is sqrt(dx**2+dy**2+dz**2) of the cell in the i direction
     type(d_metrics_type)                   :: dir(3)           ! Direction object. Contains: i-faces, j-faces, k-faces; eg: dir(1)%face(i,j,k)%n
     real(R8), allocatable                  :: yn(:,:,:)        ! Nearest wall distance
@@ -46,6 +50,7 @@ module ARES_Advanced_Types_m
   type, extends(block_type) :: ARES_block_type
     real(R8), dimension(:,:,:,:), allocatable :: P, PO                 ! Primitive variables at time n and n-1: { p vel h }
     real(R8), dimension(:,:,:,:), allocatable :: R                     ! Residuals
+    real(R8), dimension(:,:,:,:), allocatable :: Visc                  ! Viscous variables of the cells, once per stage
     real(R8), dimension(:,:,:,:), allocatable :: TE                    ! Truncation error
     real(R8), dimension(:,:,:,:), allocatable :: RC                    ! Conservation form residuals (temporary storage)
     real(R8), dimension(:,:,:,:), allocatable :: RS1, RS2              ! Implicit smoothing residuals (temporary storage)
@@ -59,6 +64,11 @@ module ARES_Advanced_Types_m
   type, extends(bc_type) :: ARES_bc_type
     real(R8)                  :: qw, Tw, Taw, hg, qrad             ! BC wall specifications 
     real(R8)                  :: eps_wall = 0.0_R8, k_rough = 0.0_R8 ! BC viscous wall specifications   
+    real(R8)                  :: sx = 0.0_R8                       ! Walls and 400: l0/l1 of the MUSCL distances (Extrapolation_Ratio)
+    ! Wall faces with diffusive-metric = stencil (ARES_Lib_Stencil_Metrics: Wall_Face_Stencils)
+    logical                   :: wstencil = .false.                ! wM, wdT set for this wall face
+    real(R8)                  :: wM(3,3) = 0.0_R8                  ! face metric of the wall gradient
+    real(R8)                  :: wdT(2) = 0.0_R8                   ! tangential differences of T_w (302)
     real(R8)                  :: T0, p0, alpha, beta, mach, pamb   ! BC 4 (inflow/outflow) specifications
     real(R8)                  :: mdot                              ! BC 4 (inflow/outflow) specifications
     real(R8)                  :: rel_fac                           ! BC 4 (inflow/outflow) specifications

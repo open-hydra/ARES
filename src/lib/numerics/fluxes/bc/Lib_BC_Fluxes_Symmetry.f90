@@ -105,15 +105,16 @@ contains
     use FLINT_Lib_Thermodynamic
     use ARES_Lib_RANS
     use ARES_Lib_Fluid
-    use ARES_Config_Types_m, only: obj_rans
+    use ARES_Config_Types_m, only: obj_rans, obj_space_scheme
 
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
-    type(ARES_block_type), intent(inout) :: Blk
+    type(ARES_block_type), intent(inout), target :: Blk
     ! Local
     integer :: modfm, modfm1, modfm2, modfm3, dir, Face_i, Face_j, Face_k, a, b, c
     integer :: ig, jg, kg
-    real(R8) :: Normal(3), Area, M(3,3), Prim(nprim), rho, mil, mie
+    real(R8) :: Normal(3), Area, Prim(nprim), rho, mil, mie
+    real(R8), pointer, contiguous :: M(:,:)   ! the metric of the cell or of the face, read in place
     real(R8) :: Prim_Wall(nprim), Gradrij(nRANS,3), dist, hs
     real(R8) :: Gradient(3,3), Stress(3), Flux(nprim)
     real(R8), dimension(3) :: Vel1, Vel2, Vel3, Vel4, Vel5, Vel6, Vel7, Vel8, Vel9, Vel10, Vel
@@ -126,7 +127,10 @@ contains
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     dist = Blk % yn(Im,Jm,Km)
-    M = Blk % M (Im,Jm,Km) % c
+    M => Blk % M (Im,Jm,Km) % c
+    ! diffusive-metric = stencil: the face metric of the differences below, between the cell and its mirror image
+    ! (ARES_Lib_Stencil_Metrics); a face across an index direction with one cell keeps the cell metric
+    if ( obj_space_scheme % stencil_metric .and. Blk % dim(Dir) > 1 ) M => Blk % dir(Dir) % Mf(Face_i,Face_j,Face_k) % c
 
     ! On the collapsed axis of an axisymmetric grid the boundary face has zero area
     ! and Compute_Norm_Area returns a null normal. No flux crosses it, but the RSM

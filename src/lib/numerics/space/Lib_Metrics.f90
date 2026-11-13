@@ -2216,6 +2216,55 @@ contains
   end subroutine Yn_Chimera
 
 
+  !> Ratio s = l0/l1 of the distances of the MUSCL reconstruction (Convective_Flux) at the first interior face behind
+  !> boundary face Fm of cell (Im,Jm,Km): l0 = (dl_g + dl_1)/2, l1 = (dl_1 + dl_2)/2 along the direction of the face, with
+  !> the cell lengths of Compute_Metric_Tensor, the norm of the mean edge; the ghost cell of BC_Extrapolate_Metrics has
+  !> the edge of the first cell, so dl_g = dl_1 and s = 2 dl_1/(dl_1 + dl_2). 0 with one cell along that direction. From
+  !> the nodes, not from the stored dl, so that every rank computes the same value for every block, its own or not:
+  !> Ghost_Wall extrapolates with it, ARES_Lib_Stencil_Metrics places the ghost cells with it, also those of the block
+  !> across a face between blocks (Connection_Face_Metric).
+  function Extrapolation_Ratio ( node, Im, Jm, Km, Fm, n ) result ( s )
+    implicit none
+    type(ARES_vector_3D_type), intent(in) :: node(0:,0:,0:)
+    integer, intent(in) :: Im, Jm, Km, Fm, n(3)
+    real(R8) :: s
+    ! Local
+    integer  :: d, a(0:2), t1, t2, p, q, x(3)
+    real(R8) :: e1(3), e2(3), n0(3), n1(3), n2(3)
+
+    s = 0d0
+    d = (Fm + 1) / 2
+    if ( n(d) < 2 ) return
+    ! node planes along d from the face inwards: the face, then the far faces of the first and second cells
+    x = [Im, Jm, Km]
+    if ( mod(Fm,2) == 1 ) then
+      a = [x(d) - 1, x(d), x(d) + 1]
+    else
+      a = [x(d), x(d) - 1, x(d) - 2]
+    end if
+    e1 = 0d0 ; e2 = 0d0
+    select case (d)
+      case (1) ; t1 = 2 ; t2 = 3
+      case (2) ; t1 = 1 ; t2 = 3
+      case default ; t1 = 1 ; t2 = 2
+    end select
+    do q = 0, 1
+      do p = 0, 1
+        x = [Im, Jm, Km]
+        x(t1) = x(t1) - 1 + p
+        x(t2) = x(t2) - 1 + q
+        x(d) = a(0) ; n0 = node(x(1),x(2),x(3)) % c
+        x(d) = a(1) ; n1 = node(x(1),x(2),x(3)) % c
+        x(d) = a(2) ; n2 = node(x(1),x(2),x(3)) % c
+        e1 = e1 + ( n1 - n0 )
+        e2 = e2 + ( n2 - n1 )
+      enddo
+    enddo
+    s = 2d0 * norm2(0.25d0*e1) / ( norm2(0.25d0*e1) + norm2(0.25d0*e2) )
+
+  end function Extrapolation_Ratio
+
+
   !> Metrics of the gc ghost cells behind face Fm of cell (Im,Jm,Km) of block b, from nodes extrapolated linearly
   !> along the index lines, N(-g) = 2 N(-g+1) - N(-g+2): every ghost layer has the edge across the face of the first
   !> cell, so its size across the face never vanishes nor turns over; its edges along the face are extrapolated too, and
@@ -2223,15 +2272,15 @@ contains
   !> turns the first layer, 5/3 times the second). Behind a chimera face (chimera true) the first layer must keep the
   !> sign and the size of the first cell (Compute_Metric_Tensor stops otherwise): its metric is the ghost metric of the
   !> viscous flux of chimera faces (BC_Connection_Visc), the one flux that reads the metric of an extrapolated ghost
-  !> cell. Behind the other faces no flux reads it: the walls (301, 302) take the metric of the cell, the other faces
-  !> carry no viscous flux that needs it, and the wedge (200) rotates the cell,
+  !> cell. Behind the other faces no flux reads it: the walls (301, 302) take the metric of the cell, or the stencil of
+  !> positions, the other faces carry no viscous flux that needs it, and the wedge (200) rotates the cell,
   !> exactly when its node planes lie at theta = -+delthe/2 (otherwise the ghost cell is flat and the check of its size
   !> stops the run). Of the ghost layers the solver then reads only the length across the face, in the MUSCL reconstruction
   !> (the interior faces next to the boundary that of the first layer, BC_Connection_Eul of chimera faces that of both),
   !> and that is the length of the first cell whatever the edges along the face: there their sign is not
   !> checked, only a zero size stops (no infinite metric). The first layer is centred at
   !> 2 x_f - x_1 (x_f the mean of the nodes of the face, x_1 that of the cell): the position of the ghost values with a
-  !> wall value (2 Z_wall - Z_cell, RANS_Extrapolate_Wall), and the MUSCL distance l0 of the first interior face is dl_1.
+  !> wall value (Ghost_Wall), and the MUSCL distance l0 of the first interior face is dl_1.
   !> The 2-D axisymmetric wedge rotates the cell (exact).
   subroutine BC_Extrapolate_Metrics( Im, Jm, Km, Fm, blk, Mg, dlg, volg, b, chimera )
     implicit none

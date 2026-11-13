@@ -51,21 +51,25 @@ contains
     use ARES_Global_m
     use ARES_Config_Types_m, only: obj_rans
     use ARES_Mod_MPI, only: is_local_block
+    use ARES_Base_Types_m, only: ARES_tensor_3D_type
+    use ARES_Lib_Stencil_Metrics, only: Source_Metrics
 
     implicit none
-    type(ARES_domain_type), intent(inout) :: domain
+    type(ARES_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
     logical :: LSC
+    type(ARES_tensor_3D_type), pointer :: Mi(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
 
     LSC = obj_rans%LSC
     
     do b = 1, domain % nb
       if (.not. is_local_block(b)) cycle
 
+      call Source_Metrics ( domain % blk(b), Mi, Mt=Mt )
       call SSGLRR_Blk ( domain % blk(b) % P,    &
                         domain % blk(b) % r,    &
-                        domain % blk(b) % M,    &
+                        Mi, Mt,                 &
                         domain % blk(b) % vol,  &
                         domain % blk(b) % yn,   &
                         domain % blk(b) % dim,  &
@@ -76,7 +80,7 @@ contains
   end subroutine SSGLRR_Source_Terms
 
 
-  subroutine SSGLRR_Blk ( Prim, Res, M, Volume, walldist, n, LSC )
+  subroutine SSGLRR_Blk ( Prim, Res, M, Mt, Volume, walldist, n, LSC )
     use ARES_Base_Types_m
     use ARES_Global_m
     use ARES_Lib_Fluid
@@ -89,7 +93,8 @@ contains
     real(kind=8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Volume
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: walldist
-    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M    ! velocity
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variables
     logical, intent(in) :: LSC ! length-scale correction (w2019)
     ! Local
     integer :: i, j, k, ii, jj, kk
@@ -145,7 +150,7 @@ contains
       Grad(8,1) = 0.5d0 * Sum ( Grad(1:3,1) )
       Grad(8,2) = 0.5d0 * Sum ( Grad(1:3,2) )
       Grad(8,3) = 0.5d0 * Sum ( Grad(1:3,3) )
-      Grad = Matmul ( Grad, M(i,j,k) % c )
+      Grad = Matmul ( Grad, Mt(i,j,k) % c )
 
       ! Strain tensor Sij, Sij*, and vorticity tensor Wij 
       Divel = Gradvel(1,1) + Gradvel(2,2) + Gradvel(3,3) 

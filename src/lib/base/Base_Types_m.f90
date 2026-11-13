@@ -25,7 +25,10 @@ module ARES_Base_Types_m
 
 
   type :: d_metrics_type
-    type(f_metrics_type), allocatable  :: f(:,:,:)   
+    type(f_metrics_type), allocatable       :: f(:,:,:)   
+    type(ARES_tensor_3D_type), allocatable  :: Mf(:,:,:)   !> Face metric of the viscous fluxes, diffusive-metric = stencil
+    integer, allocatable                    :: ig(:,:,:)   !> Faces with a wall ghost cell in their stencil: column of Mg, else 0
+    real(R8), allocatable                   :: Mg(:,:,:,:) !> Their face metrics per group of quantities (3,3,4,:)
   end type d_metrics_type
 
 

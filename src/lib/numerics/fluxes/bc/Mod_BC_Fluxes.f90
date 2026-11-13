@@ -115,13 +115,13 @@ contains
             case (301) ! wall: prescribed heat flux
               call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
               if (model>0) then
-                call BC_Wall_Heat ( Im, Jm, Km, Fm, blk(Bm), bc(i) % qw )
+                call BC_Wall_Heat ( Im, Jm, Km, Fm, blk(Bm), bc(i) % qw, rec = bc(i) )
               endif
 
             case (302) ! wall: prescribed temperature
               call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
               if (model>0) then
-                call BC_Wall_Temperature ( Im, Jm, Km, Fm, blk(Bm), bc(i) % Tw )
+                call BC_Wall_Temperature ( Im, Jm, Km, Fm, blk(Bm), bc(i) % Tw, rec = bc(i) )
               endif
 
             case (400) ! extrapolation
@@ -178,6 +178,7 @@ contains
   !> adds to each cell its share, in the order of the records, as before.
   subroutine Connection_Fluxes ( domain, Sc, Sct, Prt, Prt_corr )
     use ARES_Advanced_Types_m
+    use ARES_Config_Types_m, only: obj_space_scheme
     use ARES_Global_m, only: model, nprim
     use ARES_Mod_MPI, only: mpi_size_
     use ARES_Mod_GhostExchange, only: exchange_connection_flux
@@ -202,9 +203,14 @@ contains
       domain % bc(i) % Fc(:,1) = dR
       domain % bc(p) % Fc(:,1) = -dR
       if (model>0) then
-        call BC_Connection_Visc ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
-                                  domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
-                                  Sc, Sct, Prt, Prt_corr, dR )
+        if ( obj_space_scheme % stencil_metric ) then
+          call BC_Connection_Visc_Stencil ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
+                                            domain % blk(Bm), domain % bc(i) % Pg, Sc, Sct, Prt, Prt_corr, dR )
+        else
+          call BC_Connection_Visc ( domain % bc(i) % i, domain % bc(i) % j, domain % bc(i) % k, domain % bc(i) % f, &
+                                    domain % blk(Bm), domain % bc(i) % Mg(1), domain % bc(i) % Pg, &
+                                    Sc, Sct, Prt, Prt_corr, dR )
+        end if
         domain % bc(i) % Fc(:,2) = dR
         domain % bc(p) % Fc(:,2) = -dR
       end if

@@ -22,6 +22,8 @@ contains
     
     call reg%add( section, 'ic-format', obj_io%ini_format, 'tecplot ascii', 'Initial condition (INPUT/ic.*) format', 'tecplot ascii, tecplot binary, vtk ascii, vtk raw', .false. )
     call reg%add( section, 'sol-format', obj_io%sol_format, 'tecplot ascii', 'Solution (OUTPUT/field.*) format', 'tecplot ascii, tecplot binary, vtk ascii, vtk raw', .false. )
+    call reg%add( section, 'decomposition-map', obj_io%decomposition_map, 'none', &
+                  'Block-to-rank map in INPUT/ (none: ARES assigns the blocks)', '', .false. )
 
     call reg%add( section, 'sol-diter', obj_io%sol_diter, '1000000000', 'Solution output iter frequency', '> 0', .false. )
     call reg%add( section, 'sol-dtime', obj_io%sol_dtime, '1e30', 'Solution output time frequency', '> 0', .false. )
