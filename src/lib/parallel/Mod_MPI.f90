@@ -16,6 +16,9 @@ module ARES_Mod_MPI
   integer, public :: mpi_size_ = 1        !< Total number of MPI processes
   logical, public :: mpi_is_root = .true.  !< True on rank 0
 
+  ! --- Outcome of reading a decomposition map ---
+  integer, parameter :: MAP_ABSENT = 0, MAP_READ = 1, MAP_ERROR = 2
+
   ! --- Block-to-rank mapping ---
   integer, allocatable, public :: block_owner(:)     !< block_owner(b) = rank owning block b
   integer, allocatable, public :: local_block_ids(:) !< Global block IDs owned by this rank
@@ -89,14 +92,24 @@ contains
   end function is_local_block
 
 
-  !> Partition nb blocks across MPI ranks using greedy load balancing.
-  !> blk_ncells(b) = total number of cells in block b.
-  subroutine partition_blocks(nb, blk_ncells)
+  !> Partition nb blocks across MPI ranks.
+  !> blk_ncells(b) = total number of cells in block b; blk_dims(:,b) = its cells
+  !> along i, j, k.
+  !> When map_file is given (the decomposition map that the key decomposition-map
+  !> names), the rank of every block is read from it (read_decomposition_map); a
+  !> file that cannot be read, or that does not fit the mesh or the run, stops the
+  !> run. Otherwise the blocks are walked in the order of the mesh, each to the
+  !> rank with the least load (the lowest such rank on a tie), and nothing is
+  !> printed.
+  subroutine partition_blocks(nb, blk_ncells, blk_dims, map_file)
     integer, intent(in) :: nb
     integer, intent(in) :: blk_ncells(nb)
+    integer, intent(in), optional :: blk_dims(3,nb)
+    character(len=*), intent(in), optional :: map_file
     ! Local
     integer :: b, r, nloc
-    integer, allocatable :: rank_load(:)
+    integer, allocatable :: rank_load(:), map_owner(:)
+    logical :: from_map
 
     if (allocated(block_owner)) deallocate(block_owner)
     if (allocated(rank_load)) deallocate(rank_load)
@@ -111,7 +124,23 @@ contains
       block_owner(b) = r
       rank_load(r) = rank_load(r) + blk_ncells(b)
     end do
-    
+
+    ! The assignment of the decomposition map, when one is named, replaces it
+    from_map = .false.
+    if (present(blk_dims) .and. present(map_file)) then
+      allocate(map_owner(nb))
+      call read_decomposition_map(map_file, nb, blk_dims, blk_ncells, map_owner, from_map)
+      if (from_map) then
+        block_owner = map_owner
+        rank_load = 0
+        do b = 1, nb
+          rank_load(block_owner(b)) = rank_load(block_owner(b)) + blk_ncells(b)
+        end do
+        call report_partition_balance(nb, blk_ncells, rank_load, map_file)
+      end if
+      deallocate(map_owner)
+    end if
+
     ! Build local block list
     nloc = count(block_owner == mpi_rank_)
     n_local_blocks = nloc
@@ -127,6 +156,259 @@ contains
 
     deallocate(rank_load)
   end subroutine partition_blocks
+
+
+  !> Balance of a partition read from a decomposition map, printed by rank 0: the
+  !> balance of the cells over the ranks, the file, and a warning about ranks the
+  !> map leaves without blocks. The assignment that ARES makes itself (no map)
+  !> prints nothing.
+  subroutine report_partition_balance(nb, blk_ncells, rank_load, map_file)
+    integer, intent(in) :: nb
+    integer, intent(in) :: blk_ncells(nb)
+    integer, intent(in) :: rank_load(0:)
+    character(len=*), intent(in) :: map_file
+    ! Local
+    real(R8) :: ideal, eff
+
+    if (mpi_rank_ /= 0) return
+    if (mpi_size_ <= 1) then
+      write(*,'(A,A)') '  MPI partition read from ', trim(map_file)
+      return
+    end if
+
+    ideal = real(sum(blk_ncells), R8) / real(mpi_size_, R8)
+    eff   = ideal / real(maxval(rank_load), R8) * 100.0_R8
+
+    write(*,'(A,I0,A,I0,A,F5.1,A)') '  MPI partition: ', nb, ' blocks over ', &
+      mpi_size_, ' ranks, balance ', eff, '% of ideal'
+    write(*,'(A,A)') '  MPI partition read from ', trim(map_file)
+    if (count(rank_load == 0) > 0 .and. mpi_size_ > nb) then
+      write(*,'(A,I0,A,I0,A,I0,A)') '  WARNING: the decomposition map gives no block to ', count(rank_load == 0), &
+        ' of ', mpi_size_, ' ranks; they idle (the mesh has only ', nb, ' blocks).'
+    else if (count(rank_load == 0) > 0) then
+      write(*,'(A,I0,A,I0,A)') '  WARNING: the decomposition map gives no block to ', count(rank_load == 0), &
+        ' of ', mpi_size_, ' ranks; they idle.'
+    else if (real(maxval(blk_ncells), R8) > ideal) then
+      write(*,'(A,I0,A)') '  NOTE: balance is capped by the largest block (', &
+        maxval(blk_ncells), ' cells); only a finer mesh split can improve it.'
+    end if
+  end subroutine report_partition_balance
+
+
+  !> Block-to-rank assignment from a decomposition map, in the format of the map
+  !> that the ATLAS mesh decomposer (MDB) writes: lines starting with '#' are
+  !> comments; then one line per block, blocks 1 to nb in order, with the 13
+  !> integers
+  !>   new parent i0 i1 j0 j1 k0 k1 ni nj nk cells rank
+  !> of which ARES uses new (the block), ni nj nk and cells (checked against the
+  !> mesh) and rank (from 0). The first '#' line after the block lines ends them
+  !> (MDB writes the face origins of the blocks after it). The ranks must lie
+  !> between 0 and N-1; when the mesh has at least as many blocks as the run has
+  !> ranks, the highest rank must be used too, or the map was written for another
+  !> number of ranks, an error; with fewer blocks than ranks, some ranks idle
+  !> whatever the map (as without one), with a warning (report_partition_balance).
+  !> A directory in place of the file is an error too.
+  !> Rank 0 reads the file and broadcasts what it
+  !> found, so that every rank takes the same decision: the assignment in owner
+  !> (found true), or an error, which every rank prints before every rank stops
+  !> (mpi_stop_all, exit code 1). A file that does not exist is an error: the
+  !> map is read only when the key decomposition-map names it.
+  subroutine read_decomposition_map(path, nb, blk_dims, blk_ncells, owner, found)
+    character(len=*), intent(in) :: path
+    integer, intent(in)  :: nb
+    integer, intent(in)  :: blk_dims(3,nb), blk_ncells(nb)
+    integer, intent(out) :: owner(nb)
+    logical, intent(out) :: found
+    ! Local
+    integer :: status
+    character(len=256) :: message
+#ifdef USE_MPI
+    integer :: ierr
+#endif
+
+    owner   = -1
+    status  = MAP_ABSENT
+    message = ''
+    if (mpi_rank_ == 0) call parse_decomposition_map(path, nb, blk_dims, blk_ncells, owner, status, message)
+#ifdef USE_MPI
+    if (mpi_size_ > 1) then
+      call MPI_BCAST(status, 1, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+      call check_mpi_error(ierr)
+      call MPI_BCAST(owner, nb, MPI_INTEGER, 0, MPI_COMM_WORLD, ierr)
+      call check_mpi_error(ierr)
+      call MPI_BCAST(message, len(message), MPI_CHARACTER, 0, MPI_COMM_WORLD, ierr)
+      call check_mpi_error(ierr)
+    end if
+#endif
+    if (status == MAP_ERROR) then
+      write(*,'(A,I4,A,A)') ' [RANK ', mpi_rank_, '] ERROR: ', trim(message)
+      flush(output_unit)
+#ifdef USE_MPI
+      if (mpi_size_ > 1) call MPI_BARRIER(MPI_COMM_WORLD, ierr)
+#endif
+      ! Every rank has the error, broadcast by rank 0: the ranks stop together, so that the output of every rank reaches the
+      ! log, and not with MPI_ABORT, which only makes a best attempt to stop the processes
+      call mpi_stop_all('decomposition map error (see above)')
+    end if
+    found = (status == MAP_READ)
+  end subroutine read_decomposition_map
+
+
+  !> Internal: read and check the decomposition map on rank 0 (read_decomposition_map).
+  subroutine parse_decomposition_map(path, nb, blk_dims, blk_ncells, owner, status, message)
+    character(len=*), intent(in)    :: path
+    integer, intent(in)             :: nb
+    integer, intent(in)             :: blk_dims(3,nb), blk_ncells(nb)
+    integer, intent(inout)          :: owner(nb)
+    integer, intent(out)            :: status
+    character(len=*), intent(inout) :: message
+    ! Local
+    integer, parameter :: UNSET = -huge(1)
+    character(len=1024) :: line
+    integer :: unit, ios, nline, nrow, v(13), b
+    logical :: exists, is_dir, in_rows
+
+    ! The map is read only when the key decomposition-map names it: a file that does
+    ! not exist is an error (it cannot be opened, below), and so is a directory of
+    ! that name. gfortran reports a directory as existing (and path/. too); ifx does
+    ! not, but opens it.
+    status = MAP_ERROR
+    inquire(file=path, exist=exists)
+    inquire(file=trim(path)//'/.', exist=is_dir)
+    if (.not. exists .and. .not. is_dir) then
+      open(newunit=unit, file=path, status='old', action='read', iostat=ios)
+      if (ios == 0) then
+        close(unit)
+        is_dir = .true.
+      end if
+    end if
+    if (is_dir) then
+      message = trim(path)//': is a directory, not a file'
+      return
+    end if
+    open(newunit=unit, file=path, status='old', action='read', iostat=ios)
+    if (ios /= 0) then
+      message = trim(path)//': cannot be opened'
+      return
+    end if
+
+    nline = 0
+    nrow = 0
+    in_rows = .false.
+    do
+      read(unit, '(A)', iostat=ios) line
+      if (is_iostat_end(ios)) exit
+      if (ios /= 0) then
+        write(message, '(A,A,I0,A,I0,A)') trim(path), ': read error after line ', nline, ' (iostat ', ios, ')'
+        close(unit)
+        return
+      end if
+      nline = nline + 1
+      line = adjustl(line)
+      if (len_trim(line) == 0) cycle
+      if (line(1:1) == '#') then
+        if (in_rows) exit          ! end of the block lines
+        cycle
+      end if
+      in_rows = .true.
+      v = UNSET
+      ios = 1
+      if (starts_with_13_integers(line)) read(line, *, iostat=ios) v
+      if (ios /= 0 .or. any(v == UNSET)) then
+        write(message, '(A,A,I0,A)') trim(path), ': line ', nline, &
+          ' is not 13 integers (new parent i0 i1 j0 j1 k0 k1 ni nj nk cells rank)'
+        close(unit)
+        return
+      end if
+      nrow = nrow + 1
+      if (nrow > nb) then
+        write(message, '(A,A,I0,A)') trim(path), ': more block lines than the ', nb, ' blocks of the mesh'
+        close(unit)
+        return
+      end if
+      b = v(1)
+      if (b /= nrow) then
+        write(message, '(A,A,I0,A,I0,A,I0,A,I0,A)') trim(path), ': line ', nline, ' lists block ', b, &
+          ' where block ', nrow, ' is expected (blocks 1 to ', nb, ', in order)'
+        close(unit)
+        return
+      end if
+      if (any(v(9:11) /= blk_dims(:,b))) then
+        write(message, '(A,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A,I0,A)') trim(path), ': block ', b, ' is ', &
+          v(9), ' x ', v(10), ' x ', v(11), ' cells in the map, ', &
+          blk_dims(1,b), ' x ', blk_dims(2,b), ' x ', blk_dims(3,b), ' in the mesh'
+        close(unit)
+        return
+      end if
+      if (v(12) /= blk_ncells(b)) then
+        write(message, '(A,A,I0,A,I0,A,I0,A)') trim(path), ': block ', b, ' has ', v(12), &
+          ' cells in the map, ', blk_ncells(b), ' in the mesh'
+        close(unit)
+        return
+      end if
+      if (v(13) < 0 .or. v(13) >= mpi_size_) then
+        write(message, '(A,A,I0,A,I0,A,I0,A)') trim(path), ': block ', b, ' is on rank ', v(13), &
+          ', outside the ranks of the run (0 to ', mpi_size_ - 1, ')'
+        close(unit)
+        return
+      end if
+      owner(b) = v(13)
+    end do
+    close(unit)
+
+    if (nrow /= nb) then
+      write(message, '(A,A,I0,A,I0,A)') trim(path), ': ', nrow, ' block lines for the ', nb, ' blocks of the mesh'
+      return
+    end if
+    if (maxval(owner) + 1 < mpi_size_ .and. nb >= mpi_size_) then
+      write(message, '(A,A,I0,A,I0,A,A,I0,A,I0,A)') trim(path), ': the largest rank is ', maxval(owner), &
+        ': the map is for ', maxval(owner) + 1, trim(merge(' rank, ', ' ranks,', maxval(owner) == 0)), &
+        ' but the run has ', mpi_size_, ' ranks and the mesh ', nb, &
+        ' blocks (not fewer than the ranks): a map for another number of ranks'
+      return
+    end if
+    status = MAP_READ
+  end subroutine parse_decomposition_map
+
+
+  !> Internal: whether line starts with 13 integers, each an optional sign and
+  !> digits, separated by blanks, tabs or a carriage return. What follows the
+  !> 13th is not looked at. A list-directed read alone may take 8.5 for 8.
+  logical function starts_with_13_integers(line) result(ok)
+    character(len=*), intent(in) :: line
+    ! Local
+    integer :: i, ntok, ndig
+    character :: c
+
+    ok = .false.
+    ntok = 0
+    ndig = -1                                 ! -1 between tokens, else the digits of the token
+    do i = 1, len(line)
+      c = line(i:i)
+      if (c == ' ' .or. c == achar(9) .or. c == achar(13)) then
+        if (ndig == 0) return                 ! a sign alone
+        if (ndig > 0 .and. ntok == 13) then
+          ok = .true.
+          return
+        end if
+        ndig = -1
+      else if (ndig < 0) then                 ! first character of a token
+        ntok = ntok + 1
+        if (c == '+' .or. c == '-') then
+          ndig = 0
+        else if (c >= '0' .and. c <= '9') then
+          ndig = 1
+        else
+          return
+        end if
+      else if (c >= '0' .and. c <= '9') then
+        ndig = ndig + 1
+      else
+        return
+      end if
+    end do
+    ok = (ntok == 13 .and. ndig > 0)
+  end function starts_with_13_integers
 
 
   !> MPI_ALLREDUCE with MPI_SUM for a scalar real(R8).
@@ -355,8 +637,9 @@ contains
 
 
   !> Stop of every rank on an error that every rank has found, a decision taken
-  !> on all ranks (the outcome of a check of rank 0 or of the reading of input.ini,
-  !> which rank 0 broadcasts; a file that every rank reads, such as bc.txt):
+  !> on all ranks (the outcome of reading the decomposition map, of a check of
+  !> rank 0 or of the reading of input.ini, which rank 0 broadcasts; a file that
+  !> every rank reads, such as bc.txt):
   !> each rank prints the message and flushes its output, the ranks wait for
   !> each other, so that what any rank printed before (rank 0 the explanation of
   !> the error) is out before any rank ends, then the ranks finalize MPI and end

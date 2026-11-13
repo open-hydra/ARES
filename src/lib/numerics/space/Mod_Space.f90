@@ -39,6 +39,15 @@ contains
 
     call Assign_Limiter(limiter, obj_space_scheme%limiter_name)
 
+    ! Chimera faces (102), and with mean those between blocks, take the inverse-mean viscous metric; with stencil the rest take
+    ! that of ARES_Lib_Stencil_Metrics, but 300 faces across one cell take the cell metric
+    obj_space_scheme%stencil_metric = ( trim(obj_space_scheme%diffusive_metric) == 'stencil' )
+    if ( obj_space_scheme%stencil_metric ) then
+      obj_space_scheme%metric_mode = 2
+    else
+      obj_space_scheme%metric_mode = 0
+    end if
+
   end subroutine Setup_Space_Scheme
 
 

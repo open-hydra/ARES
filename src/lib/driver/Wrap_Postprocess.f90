@@ -27,6 +27,7 @@ contains
     use ARES_Mod_MPI,        only: mpi_is_root
     use ARES_Mod_Timers,     only: timer_summary
     use ARES_Lib_Newstate,   only: Report_Negative_Turbulence
+    use ARES_Lib_Ghost,      only: Report_Wall_Ghosts
     use ARES_Lib_BC_Fluxes_Extrapolation, only: Report_400_Entering
     use IR_precision
     implicit none
@@ -137,6 +138,9 @@ contains
 
       ! Negative turbulence variables after a stage, over the run (collective)
       call Report_Negative_Turbulence()
+
+      ! Cuts, floors and table bounds of the ghost cells of walls and 400 faces, over the run (collective)
+      call Report_Wall_Ghosts()
 
       ! Flux evaluations of 400 faces with gas entering, over the run (collective)
       call Report_400_Entering()

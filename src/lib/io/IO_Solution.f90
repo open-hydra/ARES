@@ -581,16 +581,20 @@ contains
     use IR_Precision
     use FLINT_Lib_Thermodynamic
     use ARES_Lib_Preconditioning
+    use ARES_Base_Types_m, only: ARES_tensor_3D_type
+    use ARES_Lib_Stencil_Metrics, only: Source_Metrics
     implicit none
-    type(ARES_block_type), intent(in) :: blk
+    type(ARES_block_type), intent(in), target :: blk
     integer, intent(in)               :: nijk(3)
     real(R8P), intent(out)            :: out(obj_io%Onvar, nijk(1), nijk(2), nijk(3))
     ! Local
     integer :: i, j, k, pv
     real(8) :: p, rho, T, mu, kl, mut, entalpy, sound
     real(8) :: vel_gradient(3,3)
+    type(ARES_tensor_3D_type), pointer :: Mi(:,:,:)   ! cell metric of the sources (Source_Metrics)
 
     out(1:nprim,:,:,:) = blk%P(:,1:nijk(1),1:nijk(2),1:nijk(3))
+    call Source_Metrics ( blk, Mi )
     ! Auxiliary variables
     do k = 1, nijk(3) ; do j = 1, nijk(2) ; do i = 1, nijk(1)
       entalpy = blk%P(nh,i,j,k)
@@ -616,7 +620,7 @@ contains
           vel_gradient(:,1) = ( blk%P(nu:nw,i+1,j,k) - blk%P(nu:nw,i-1,j,k) )/2d0
           vel_gradient(:,2) = ( blk%P(nu:nw,i,j+1,k) - blk%P(nu:nw,i,j-1,k) )/2d0
           vel_gradient(:,3) = ( blk%P(nu:nw,i,j,k+1) - blk%P(nu:nw,i,j,k-1) )/2d0
-          vel_gradient = matmul ( vel_gradient + 1d-40, blk%m(i,j,k)%c )
+          vel_gradient = matmul ( vel_gradient + 1d-40, Mi(i,j,k)%c )
           call Eddy_Viscosity ( mut=mut, rans_variables=blk%p(nt:,i,j,k), &
                                 mul=mu, rho=rho, vel_gradient=vel_gradient, &
                                 walldist=blk%yn(i,j,k), ks=blk%ks(i,j,k))

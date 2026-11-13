@@ -186,8 +186,7 @@ contains
     integer :: n_wall_total, wall_i, ii, nrec, lv
     real(R8), allocatable :: wall_buf(:)
     integer, allocatable  :: order(:), first(:,:), next(:,:)
-    integer  :: Ig, Jg, Kg
-    real(R8) :: r_keep(nprim), g_keep(nprim)   ! residual of the wall cell and its ghost cell, before the call
+    real(R8) :: r_keep(nprim)   ! residual of the wall cell, before the call
 
     lv = domain%mg_level
 
@@ -242,14 +241,10 @@ contains
           Fm = domain%bc(i)%f
 
           ! The wall flux routines below are called for the wall properties (Ovar)
-          ! only, but they also add the wall flux to the residual of the wall cell
-          ! and rewrite the RANS variables of its ghost cell. The diagnostic output,
-          ! written next, prints that residual: keep both and put them back.
-          Ig = Im - guide(Fm,1)
-          Jg = Jm - guide(Fm,2)
-          Kg = Km - guide(Fm,3)
+          ! only, but they also add the wall flux to the residual of the wall cell.
+          ! The diagnostic output, written next, prints that residual: keep it and
+          ! put it back. (They write no ghost value: Fill_Ghost_Cell does.)
           r_keep = domain % blk(Bm) % r (:,Im,Jm,Km)
-          g_keep = domain % blk(Bm) % P (:,Ig,Jg,Kg)
 
           Ovar = 0d0
 
@@ -260,15 +255,14 @@ contains
           select case ( domain%bc(i)%type )
 
             case (301) ! wall: prescribed heat flux
-              call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar )
+              call BC_Wall_Heat ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % qw, Ovar, rec = domain % bc(i) )
 
             case (302) ! wall: prescribed temperature
-              call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar )
+              call BC_Wall_Temperature ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Tw, Ovar, rec = domain % bc(i) )
 
           end select
 
           domain % blk(Bm) % r (:,Im,Jm,Km) = r_keep
-          domain % blk(Bm) % P (:,Ig,Jg,Kg) = g_keep
 
           wall_buf(8*(wall_i-1)+1 : 8*wall_i) = Ovar
         enddo

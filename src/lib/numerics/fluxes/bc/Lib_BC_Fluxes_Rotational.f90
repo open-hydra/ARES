@@ -187,9 +187,14 @@ contains
   !> the k difference across the face, the i and j differences averaged over
   !> the row of the cell and its rotated image. The image row is rotated here
   !> with the same formula, because the k ghosts of the i and j ghost cells (the
-  !> corners) are not filled. Face metric: Mf, the inverse of the mean of the two
-  !> inverse metrics of the cell and its image, as on the connections, computed
-  !> once at setup (Rotational_Periodic_Face_Metric, stored in the record: bc%rM).
+  !> corners) are not filled. Face metric: with diffusive-metric = stencil the
+  !> metric of the same differences of the positions, the image row the row of
+  !> the source turned (Rotational_Face_Metric, ARES_Lib_Stencil_Metrics, stored on
+  !> the face of the block, one per group of quantities with a wall ghost cell in
+  !> the stencil), exact for the linear fields that the periodicity allows; with
+  !> mean, Mf, the inverse of the mean of the two inverse metrics
+  !> of the cell and its image, as on the connections, computed once at setup
+  !> (Rotational_Periodic_Face_Metric, stored in the record: bc%rM).
   !>
   !> On the wedge only the momentum is updated. The flow there is axisymmetric by
   !> construction, so, as for the inviscid flux above, the mass, energy and
@@ -212,19 +217,19 @@ contains
   !> fluxes of faces 5 and 6 are the same and cancel.
   subroutine BC_Rotational_Periodic_Visc ( Im, Jm, Km, Fm, Blk, Mf, Sc, Sct, Prt, Prt_corr )
     use ARES_Lib_Metrics, only : delthe, cos_delthe, sin_delthe
-    use ARES_Lib_Diffusive, only : Compute_Diffusive_Flux
-    use FLINT_Lib_Thermodynamic, only : ph2vars, rho_tab, T_tab
+    use ARES_Lib_Diffusive, only : Compute_Diffusive_Flux, Diffusive_Flux
+    use ARES_Config_Types_m, only : obj_space_scheme
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
-    type(ARES_block_type), intent(inout) :: Blk
-    real(R8), intent(in) :: Mf(3,3)      ! face metric (Rotational_Periodic_Face_Metric)
+    type(ARES_block_type), intent(inout), target :: Blk
+    real(R8), intent(in) :: Mf(3,3)      ! face metric of mean (Rotational_Periodic_Face_Metric)
     real(R8), intent(in) :: Sc, Sct, Prt
     logical, intent(in)  :: Prt_corr
     ! Local
     integer :: Dir, Face_i, Face_j, Face_k, Kg, Ks, modfm2, v
     real(R8) :: Normal(3), Area, Prim(nprim), Flux(nprim), Gradient(nprim,3), g1, g2, g3
-    real(R8), dimension(nprim) :: Visc_c, Visc_g, Visc_im, Visc_ip, Visc_jm, Visc_jp
-    real(R8), dimension(nprim) :: Rot_im, Rot_ip, Rot_jm, Rot_jp
+    real(R8), dimension(nprim) :: Rot_im, Rot_ip, Rot_jm, Rot_jp, Rl, Rr
+    real(R8), pointer, contiguous :: Mg(:,:,:)   ! stencil: metrics per group with a wall ghost cell in the stencil, else absent
 
     ! No wedge on a 2-D mesh: delthe exactly zero, written as two ordered comparisons (same result, also for -0 and NaN)
     if (ndir < 3 .and. (delthe >= 0d0 .and. delthe <= 0d0)) return
@@ -240,41 +245,65 @@ contains
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area   = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
 
-    call Visc_Variables ( Blk % P(:,Im,Jm,Km), Visc_c )
-    call Visc_Variables ( Blk % P(:,Im,Jm,Kg), Visc_g )
-    call Visc_Variables ( Blk % P(:,Im-1,Jm,Ks), Rot_im )
-    call Visc_Variables ( Blk % P(:,Im+1,Jm,Ks), Rot_ip )
-    call Visc_Variables ( Blk % P(:,Im,Jm-1,Ks), Rot_jm )
-    call Visc_Variables ( Blk % P(:,Im,Jm+1,Ks), Rot_jp )
-    Rot_im = Rotated ( Rot_im )
-    Rot_ip = Rotated ( Rot_ip )
-    Rot_jm = Rotated ( Rot_jm )
-    Rot_jp = Rotated ( Rot_jp )
-    call Visc_Variables ( Blk % P(:,Im-1,Jm,Km), Visc_im )
-    call Visc_Variables ( Blk % P(:,Im+1,Jm,Km), Visc_ip )
-    call Visc_Variables ( Blk % P(:,Im,Jm-1,Km), Visc_jm )
-    call Visc_Variables ( Blk % P(:,Im,Jm+1,Km), Visc_jp )
+    ! The viscous variables of the cells (Viscous_Variables); those of the image row, turned
+    Rot_im = Rotated ( Blk % Visc(:,Im-1,Jm,Ks) )
+    Rot_ip = Rotated ( Blk % Visc(:,Im+1,Jm,Ks) )
+    Rot_jm = Rotated ( Blk % Visc(:,Im,Jm-1,Ks) )
+    Rot_jp = Rotated ( Blk % Visc(:,Im,Jm+1,Ks) )
 
-    ! Gradients in computational space: k across the face, i and j along it
-    Gradient(:,3) = ( Visc_g - Visc_c ) * modfm2
-    Gradient(:,1) = ( Visc_ip - Visc_im + Rot_ip - Rot_im ) * 0.25d0
-    Gradient(:,2) = ( Visc_jp - Visc_jm + Rot_jp - Rot_jm ) * 0.25d0
+    if ( obj_space_scheme % stencil_metric ) then
+      ! diffusive-metric = stencil: one face gradient as on an interior face, with the cells in the order of growing k (on
+      ! face 6 the cell, then its image; on face 5 the image, then the cell; the rows along the face in either order, as
+      ! their differences are averaged), the metric of the face stored at setup and, with a wall ghost cell in the stencil,
+      ! the metrics per group. The image has the wall distance and roughness of its source, as below.
+      nullify ( Mg )
+      if ( Blk % dir(Dir) % ig(Face_i,Face_j,Face_k) > 0 ) &
+        Mg => Blk % dir(Dir) % Mg(:,:,:,Blk % dir(Dir) % ig(Face_i,Face_j,Face_k))
+      Rl = 0d0
+      Rr = 0d0
+      if ( Fm == 6 ) then
+        call Diffusive_Flux ( Normal, Area, Blk % yn(Im,Jm,Km), Blk % yn(Im,Jm,Ks),                          &
+                              Blk % ks(Im,Jm,Km), Blk % ks(Im,Jm,Ks),                                      &
+                              Blk % P(:,Im,Jm,Km), Blk % P(:,Im,Jm,Kg),                                    &
+                              Blk % Visc(:,Im,Jm,Km), Blk % Visc(:,Im,Jm,Kg),                              &
+                              Blk % Visc(:,Im-1,Jm,Km), Blk % Visc(:,Im+1,Jm,Km), Rot_im, Rot_ip,          &
+                              Blk % Visc(:,Im,Jm-1,Km), Blk % Visc(:,Im,Jm+1,Km), Rot_jm, Rot_jp,          &
+                              Blk % dir(Dir) % Mf(Face_i,Face_j,Face_k) % c, Rl, Rr, 3, 1, 2,              &
+                              Sc, Sct, Prt, Prt_corr, Mg = Mg )
+        Flux = -Rl                     ! Res1 (the cell) takes -flux
+      else
+        call Diffusive_Flux ( Normal, Area, Blk % yn(Im,Jm,Ks), Blk % yn(Im,Jm,Km),                          &
+                              Blk % ks(Im,Jm,Ks), Blk % ks(Im,Jm,Km),                                      &
+                              Blk % P(:,Im,Jm,Kg), Blk % P(:,Im,Jm,Km),                                    &
+                              Blk % Visc(:,Im,Jm,Kg), Blk % Visc(:,Im,Jm,Km),                              &
+                              Rot_im, Rot_ip, Blk % Visc(:,Im-1,Jm,Km), Blk % Visc(:,Im+1,Jm,Km),          &
+                              Rot_jm, Rot_jp, Blk % Visc(:,Im,Jm-1,Km), Blk % Visc(:,Im,Jm+1,Km),          &
+                              Blk % dir(Dir) % Mf(Face_i,Face_j,Face_k) % c, Rl, Rr, 3, 1, 2,              &
+                              Sc, Sct, Prt, Prt_corr, Mg = Mg )
+        Flux = Rr                      ! Res2 (the cell) takes +flux
+      end if
+    else
+      ! Gradients in computational space: k across the face, i and j along it
+      Gradient(:,3) = ( Blk % Visc(:,Im,Jm,Kg) - Blk % Visc(:,Im,Jm,Km) ) * modfm2
+      Gradient(:,1) = ( Blk % Visc(:,Im+1,Jm,Km) - Blk % Visc(:,Im-1,Jm,Km) + Rot_ip - Rot_im ) * 0.25d0
+      Gradient(:,2) = ( Blk % Visc(:,Im,Jm+1,Km) - Blk % Visc(:,Im,Jm-1,Km) + Rot_jp - Rot_jm ) * 0.25d0
 
-    ! ... and in physical space
-    do v = 1, nprim
-      g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
-      Gradient(v,1) = g1*Mf(1,1) + g2*Mf(2,1) + g3*Mf(3,1)
-      Gradient(v,2) = g1*Mf(1,2) + g2*Mf(2,2) + g3*Mf(3,2)
-      Gradient(v,3) = g1*Mf(1,3) + g2*Mf(2,3) + g3*Mf(3,3)
-    end do
+      ! ... and in physical space
+      do v = 1, nprim
+        g1 = Gradient(v,1) ; g2 = Gradient(v,2) ; g3 = Gradient(v,3)
+        Gradient(v,1) = g1*Mf(1,1) + g2*Mf(2,1) + g3*Mf(3,1)
+        Gradient(v,2) = g1*Mf(1,2) + g2*Mf(2,2) + g3*Mf(3,2)
+        Gradient(v,3) = g1*Mf(1,3) + g2*Mf(2,3) + g3*Mf(3,3)
+      end do
 
-    ! The image has the wall distance and roughness of its source: the face takes their mean with the cell, as an
-    ! interior face (on a wedge the source is the cell)
-    Prim = 0.5d0 * ( Blk % P(:,Im,Jm,Km) + Blk % P(:,Im,Jm,Kg) )
-    call Compute_Diffusive_Flux ( Prim, Gradient, Area, Normal, &
-                                  0.5d0 * ( Blk % yn(Im,Jm,Km) + Blk % yn(Im,Jm,Ks) ), &
-                                  0.5d0 * ( Blk % ks(Im,Jm,Km) + Blk % ks(Im,Jm,Ks) ), &
-                                  Flux, Sc, Sct, Prt, Prt_corr )
+      ! The image has the wall distance and roughness of its source: the face takes their mean with the cell, as an
+      ! interior face (on a wedge the source is the cell)
+      Prim = 0.5d0 * ( Blk % P(:,Im,Jm,Km) + Blk % P(:,Im,Jm,Kg) )
+      call Compute_Diffusive_Flux ( Prim, Gradient, Area, Normal, &
+                                    0.5d0 * ( Blk % yn(Im,Jm,Km) + Blk % yn(Im,Jm,Ks) ), &
+                                    0.5d0 * ( Blk % ks(Im,Jm,Km) + Blk % ks(Im,Jm,Ks) ), &
+                                    Flux, Sc, Sct, Prt, Prt_corr )
+    end if
 
     if (ndir == 3) then
       ! Residual update of the two cells of the face: the cell next to face 6, and the source next to face 5 with the
@@ -291,24 +320,6 @@ contains
 
     contains
 
-      !> Velocity, temperature and RANS variables per unit mass, as Visc_Variables of BC_Connection_Visc (no
-      !> concentration gradient: one species)
-      subroutine Visc_Variables ( P, Visc )
-        implicit none
-        real(R8), intent(in)  :: P(nprim)
-        real(R8), intent(out) :: Visc(nprim)
-        real(R8) :: rho
-
-        Visc(np) = 0.0_R8
-        Visc(nu:nw) = P(nu:nw)
-        Visc(nh) = ph2vars( P(np), P(nh), T_tab )
-        if (nprim>nh) then
-          rho = ph2vars( P(np), P(nh), rho_tab )
-          Visc(nt:nprim) = P(nt:nprim) / rho
-        end if
-
-      end subroutine Visc_Variables
-
       !> The same values in the image row: v and w rotated as in Ghost_Axysimmetry
       function Rotated ( Visc ) result ( Rot )
         implicit none
@@ -324,7 +335,9 @@ contains
   end subroutine BC_Rotational_Periodic_Visc
 
 
-  !> Face metric of the viscous flux of a face of type 200 (BC_Rotational_Periodic_Visc): the inverse of the mean of
+  !> Face metric of the viscous flux of a face of type 200 (BC_Rotational_Periodic_Visc) with diffusive-metric =
+  !> mean (with stencil the face takes Rotational_Face_Metric of ARES_Lib_Stencil_Metrics, which takes
+  !> from this one the columns of the index directions with one cell): the inverse of the mean of
   !> the two inverse metrics (Face_Metric) of the cell and of its image. It depends on the metrics only, so
   !> Setup_Metrics computes it once, for the records of type 200 of the blocks of the rank, and stores it in the record
   !> (bc%rM). On a wedge the metric of the image is that of the ghost cell, the exact rotation of the cell

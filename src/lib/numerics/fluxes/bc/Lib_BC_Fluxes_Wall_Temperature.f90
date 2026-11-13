@@ -10,7 +10,7 @@ module ARES_Lib_BC_Fluxes_Wall_Temperature
 
 contains
 
-  subroutine BC_Wall_Temperature ( Im, Jm, Km, Fm, Blk, T_wall, Ovar )
+  subroutine BC_Wall_Temperature ( Im, Jm, Km, Fm, Blk, T_wall, Ovar, rec )
     use ARES_Lib_Fluid
     use ARES_Lib_RANS
     use FLINT_Lib_Thermodynamic
@@ -20,11 +20,16 @@ contains
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     real(R8), intent(in) :: T_wall
-    type(ARES_block_type), intent(inout) :: Blk
+    type(ARES_block_type), intent(inout), target :: Blk
     real(R8), optional, dimension(8), intent(out) :: Ovar
+    ! the record of the face: its wall stencil (diffusive-metric = stencil)
+    type(ARES_bc_type), optional, intent(in), target :: rec
     ! Local
-    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, ig, jg, kg
-    real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, T, rho_wall, dl
+    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k
+    real(R8) :: Normal(3), Area, Dist, Prim(nprim), rho, T, rho_wall, dl
+    real(R8), pointer, contiguous :: M(:,:), Mc(:,:)   ! metrics of the face and of the cell, read in place
+    integer  :: tb(2)
+    logical  :: wst
     real(R8) :: Prim_wall(nprim), mil, kl, Gradient(nprim,3), Stress(3), Flux(nprim), pressure, entalpy
     real(R8) :: hs, mit, cp, kt ! roughness variables
     real(R8) :: dPrt ! Turbulent Prandtl correction for rough wall
@@ -36,7 +41,14 @@ contains
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     Dist = 1d-20 ! since the flux is computed at the wall
-    M = Blk % M (Im,Jm,Km) % c
+    Mc => Blk % M (Im,Jm,Km) % c
+    M => Mc
+    ! diffusive-metric = stencil: the metric of the wall face, with the differences of the wall temperature along the
+    ! wall below (Wall_Face_Stencils in ARES_Lib_Stencil_Metrics); otherwise the metric of the cell and no tangential
+    ! difference. The wall values of the turbulence variables take the metric of the cell
+    wst = .false.
+    if ( present(rec) ) wst = rec % wstencil
+    if ( wst ) M => rec % wM
 
     ! Roughness
     if ( obj_rans%rough ) then 
@@ -68,11 +80,19 @@ contains
     ! Difference in Across-face direction: symmetry; tangential direction: null
     Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3                  ! Velocity
     Gradient(nh,Dir) = ( T - T_wall ) * modfm3                  ! Temperature
+    if ( wst ) then
+      select case (Dir)
+        case (1) ; tb = [2, 3]
+        case (2) ; tb = [1, 3]
+        case default ; tb = [1, 2]
+      end select
+      Gradient(nh,tb(1)) = rec % wdT(1) ; Gradient(nh,tb(2)) = rec % wdT(2)
+    end if
 
     if (model==2)  then
       dl = blk % yn(im,jm,km)
       call RANS_Set_Wall_Values( mil_wall=mil, rans_wall=Prim_Wall(nt:nprim), rans_cell=Prim(nt:nprim), &
-                                 metric=dot_product( M(Dir,:), normal ), dist=dl, ks=hs )
+                                 metric=dot_product( Mc(Dir,:), normal ), dist=dl, ks=hs )
       Gradient(nt:nprim,Dir) = ( Prim(nt:nprim)/rho - Prim_Wall(nt:nprim)/rho_wall ) * modfm3 
       call Eddy_Viscosity ( mut=mit, rans_variables=Prim_Wall(nt:nprim), &
                             mul=mil, rho=rho_wall, vel_gradient=Gradient(nu:nw,:), &
@@ -109,12 +129,8 @@ contains
                                  rans_gradient=Gradient(nt:nprim,:), &
                                  mul=mil, rho=rho_wall, &
                                  area=area, normal=normal, dist=dist )
-      ! Ghost-cell extrapolation of RANS variables
-      ig = im - guide(fm,1)
-      jg = jm - guide(fm,2)
-      kg = km - guide(fm,3)
-      call RANS_Extrapolate_Wall ( Prim(nt:nprim), Prim_Wall(nt:nprim), &
-                                   rho, rho_wall, Blk % P(nt:nprim,Ig,Jg,Kg) )
+      ! The ghost cells of the wall, turbulence variables included, are those of Fill_Ghost_Cell (Ghost_Wall), from the
+      ! same wall values: one set of ghost cells for the fluxes and the source terms
     endif
 
     ! Residual update

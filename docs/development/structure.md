@@ -128,17 +128,19 @@ Each `Explicit_Step` performs one time step:
 
 1. **Compute Δt** — local/global steps from one additive rule of the convective (CFL) and diffusive (VNN) rates, summed over the directions (preconditioned signal speed when `prec` is active; on a 2-D wedge also the hoop stress of the wedge faces; in time-accurate RANS runs also the stiffness of the turbulence sources).
 2. **Runge–Kutta loop** (`n_RK` stages):
-    - Fill ghost cells (boundary + inter-block).
+    - Fill ghost cells (boundary + inter-block; those of the walls and `400` faces by `Ghost_Wall`).
+    - Compute the viscous variables of the cells and of their first layer of ghost cells (`Viscous_Variables`, viscous runs).
     - Evaluate convective fluxes (reconstruction → Riemann solver).
     - Evaluate diffusive fluxes.
     - Apply boundary fluxes: first one flux per face between blocks (`Connection_Fluxes`), then every boundary record.
-    - Add RANS source terms (if turbulent), after the wall ghost cells of the mean flow (`Ghost_Wall_Extrapolation`).
+    - Add RANS source terms (if turbulent), with the ghost cells of the fluxes.
     - Update state via `Newstate` (optional IRS smoothing + RK combination + thermo inversion).
 3. **Compute residual** (pressure residual) and write diagnostics.
 
 The RK stages run inside one OpenMP parallel region. The MPI calls made inside it (the halo
 exchange in `Fill_Ghost_Cell`, the flux of the faces between blocks whose two cells are on different
-ranks in `Connection_Fluxes`, the residual exchange of the implicit residual smoothing) are made
+ranks in `Connection_Fluxes`, the velocity gradient of the rotation–curvature correction (SA-RC,
+SST-RC) in `Ghost_Velocity_Gradient`, the residual exchange of the implicit residual smoothing) are made
 by the primary thread only, in `!$omp master` blocks (OpenMP 5.1 added the `masked`
 construct and deprecated `master`), each followed by an explicit
 `!$omp barrier` wherever the other threads use its result. ARES initialises MPI with
@@ -154,11 +156,15 @@ so that the message is written once and the exit code is 1. With symmetry (`300`
 index direction that has fewer than two cells (the $k$ faces of a 2-D case, the $j$ faces of a 1-D case),
 the second layer of ghost cells of each face copies the first layer of the other: `Setup_Metrics` fills
 the ghost layers of the symmetry faces one layer at a time, each after the previous layer of every face,
-so their metrics do not depend on the number or on the order of the threads. The viscous flux of a face of
-type `200` (`BC_Rotational_Periodic_Visc`) takes the inverse-mean metric of the cell and of its image, which
-depends on the mesh only: `Setup_Metrics` computes it once (`Rotational_Periodic_Face_Metric`) and stores it in
-the record (`bc%rM`), and `BC_Fluxes` passes it. A viscous run on a wedge or a sector closed by type `200` whose
-boundary faces on the axis have zero area stops there (`Check_Wedge_Axis`).
+so their metrics do not depend on the number or on the order of the threads. With `diffusive-metric = mean` the
+viscous flux of a face of type `200` (`BC_Rotational_Periodic_Visc`) takes the inverse-mean metric of the cell and of
+its image, which depends on the mesh only: `Setup_Metrics` computes it once (`Rotational_Periodic_Face_Metric`) and
+stores it in the record (`bc%rM`), and `BC_Fluxes` passes it. At its end `Setup_Metrics` computes, for the records of
+the walls and `400` faces, the ratio of the MUSCL distances behind the face (`Extrapolation_Ratio`, `bc%sx`, on every
+rank), and with `stencil` the face metrics of the viscous fluxes and the cell metrics of the source terms
+(`Setup_Stencil_Metrics`, [Diffusive Flux Evaluation](#diffusive-flux-evaluation)). A viscous run on a wedge or a
+sector closed by type `200` whose boundary faces on the axis have zero area stops there (`Check_Wedge_Axis`), and so
+does, with `mean`, a viscous run on a 3-D mesh with a boundary face of zero area (a polar line).
 
 ---
 
@@ -169,6 +175,59 @@ The convective flux at each interface is built in stages from a 4-point stencil:
 1. **MUSCL reconstruction** — interface left/right states using the selected limiter.
 2. **Riemann solver** — one of six solvers resolves the jump (`Mod_Riemann` binds `Riemann => …`).
 3. **Numerical flux** — multiplied by the interface area vector.
+
+---
+
+## Diffusive Flux Evaluation
+
+The viscous and conductive flux of an interior face comes from `Diffusive_Flux`
+(`numerics/fluxes/Lib_Diffusive.f90`), which takes the face metric as one argument:
+
+```fortran
+call Diffusive_Flux ( normal, area, waldis1, waldis2, rough1, rough2,           &
+                      Prim1, Prim2, Visc1, Visc2, Visc3, Visc4, Visc5, Visc6,   &
+                      Visc7, Visc8, Visc9, Visc10, Mf, Res1, Res2, a, b, c,     &
+                      Sc, Sct, Prt, Prt_corr, Mg )
+```
+
+`Prim1` and `Prim2` are the primitive variables of the two cells, from 1 to 2 along the normal (the state of the face is
+their mean); `Visc1` and `Visc2` their viscous variables, `Visc3`–`Visc6` and `Visc7`–`Visc10` those of their neighbours
+along the two tangential index directions `b` and `c` (cell 1 at -1 and +1, then cell 2 at -1 and +1); `a` is the
+direction across the face. The viscous variables of a cell are its velocity, temperature (from the tables) and turbulence
+variables per unit mass (`Visc_State`, `Lib_Diffusive.f90`), the quantities whose differences make the gradients.
+`Viscous_Variables` (`numerics/fluxes/Mod_Fluxes.f90`) computes them once per stage, after the ghost cells are filled, for
+every cell of the blocks of the rank and for the first layer of ghost cells across the faces of each block, into
+`blk%Visc`; the viscous fluxes of the interior faces and of the faces of types `101`, `201`, `102` and `200` read them there
+(the cells of the other block of a face between blocks, `bc%Pg`, are computed on the face). `Mf(3,3)` is the face metric:
+the gradient is `Gradient(v,:) = matmul(D(v,:), Mf)`, with `D` the difference across the face and the two tangential
+differences. `Mg(3,3,4)`, optional, holds one face metric per group of quantities (1 unused, 2 temperature, 3 velocity,
+4 turbulence variables) where a ghost cell of a wall is in the stencil, whose values sit at different positions
+(`Ghost_Wall`). `Res1` takes -flux and `Res2` +flux.
+
+`Fluxes_blk` (`Mod_Fluxes.f90`) chooses the metric with `metric = obj_space_scheme%metric_mode` (`METRIC_MEAN` 0,
+`METRIC_STENCIL` 2, from `diffusive-metric`): with `stencil` it passes the metric stored at setup in
+`blk%dir(d)%Mf(i,j,k)%c` by `Setup_Stencil_Metrics` (`numerics/space/Lib_Stencil_Metrics.f90`, called at the end of
+`Setup_Metrics`, on every multigrid level) itself, through a contiguous pointer (no copy), with `blk%dir(d)%Mg` where
+`blk%dir(d)%ig` names a column; with `mean` it computes the mean of the cell metrics `blk%M` of the two cells.
+
+Boundary faces with `stencil`: a face between blocks (`101`, `201`) takes one gradient through `Diffusive_Flux`
+(`BC_Connection_Visc_Stencil`), with the metric stored on the face of the block of the record and the tangential
+neighbours of the ghost cell from `bc%Pg(:,3:6)`; a symmetry face (`300`) uses the stored metric of the cell and its
+mirror image in `BC_Symmetry_Visc` (the metric of the cell with one cell across the face). A wall face takes the metric
+and the tangential differences of the wall temperature that `Wall_Face_Stencils` stores in its record (`bc%wstencil`,
+`bc%wM`, `bc%wdT`): `BC_Wall_Temperature` and `BC_Wall_Heat` read them through their optional argument `rec`, which every
+caller passes (`BC_Fluxes`, the wall output). Faces of type `200` (`BC_Rotational_Periodic_Visc`) take one gradient
+through `Diffusive_Flux` with `stencil`, with the metric that `Rotational_Face_Metric` stores on the face of the block
+(one per group of quantities with a wall ghost cell in the row of the cell or of the source; the image row is the row of
+the source turned, positions and values), and with `mean` the inverse-mean metric of the record (`bc%rM`); the routine
+chooses by `obj_space_scheme%stencil_metric`, so every caller passes `bc%rM`. Chimera faces (`102`) keep their own
+metric with every option. The positions of the ghost cells that enter the metric are listed in
+[Spatial Discretization](../theory/numerics.md#face-metric-stencil).
+
+The source terms of the turbulence models and the eddy viscosity of the output take their cell metrics from
+`Source_Metrics` (`Lib_Stencil_Metrics.f90`): with `stencil` those of `Cell_Source_Metrics` (`blk%Ms` for the velocity,
+`blk%Msc` for the density, `blk%Msa` for the velocity gradients of SA-RC and SST-RC, `blk%Mst` for the turbulence
+variables where their position is not that of the velocity), with `mean` the metric of the cell for all of them.
 
 ---
 

@@ -70,6 +70,7 @@ module ARES_Config_Types_m
     integer              :: ini_diter    ! input.ini update
     character(len=llen)  :: ini_error    ! input.ini read again with an error: warn (the reading not taken) or stop
     integer              :: timer_diter  ! Wall-clock timing report (0 = off)
+    character(len=llen)  :: decomposition_map   ! Block-to-rank map in INPUT/ (none: ARES assigns the blocks)
     ! Useful variables
     character(len=llen)  :: nameinit  ! Initial file name
     logical              :: write_thermo, write_transport
@@ -173,8 +174,11 @@ module ARES_Config_Types_m
     character(len=llen) :: space_reconstruction ! Space reconstruction method
     character(len=llen) :: flux_limiter         ! Flux limiter for space reconstruction, as input.ini gives it
     character(len=llen) :: limiter_name = ''    ! Name of the limiter in use in the set-up summary (blank: first order)
+    character(len=llen) :: diffusive_metric     ! Face metric of the viscous fluxes (stencil/mean)
     ! Useful variables
     logical :: SD
+    logical :: stencil_metric = .true.          ! diffusive_metric == stencil
+    integer :: metric_mode = 2                  ! 0 mean, 2 stencil (ARES_Lib_Stencil_Metrics)
   end type space_scheme_t
   !! ------------------------------------------------------
   !! ------------------------------------------------------

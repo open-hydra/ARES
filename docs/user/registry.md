@@ -31,6 +31,7 @@ This page is the reference for every `[ARES-*]` parameter. It mirrors the output
 | preconditioning-eps-min | -1.0 |  | no | Minimum cut-off $\varepsilon$ for preconditioning (< 0 ⇒ default 0.10) |
 | space-reconstruction | none | MUSCL, first-order, none | **yes** | Space reconstruction method |
 | flux-limiter | none | vanalbada, minmod, superbee, vanleer, mc, MC, LIMO3, none | no | Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order; `mc` and `MC` are the same limiter) |
+| diffusive-metric | stencil | stencil, mean | no | Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of the cell centres as the face gradient, exact for a linear field on any mesh (at the symmetry faces and the k faces of type 200 for the linear fields that they allow) except at the chimera faces (102), which take the inverse of the mean of the inverse metrics of the two cells with every value, and at the symmetry faces with one cell across them, which take the metric of the cell; mean takes the mean of the two metrics (the faces between blocks and of type 200 the inverse of the mean of the inverse metrics), overstates the gradient by (1+r)^2/(4r) at a cell-size ratio r and does not converge next to a symmetry plane (300) that bounds a sector of a polar mesh ([Spatial Discretization](../theory/numerics.md#gradient-computation-for-diffusive-fluxes)) |
 | riemann-solver | HLLC | Rusanov, PLLF, HLLE, HLLC, HLLC Prec, HLLC Rotated | no | Riemann (numerical flux) solver |
 | riemann-options-Minf | 0.0 | >= 0 | no | Reference Mach number for the Riemann solver |
 
@@ -87,6 +88,7 @@ These keys are read for every run and used only when `turbulence` names a model.
 |-----------|---------|---------|----------|-------------|
 | ic-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw | no | Initial-condition (`INPUT/ic.*`) format |
 | sol-format | tecplot ascii | tecplot ascii, tecplot binary, vtk ascii, vtk raw | no | Solution (`OUTPUT/field.*`) format |
+| decomposition-map | none |  | no | Block-to-rank map in `INPUT/` (none: ARES assigns the blocks; see [Block-to-rank assignment](using.md#block-to-rank-assignment)) |
 | sol-diter | 1000000000 | > 0 | no | Solution output frequency (iterations) |
 | sol-dtime | 1e30 | > 0 | no | Solution output frequency (physical time) |
 | sol-overwrite | true | true, false | no | Overwrite the solution file (false ⇒ numbered snapshots) |

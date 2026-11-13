@@ -121,6 +121,12 @@ updates in which a stage made it negative ([Time-accurate runs](#time-accurate-r
     ARES computes the factor $2r^\ast/(1 + r^\ast)$ of $f_{r1}$ as $2S/(S + \Omega)$: where the vorticity vanishes it takes its limit, 2. Where strain and vorticity are both below $10^{-30}\ \mathrm{s^{-1}}$, in a fluid at rest or a uniform flow, $r^\ast$ is not defined: the velocity gradient there is the $10^{-40}$ that ARES adds to the velocity differences, times the metric of the cell. ARES then takes the value of simple shear, 1, with $\tilde r = 0$. The correction does not act there, and the production is that of SA.
 
     ARES evaluates the Lagrangian derivative $DS_{ij}/Dt = \partial S_{ij}/\partial t + u_k\,\partial S_{ij}/\partial x_k$ with its convective part only. Without the time term the correction holds for steady flows only: «Without the time term, the model is not correct in a time-dependent flowfield» (NASA Turbulence Modeling Resource, Spalart–Allmaras page, SA-RC). Time-accurate runs with a `-RC` correction (SA-RC, SST-RC) print a warning at start-up.
+
+    ARES takes $\partial S_{ij}/\partial x_k$ with central differences of the velocity gradients $G = \nabla\mathbf{u}$ of the cell and of its neighbours (`compute_velocity_gradient`, `compute_rc_terms`), mapped to Cartesian components with a cell metric. Next to a block face the neighbour is the first ghost cell, and the difference is right when the ghost cell holds the value of a definite cell and the metric takes the position of that same cell: for $S_{ij}$ linear in space the difference is then exact (with `diffusive-metric = stencil`, the metric of the differences of these positions: [Cell gradients of the source terms](#cell-gradients-of-the-source-terms)).
+
+    - Behind a face between blocks (`101`) or of a periodic pair (`201`) the ghost cell holds $G$ of the cell across, the source cell of the record (from another MPI rank by message), and the metric takes its centre, plus the translation of a periodic pair. $G$ is a tensor in Cartesian components: it is copied whatever the orientation of the two blocks. The cell next to the face then takes the central difference of the undivided mesh, and the result does not depend on how the mesh is divided into blocks or among ranks.
+    - Behind a face of rotational periodicity (`200`) the ghost cell holds $R\,G\,R^{\mathsf T}$, $G$ of the image cell that the velocity takes there, turned by the same rotation $R$ about $x$: a flow invariant under the turn, $\mathbf{u}(R\mathbf{x}) = R\,\mathbf{u}(\mathbf{x})$, has $G(R\mathbf{x}) = R\,G(\mathbf{x})\,R^{\mathsf T}$. On a 3-D sector the image is the cell next to the opposite face and the metric takes its position turned; on the 2-D wedge it is the cell itself, and along $k$ the metric takes the edge of the cell, as for the velocity. With a zero sector angle (a planar mesh, a translated sector) the ghost cell holds a copy of the cell, as below.
+    - Behind the other faces (walls, symmetry, inflow, outflow, chimera) the ghost cell holds a copy of the gradient of the cell and the metric takes the cell itself: the difference across the boundary cell is one-sided, a choice of the model.
 - **SAcomp (compressibility).** Paciorri–Sabetta correction scaling the production with the turbulent-stress ratio $S_\tau = \omega\,\tilde\nu f_{v1}/a^2$, for high-speed shear layers.
 
     !!! warning "Stopped at set-up"
@@ -490,23 +496,48 @@ This lets the model be switched at run time without recompilation.
 
 ### Wall ghost cells of the turbulence variables
 
-Behind a viscous wall (`301`, `302`) the ghost cell of each turbulence variable takes the value that puts the wall
-value on the face,
+Behind a viscous wall (`301`, `302`, and the walls `103` and `104` coupled to another solver) the ghost cell of each
+turbulence variable takes the value that puts the wall value on the face,
 
 $$
 Z_\text{ghost} = 2\,Z_\text{wall} - Z_\text{cell}, \qquad Z = \tilde\nu,\ k,\ \omega,\ R_{ij} ,
 $$
 
-with the wall values of the models above (`RANS_Extrapolate_Wall`). It is the rule of CFL3D, «the actual wall boundary
-conditions for the turbulence quantities (unlike the primitive variables) are applied at ghost cells» (S. L. Krist,
-R. T. Biedron, C. L. Rumsey, *CFL3D User's Manual (Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186).
-The wall flux routines set these values at every stage; the source terms read them in the gradients of the wall cells:
-the $c_{b2}$ term of SA and its term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the
-cross-diffusion of SST, the cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of
-the wall cell sees $\partial\tilde\nu/\partial y = a$; a ghost cell that copied the cell would give $a/2$. The other
-primitive variables are copied into the wall ghost cells, with the velocity reversed (`Ghost_Wall_Extrapolation`); the
-fluxes through the first interior faces use the extrapolation of `Fill_Ghost_Cell`. The walls coupled to another solver
-(`103`, `104`) have no wall flux routine of their own: their ghost cells copy the cell, turbulence variables included.
+with the wall values of the models above, here of the specific variables $Z$ (the ghost value of $\rho Z$ is that times
+the density of the ghost cell). It is the rule of CFL3D, «the actual wall boundary conditions for the turbulence quantities
+(unlike the primitive variables) are applied at ghost cells» (S. L. Krist, R. T. Biedron, C. L. Rumsey, *CFL3D User's
+Manual (Version 5.0)*, NASA/TM-1998-208444, 1998, appendix H, eq. H-186). `Fill_Ghost_Cell` sets these values once per
+stage (`Ghost_Wall`), from the wall values of the wall flux routines (the same wall state), with the other ghost values of
+the wall ([Numerics](numerics.md#ghost-cells-of-walls-and-400-faces)): the fluxes through the first interior faces and the
+source terms read the same ghost cells, at every stage. The source terms read them in the gradients of the wall cells: the
+$c_{b2}$ term of SA and its term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$, $F_1$ and the cross-diffusion of
+SST, the cross-diffusion of Wilcox 2006. With $\tilde\nu = a\,y$ next to a wall the $c_{b2}$ term of the wall cell sees
+$\partial\tilde\nu/\partial y = a$; a ghost cell that copied the cell would give $a/2$. The walls coupled to another solver
+(`103`, `104`), whose viscous flux the other solver gives, take the wall values of an adiabatic wall at the state of the
+cell, smooth or rough as the `ks` of their record in `bc.txt` (with `SA-rough`, $\tilde\nu$ of the rough-wall condition,
+as their wall flux takes it).
+
+### Cell gradients of the source terms
+
+The source terms take, in every cell, the central differences of the values along the three index directions and map them
+to Cartesian components with a cell metric. With `diffusive-metric = stencil` the metric is $M_s = (J_c^{T})^{-1}$ with
+$J_c^{T}(:,d) = (\mathbf{x}_{c+e_d} - \mathbf{x}_{c-e_d})/2$, the same central differences of the cell centres (the mean of
+the eight nodes): the gradient of a linear field is exact on stretched, skewed and non-smooth cells (along an index
+direction with one cell, the edge of the cell and no difference). On a mesh of equal parallelograms these gradients are the
+reference gradient of [14] (Eq. 1), second order on smooth structured meshes. In a wall cell, for a field that is not
+linear, the reflected ghost value $2\phi_\text{wall} - \phi_\text{cell}$ makes the gradient first order, as the Green–Gauss
+gradient is in the boundary cells of [14] (Eq. 13). The ghost cells sit where their value is right: those of the fluxes, at
+the positions of the face metric ([Numerics](numerics.md#face-metric-stencil)); behind a wall the position of the class of
+the quantity, one metric per group: the velocity, the density (whose ghost value follows the temperature: exact where the
+pressure does not vary across the wall cell), the turbulence variables (at the walls and at `400` faces at the position of
+the velocity). Behind a zero-gradient face (`0`, `404`–`406`), whose ghost cell copies the cell, the position is the cell
+itself, so the difference across the boundary cell is one-sided. The strain gradient of SA-RC and SST-RC takes, behind the
+faces between blocks and of a turned sector, the position of the cell whose velocity gradient the ghost cell holds, and the
+cell itself behind the other faces ([SA variants](#sa-variants)). The metrics are computed once at setup
+(`Cell_Source_Metrics`) and chosen in one place (`Source_Metrics`) by the source terms of SA, SA-RC, SST, SST-RC,
+Wilcox 2006 and SSG/LRR and by the eddy viscosity of the output. With `mean` the metric is that of the cell: the central
+difference across a cell next to a jump of size $r$ is then wrong by $(r-1)/4$, and next to a zero-gradient face the normal
+component is half the one-sided difference.
 
 ### Wall distance
 
@@ -756,3 +787,4 @@ hand-tuned per case and grid.
 11. NASA Langley Turbulence Modeling Resource, "Implementing turbulence models into the compressible RANS equations," <https://tmbwg.github.io/turbmodels/implementrans.html>.
 12. D. C. Wilcox, "Formulation of the k-ω turbulence model revisited," *AIAA J.* 46(11), pp. 2823–2838, 2008, doi:10.2514/1.36541.
 13. NASA Langley Turbulence Modeling Resource, "The Spalart–Allmaras Turbulence Model," <https://tmbwg.github.io/turbmodels/spalart.html> (formerly turbmodels.larc.nasa.gov/spalart.html): minimum distance to the wall.
+14. A. Syrakos, S. Varchanis, Y. Dimakopoulos, A. Goulas, J. Tsamopoulos, "A critical analysis of some popular methods for the discretisation of the gradient operator in finite volume methods," *Phys. Fluids*, 29, 127103, 2017, doi:10.1063/1.4997682.

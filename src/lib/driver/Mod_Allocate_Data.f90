@@ -169,6 +169,12 @@ contains
     allocate( blk % P (nprim, 1-gc:ni+gc, 1-gc:nj+gc, 1-gc:nk+gc ) )
     allocate( blk % PO, blk % R, mold = blk % P )
 
+    ! Viscous variables of the cells and of the first layer of ghost cells (Viscous_Variables)
+    if ( model > 0 ) then
+      allocate( blk % Visc (nprim, 0:ni+1, 0:nj+1, 0:nk+1) )
+      blk % Visc = 0.0_R8
+    end if
+
     ! Dt cell center with no ghost cells
     allocate( blk % dtlocal ( 1:ni, 1:nj, 1:nk) )
 
@@ -227,6 +233,7 @@ contains
       if (allocated(domain%blk(b)%vel_gradient)) deallocate(domain%blk(b)%vel_gradient)
       if (allocated(domain%blk(b)%rc_term1))     deallocate(domain%blk(b)%rc_term1)
       if (allocated(domain%blk(b)%rc_term2))     deallocate(domain%blk(b)%rc_term2)
+      if (allocated(domain%blk(b)%Visc))         deallocate(domain%blk(b)%Visc)
 
       ! P — free unless this remote block is a chimera donor
       if (.not. needs_remote_P(b)) then

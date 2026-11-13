@@ -50,7 +50,7 @@ module ARES_Lib_RANS
     subroutine RANS_Source_Terms_if(domain)
       use ARES_Advanced_Types_m
       implicit none
-      type(ARES_domain_type), intent(inout) :: domain
+      type(ARES_domain_type), intent(inout), target :: domain   ! target: the cell metrics of Source_Metrics point into it
     end subroutine RANS_Source_Terms_if
   end interface
 

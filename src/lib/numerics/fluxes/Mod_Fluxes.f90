@@ -3,14 +3,14 @@ module ARES_Mod_Fluxes
 
   implicit none
   private
-  public :: Fluxes, Setup_Quasi2D_W, Zero_W_Residual, Zero_V_Residual
+  public :: Fluxes, Setup_Quasi2D_W, Zero_W_Residual, Zero_V_Residual, Viscous_Variables
 
 contains
 
     subroutine Fluxes ( domain )
       use ARES_Advanced_Types_m
       use ARES_Mod_MPI, only: is_local_block
-      use ARES_Config_Types_m, only: obj_riemann, obj_rans, obj_sim_param
+      use ARES_Config_Types_m, only: obj_riemann, obj_rans, obj_sim_param, obj_space_scheme
 
       implicit none
       type(ARES_domain_type), intent(inout) :: domain
@@ -18,27 +18,72 @@ contains
       integer :: b
       real(R8) :: Sc, Sct, Prt
       logical :: Prt_corr
+      integer :: metric
 
       Sc  = obj_sim_param%Sc
       Sct = obj_rans%Sct
       Prt = obj_rans%Prt
       Prt_corr = obj_rans%Prt_correction
+      metric = obj_space_scheme%metric_mode
 
       do b = 1, domain % nb ! Loop over blocks
         if (.not. is_local_block(b)) cycle
 
-        call Fluxes_blk ( domain % blk(b) % P,   &
-                          domain % blk(b) % r,   &
-                          domain % blk(b) % dir, &
-                          domain % blk(b) % dl,  &
-                          domain % blk(b) % yn,  &
-                          domain % blk(b) % ks,  &
-                          domain % blk(b) % m,   &
-                          domain % blk(b) % dim, &
-                          Sc, Sct, Prt, Prt_corr )
+        ! The viscous variables of the cells exist in viscous runs only (Viscous_Variables)
+        if ( allocated ( domain % blk(b) % Visc ) ) then
+          call Fluxes_blk ( domain % blk(b) % P,   &
+                            domain % blk(b) % r,   &
+                            domain % blk(b) % dir, &
+                            domain % blk(b) % dl,  &
+                            domain % blk(b) % yn,  &
+                            domain % blk(b) % ks,  &
+                            domain % blk(b) % m,   &
+                            domain % blk(b) % dim, &
+                            Sc, Sct, Prt, Prt_corr, metric, domain % blk(b) % Visc )
+        else
+          call Fluxes_blk ( domain % blk(b) % P,   &
+                            domain % blk(b) % r,   &
+                            domain % blk(b) % dir, &
+                            domain % blk(b) % dl,  &
+                            domain % blk(b) % yn,  &
+                            domain % blk(b) % ks,  &
+                            domain % blk(b) % m,   &
+                            domain % blk(b) % dim, &
+                            Sc, Sct, Prt, Prt_corr, metric )
+        end if
       end do
 
     end subroutine Fluxes
+
+
+    !> Viscous variables (Visc_State) of every cell of the blocks of this rank and of the first layer of ghost cells
+    !> across the faces of each block (not the edges and corners, which no viscous flux reads), into blk%Visc: once per
+    !> stage, after the ghost cells are filled, so that a viscous flux reads them instead of computing them again for each
+    !> face that the cell touches.
+    subroutine Viscous_Variables ( domain )
+      use ARES_Advanced_Types_m
+      use ARES_Mod_MPI, only: is_local_block
+      use ARES_Lib_Diffusive, only: Visc_State
+      implicit none
+      type(ARES_domain_type), intent(inout) :: domain
+      ! Local
+      integer :: b, i, j, k, n(3)
+
+      do b = 1, domain % nb
+        if (.not. is_local_block(b)) cycle
+        n = domain % blk(b) % dim
+        !$omp do collapse (3)
+        do k = 0, n(3) + 1
+        do j = 0, n(2) + 1
+        do i = 0, n(1) + 1
+          ! the cells and the ghost cells across one face, not across two or three (edges, corners)
+          if ( merge(1,0, i < 1 .or. i > n(1)) + merge(1,0, j < 1 .or. j > n(2)) &
+             + merge(1,0, k < 1 .or. k > n(3)) > 1 ) cycle
+          call Visc_State ( domain % blk(b) % P(:,i,j,k), domain % blk(b) % Visc(:,i,j,k) )
+        enddo; enddo; enddo
+      enddo
+
+    end subroutine Viscous_Variables
 
 
     !> Planar quasi-2D case (one cell in k, ndir = 2, no wedge angle) whose k faces are all symmetry planes
@@ -198,25 +243,34 @@ contains
     end subroutine Zero_V_Residual
 
 
-    subroutine Fluxes_blk ( Prim, Res, Dir, dl, yn, ks, M, n, Sc, Sct, Prt, Prt_corr)
+    subroutine Fluxes_blk ( Prim, Res, Dir, dl, yn, ks, M, n, Sc, Sct, Prt, Prt_corr, metric, Visc )
       use ARES_Global_m
       use ARES_Lib_Convective
       use ARES_Lib_Diffusive
       use ARES_Base_Types_m
+      use ARES_Lib_Stencil_Metrics, only: METRIC_STENCIL
 
       implicit none
       integer, dimension(3), intent(in) :: n
       real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
       real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(out) :: Res
-      type(d_metrics_type), dimension(3), intent(in) :: Dir
+      type(d_metrics_type), dimension(3), intent(in), target :: Dir
       type(ARES_vector_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: dl
       real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: yn
       real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: ks
       type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
       real(R8), intent(in) :: Sc, Sct, Prt
       logical, intent(in)  :: Prt_corr
+      integer, intent(in)  :: metric           ! diffusive-metric: 0 mean, 2 stencil
+      ! Viscous variables of the cells and of the first layer of ghost cells (Viscous_Variables), viscous runs only
+      real(R8), dimension(nprim, 0:n(1)+1, 0:n(2)+1, 0:n(3)+1), intent(in), optional :: Visc
       ! Local
       integer :: i, j, k
+      !> Face metric handed to Diffusive_Flux, Mfp: with diffusive-metric = stencil the metric stored at setup, read
+      !> where it is (no copy); otherwise the mean of the metrics of the two cells, computed into Mf. With a wall ghost
+      !> cell in the stencil, the metrics per group of quantities (absent, a disassociated pointer, elsewhere)
+      real(R8), target :: Mf(3,3)
+      real(R8), pointer, contiguous :: Mfp(:,:), Mg(:,:,:)
 
 
       ! Reset residuals to zero
@@ -239,6 +293,14 @@ contains
                                Res (:,i:i+1,j,k)       )
 
         if (model>0)  then
+          nullify ( Mg )
+          if ( metric == METRIC_STENCIL ) then
+            Mfp => Dir(1) % Mf(i,j,k) % c
+            if ( Dir(1) % ig(i,j,k) > 0 ) Mg => Dir(1) % Mg(:,:,:,Dir(1) % ig(i,j,k))
+          else
+            Mf = 0.5d0 * ( M(i  ,j,k) % c + M(i+1,j,k) % c )
+            Mfp => Mf
+          end if
           call Diffusive_Flux ( Dir(1) % f(i,j,k) % n,  &
                                 Dir(1) % f(i,j,k) % a,  &
                                 yn(i  ,j,k),            &
@@ -247,19 +309,20 @@ contains
                                 ks(i+1,j,k),            &
                                 Prim(:,i  ,j,k),        &
                                 Prim(:,i+1,j,k),        &
-                                Prim(:,i  ,j-1,k),      &
-                                Prim(:,i  ,j+1,k),      &
-                                Prim(:,i+1,j-1,k),      &
-                                Prim(:,i+1,j+1,k),      &
-                                Prim(:,i  ,j,k-1),      &
-                                Prim(:,i  ,j,k+1),      &
-                                Prim(:,i+1,j,k-1),      &
-                                Prim(:,i+1,j,k+1),      &
-                                M(i  ,j,k) % c,         &
-                                M(i+1,j,k) % c,         &
+                                Visc(:,i  ,j,k),        &
+                                Visc(:,i+1,j,k),        &
+                                Visc(:,i  ,j-1,k),      &
+                                Visc(:,i  ,j+1,k),      &
+                                Visc(:,i+1,j-1,k),      &
+                                Visc(:,i+1,j+1,k),      &
+                                Visc(:,i  ,j,k-1),      &
+                                Visc(:,i  ,j,k+1),      &
+                                Visc(:,i+1,j,k-1),      &
+                                Visc(:,i+1,j,k+1),      &
+                                Mfp,                    &
                                 Res (:,i  ,j,k),        &
                                 Res (:,i+1,j,k),        &
-                                1, 2, 3, Sc, Sct, Prt, Prt_corr )
+                                1, 2, 3, Sc, Sct, Prt, Prt_corr, Mg = Mg )
         end if
                         
 
@@ -277,6 +340,14 @@ contains
                                Res (:,i,j:j+1,k)       )
 
         if (model>0) then
+          nullify ( Mg )
+          if ( metric == METRIC_STENCIL ) then
+            Mfp => Dir(2) % Mf(i,j,k) % c
+            if ( Dir(2) % ig(i,j,k) > 0 ) Mg => Dir(2) % Mg(:,:,:,Dir(2) % ig(i,j,k))
+          else
+            Mf = 0.5d0 * ( M(i,j  ,k) % c + M(i,j+1,k) % c )
+            Mfp => Mf
+          end if
           call Diffusive_Flux ( Dir(2) % f(i,j,k) % n,  &
                                 Dir(2) % f(i,j,k) % a,  &
                                 yn(i,j  ,k),            &
@@ -285,19 +356,20 @@ contains
                                 ks(i,j+1,k),            &
                                 Prim(:,i,j  ,k),        &
                                 Prim(:,i,j+1,k),        &
-                                Prim(:,i-1,j  ,k),      &
-                                Prim(:,i+1,j  ,k),      &
-                                Prim(:,i-1,j+1,k),      &
-                                Prim(:,i+1,j+1,k),      &
-                                Prim(:,i,j  ,k-1),      &
-                                Prim(:,i,j  ,k+1),      &
-                                Prim(:,i,j+1,k-1),      &
-                                Prim(:,i,j+1,k+1),      &
-                                M(i,j  ,k) % c,         &
-                                M(i,j+1,k) % c,         &
+                                Visc(:,i,j  ,k),        &
+                                Visc(:,i,j+1,k),        &
+                                Visc(:,i-1,j  ,k),      &
+                                Visc(:,i+1,j  ,k),      &
+                                Visc(:,i-1,j+1,k),      &
+                                Visc(:,i+1,j+1,k),      &
+                                Visc(:,i,j  ,k-1),      &
+                                Visc(:,i,j  ,k+1),      &
+                                Visc(:,i,j+1,k-1),      &
+                                Visc(:,i,j+1,k+1),      &
+                                Mfp,                    &
                                 Res (:,i,j  ,k),        &
                                 Res (:,i,j+1,k),        &
-                                2, 1, 3, Sc, Sct, Prt, Prt_corr )
+                                2, 1, 3, Sc, Sct, Prt, Prt_corr, Mg = Mg )
         end if
 
       enddo; enddo; enddo
@@ -314,6 +386,14 @@ contains
                                Res (:,i,j,k:k+1)       )
 
         if (model>0) then
+          nullify ( Mg )
+          if ( metric == METRIC_STENCIL ) then
+            Mfp => Dir(3) % Mf(i,j,k) % c
+            if ( Dir(3) % ig(i,j,k) > 0 ) Mg => Dir(3) % Mg(:,:,:,Dir(3) % ig(i,j,k))
+          else
+            Mf = 0.5d0 * ( M(i,j,k  ) % c + M(i,j,k+1) % c )
+            Mfp => Mf
+          end if
           call Diffusive_Flux ( Dir(3) % f(i,j,k) % n,  &
                                 Dir(3) % f(i,j,k) % a,  &
                                 yn(i,j,k  ),            &
@@ -322,19 +402,20 @@ contains
                                 ks(i,j,k+1),            &
                                 Prim(:,i,j,k  ),        &
                                 Prim(:,i,j,k+1),        &
-                                Prim(:,i-1,j,k  ),      &
-                                Prim(:,i+1,j,k  ),      &
-                                Prim(:,i-1,j,k+1),      &
-                                Prim(:,i+1,j,k+1),      &
-                                Prim(:,i,j-1,k  ),      &
-                                Prim(:,i,j+1,k  ),      &
-                                Prim(:,i,j-1,k+1),      &
-                                Prim(:,i,j+1,k+1),      &
-                                M(i,j,k  ) % c,         &
-                                M(i,j,k+1) % c,         &
+                                Visc(:,i,j,k  ),        &
+                                Visc(:,i,j,k+1),        &
+                                Visc(:,i-1,j,k  ),      &
+                                Visc(:,i+1,j,k  ),      &
+                                Visc(:,i-1,j,k+1),      &
+                                Visc(:,i+1,j,k+1),      &
+                                Visc(:,i,j-1,k  ),      &
+                                Visc(:,i,j+1,k  ),      &
+                                Visc(:,i,j-1,k+1),      &
+                                Visc(:,i,j+1,k+1),      &
+                                Mfp,                    &
                                 Res (:,i,j,k  ),        &
                                 Res (:,i,j,k+1),        &
-                                3, 1, 2, Sc, Sct, Prt, Prt_corr )
+                                3, 1, 2, Sc, Sct, Prt, Prt_corr, Mg = Mg )
         end if
 
       enddo; enddo; enddo

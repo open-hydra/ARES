@@ -35,7 +35,8 @@ my_case/
 │   ├── phase.txt             ← real-fluid table descriptor
 │   ├── thermo.dat            ← tabulated thermodynamic / transport data
 │   ├── ic.*                  ← initial condition (mesh + flow field)
-│   └── bc.txt                ← face-by-face boundary-condition table
+│   ├── bc.txt                ← face-by-face boundary-condition table
+│   └── decomposition.map     ← block-to-rank assignment, read when decomposition-map names it
 └── OUTPUT/                   ← created at runtime
     ├── field.*               ← solution fields (when sol-overwrite = true)
     ├── field1.*, field2.*    ← solution snapshots (when sol-overwrite = false)
@@ -103,6 +104,26 @@ export OMP_NUM_THREADS=4
 
 !!! warning "Stack size"
     ARES allocates sizeable automatic arrays. Always run `ulimit -s unlimited` (and set `KMP_STACKSIZE` for Intel/OpenMP) before launching, or the solver may crash with a segmentation fault on the first flux evaluation. `ARES.sh` does this for you.
+
+### Block-to-rank assignment
+
+Blocks are the unit of the MPI decomposition: every block runs on one rank. By default ARES assigns them itself: it walks the blocks in the order of the mesh and gives each one to the rank with the fewest cells so far (the lowest such rank on a tie), and prints nothing about it.
+
+ARES can take the rank of every block from a file instead: name it with `decomposition-map` in `[ARES-IO]` (the default, `none`, keeps the assignment above, and ARES then reads no map, even if `INPUT/` holds one). The value is the name of a file in `INPUT/`, without a folder; in multi-phase runs ARES puts the phase prefix of `bc.txt` before it. With a map ARES says so, with the balance of the cells over the ranks:
+
+```text
+  MPI partition: 12 blocks over 4 ranks, balance  94.1% of ideal
+  MPI partition read from INPUT/decomposition.map
+```
+
+The file has the format of the decomposition map that the ATLAS mesh decomposer (MDB) writes, under the name its `map-file` option gives (by default `decomposition.map`, with the phase prefix for each phase of a coupled case). In its `rank` column MDB writes the assignment largest block first, each to the least loaded rank, the one its predicted balance is computed for; ARES without a map walks the blocks in the order of the mesh, so the two can differ. Naming the map of MDB unchanged gives ARES that assignment; to run another one, change that column, or write the file by hand. Lines starting with `#` are comments; then one line per block, blocks 1 to *nb* in order, with 13 integers
+
+```text
+# new  parent   i0   i1    j0   j1    k0   k1      ni   nj   nk        cells  rank
+     1     1     1    14       1    16       1     8        14   16    8         1792     0
+```
+
+of which ARES uses `new` (the block), `ni nj nk` and `cells`, which must be those of the block in the mesh, and `rank`, counted from 0; the other columns must be integers too, but are not used. In a map written by hand for a mesh that was not split, `parent` is the block itself and `i0 i1 j0 j1 k0 k1` its whole range, `1 ni 1 nj 1 nk`. The first `#` line after the block lines ends them: the face origins MDB writes after it are not read. The map must be made for the mesh and for the run: it must list every block of the mesh once, in order, its ranks must lie between 0 and the number of ranks of the run minus 1, and when the mesh has at least as many blocks as the run has ranks the highest rank must be used, otherwise the map was made for another number of ranks. A map that does not fit the mesh or the run, a named file that is not in `INPUT/`, a directory of that name, or a value with a folder stops ARES at setup, on every rank, with a message that names the fault and exit code 1, also in a run on one rank; with `decomposition-map = none` ARES assigns the blocks itself. A rank the map gives no block to stays idle, with a warning; with fewer blocks than ranks some always do, also without a map. The balance printed is that of the cells on each rank: the cells of the mesh divided by the ranks, over the cells of the most loaded rank. The map changes only which rank computes each block; the residuals printed are summed block by block in a fixed order, the same with any assignment.
 
 ---
 

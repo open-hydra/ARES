@@ -10,7 +10,7 @@ module ARES_Lib_BC_Fluxes_Wall_Heat
 
 contains
 
-  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar )
+  subroutine BC_Wall_Heat ( Im, Jm, Km, Fm, Blk, Heat_Flux, Ovar, rec )
     use ARES_Lib_Fluid
     use ARES_Lib_RANS
     use FLINT_Lib_Thermodynamic
@@ -20,11 +20,15 @@ contains
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
     real(R8), intent(in) :: Heat_Flux
-    type(ARES_block_type), intent(inout) :: Blk
+    type(ARES_block_type), intent(inout), target :: Blk
     real(R8), optional, dimension(8), intent(inout) :: Ovar
+    ! the record of the face: its wall stencil (diffusive-metric = stencil)
+    type(ARES_bc_type), optional, intent(in), target :: rec
     ! Local
-    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k, Ig, Jg, Kg
-    real(R8) :: Normal(3), Area, Dist, M(3,3), Prim(nprim), rho, temp, Gradient(nprim,3)
+    integer :: modfm, modfm1, modfm2, modfm3, Dir, Face_i, Face_j, Face_k
+    real(R8) :: Normal(3), Area, Dist, Prim(nprim), rho, temp, Gradient(nprim,3)
+    real(R8), pointer, contiguous :: M(:,:), Mc(:,:)   ! metrics of the face and of the cell, read in place
+    logical  :: wst
     real(R8) :: mil, kl, Stress(3), Flux(nprim), Prim_Wall(nprim), rho_wall, Twall, dl, entalpy, pressure
     real(R8) :: hs, mit, cp, kt ! roughness variables
     real(R8) :: dPrt ! Turbulent Prandtl correction for rough wall
@@ -36,7 +40,16 @@ contains
     Normal = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n
     Area = Blk % dir(Dir) % f(Face_i,Face_j,Face_k) % a
     Dist = 1d-20 ! since the flux is computed at the wall
-    M = Blk % M (Im,Jm,Km) % c
+    Mc => Blk % M (Im,Jm,Km) % c
+    M => Mc
+    ! diffusive-metric = stencil: velocity and turbulence take the metric of the wall face (Wall_Face_Stencils in
+    ! ARES_Lib_Stencil_Metrics), with no difference of their wall values along the wall: the velocity of a no-slip wall
+    ! is uniform along it, while the turbulence values that vary along it (omega of the k-omega models, from the wall
+    ! distance of the cell; nu~ on a rough wall) leave out their derivative along the wall (docs/theory/numerics.md); the
+    ! wall temperature and the wall values of the turbulence variables below are estimated with the metric of the cell
+    wst = .false.
+    if ( present(rec) ) wst = rec % wstencil
+    if ( wst ) M => rec % wM
 
     ! Roughness
     if ( obj_rans%rough ) then 
@@ -67,7 +80,7 @@ contains
     if (model==2) then 
       dl = Blk%yn(Im,Jm,Km)
       call RANS_Set_Wall_Values( mil_wall=mil, rans_wall=Prim_Wall(nt:nprim), rans_cell=Prim(nt:nprim), &
-                                 metric=dot_product( M(Dir,:), normal), dist=dl, ks=hs)
+                                 metric=dot_product( Mc(Dir,:), normal), dist=dl, ks=hs)
       Gradient(nt:nprim,Dir) = ( Prim(nt:nprim)/rho - Prim_Wall(nt:nprim)/rho ) * modfm3
       call Eddy_Viscosity ( mut=mit, rans_variables=Prim_Wall(nt:nprim), mul=mil, rho=rho, vel_gradient=Gradient(nu:nw,:), &
                             walldist=0d0, ks=hs)   ! wall face: y = 0 (dl stays the cell distance for Set_Wall_Values)
@@ -86,7 +99,7 @@ contains
     end if
     kt = mit*cp/(obj_rans%Prt+dPrt)
     ! Heat_Flux is positive into the fluid on every face: the wall is hotter than the cell when it heats the fluid
-    Gradient(nh,Dir) = -Heat_Flux / ( 2d0*(kl+kt)*dot_product( M(Dir,:), normal ) )
+    Gradient(nh,Dir) = -Heat_Flux / ( 2d0*(kl+kt)*dot_product( Mc(Dir,:), normal ) )
 
     ! Wall variables
     Twall = temp - Gradient(nh,Dir)
@@ -111,12 +124,8 @@ contains
                                  rans_gradient=Gradient(nt:nprim,:), &
                                  mul=mil, rho=rho_wall, &
                                  area=area, normal=normal, dist=dist )
-      ! Ghost-cell extrapolation of RANS variables
-      ig = im - guide(fm,1)
-      jg = jm - guide(fm,2)
-      kg = km - guide(fm,3)
-      call RANS_Extrapolate_Wall ( Prim(nt:nprim), Prim_Wall(nt:nprim), &
-                                   rho, rho_wall, Blk % P(nt:nprim,Ig,Jg,Kg) )
+      ! The ghost cells of the wall, turbulence variables included, are those of Fill_Ghost_Cell (Ghost_Wall), from the
+      ! same wall values: one set of ghost cells for the fluxes and the source terms
     endif
 
     ! Residual update
