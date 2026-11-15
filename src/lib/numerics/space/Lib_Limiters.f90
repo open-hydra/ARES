@@ -68,6 +68,11 @@ contains
     real(R8) :: phi
     real(R8) :: result
     
+    ! Slopes of opposite sign (an extremum): no slope, as in the TVD region (phi = 0 for r <= 0)
+    if ( x*y <= 0d0 ) then
+      result = 0d0
+      return
+    end if
     ru = y/(x+1d-30)
     phi = (ru*ru+ru)/(1d0+ru*ru)
     result = phi*x

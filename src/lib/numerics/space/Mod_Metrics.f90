@@ -66,7 +66,7 @@ contains
 
       !$omp parallel
       ! Set wall-distance in connected cells
-      !$omp do schedule (dynamic) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks)
+      !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks)
       do i = 1, domain % nbound
         select case ( domain % bc(i) % type )
           case(101,201) ! block connection
@@ -96,7 +96,7 @@ contains
 
     !$omp parallel private(g)
     ! Create the nodes for gc layers of ghost cell (of the symmetry faces the first layer only: below)
-    !$omp do schedule (dynamic) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
+    !$omp do schedule (dynamic, 64) private(i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
     do i = 1, domain % nbound
       Bm = domain % bc(i) % b
       ! Ghost metrics land in blk(Bm) and bc(i), read only by the rank owning Bm, which alone has the metrics of the
@@ -135,7 +135,7 @@ contains
     ! cells than g are ghost cells of the opposite face: one layer at a time, after every face has written the previous
     ! one (the barrier at the end of each loop), so that no face reads a ghost cell that another one is writing
     do g = 2, gc
-      !$omp do schedule (dynamic) private(i, Bm)
+      !$omp do schedule (dynamic, 64) private(i, Bm)
       do i = 1, domain % nbound
         if ( domain % bc(i) % type /= 300 ) cycle
         Bm = domain % bc(i) % b

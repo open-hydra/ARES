@@ -1,8 +1,14 @@
 module ARES_Lib_BC_Fluxes
-  use iso_fortran_env, only: I4 => int32, R8 => real64
+  use iso_fortran_env, only: I4 => int32, I8 => int64, R8 => real64
 
   implicit none
   public
+
+  !> Evaluations of the state of a heat-flux wall (Wall_State_Heat), or of a wall coupled to the solid (103, 104, by the
+  !> coupling of hydra), whose wall temperature, an estimate (from the heat flux across the half cell, or from the
+  !> balance of the two sides), was brought within the fluid tables: reported at the end of the run with the ghost fills
+  !> (Report_Wall_Ghosts)
+  integer(I8) :: n_wall_heat_table = 0
 
 contains
 
@@ -43,6 +49,63 @@ contains
     end select
 
   end subroutine Face_Index
+
+
+  !> Gas at the face of a wall of prescribed temperature, as BC_Wall_Temperature and Ghost_Wall take it: the pressure of
+  !> the boundary cell (boundary layer), the enthalpy, the density and the laminar viscosity and conductivity at T_wall.
+  subroutine Wall_State_Temperature ( p, T_wall, h_wall, rho_wall, mil, kl )
+    use FLINT_Lib_Thermodynamic, only: ph2vars, pT2h, rho_tab, mi_tab2D, k_tab2D
+    implicit none
+    real(R8), intent(in)  :: p, T_wall
+    real(R8), intent(out) :: h_wall, rho_wall, mil, kl
+
+    h_wall   = pT2h ( p, T_wall )
+    rho_wall = ph2vars ( p, h_wall, rho_tab )
+    mil      = ph2vars ( p, h_wall, mi_tab2D )
+    kl       = ph2vars ( p, h_wall, k_tab2D )
+
+  end subroutine Wall_State_Temperature
+
+
+  !> Gas at the face of a wall of prescribed heat flux, as BC_Wall_Heat and Ghost_Wall take it: the laminar viscosity and
+  !> conductivity at the state (p, h) of the boundary cell; the wall temperature Twall = temp + Heat_Flux / (2 kl Mc(Dir,:).n),
+  !> from the heat flux across the half cell with the laminar conductivity alone, also on a rough wall (exact when
+  !> adiabatic, and the energy flux is Heat_Flux regardless), Mc the metric of the cell; the enthalpy and the density at
+  !> Twall and the pressure of the cell (boundary layer). Twall is an estimate (first order; coarse meshes, coarse
+  !> multigrid levels): when it lies outside the temperatures of the tables at that pressure it is brought within them
+  !> (Table_Bounds, as the ghost cells of Ghost_Wall), and counted; on tables with no temperature common to the two rows
+  !> that bracket p, the wall takes the state of the cell.
+  subroutine Wall_State_Heat ( p, h, Heat_Flux, Mc, normal, Dir, temp, mil, kl, Twall, h_wall, rho_wall )
+    use FLINT_Lib_Thermodynamic,   only: ph2vars, pT2h, rho_tab, T_tab, mi_tab2D, k_tab2D
+    use ARES_Load_ThermoTransport, only: Table_Bounds
+    implicit none
+    real(R8), intent(in)  :: p, h, Heat_Flux, Mc(3,3), normal(3)
+    integer,  intent(in)  :: Dir
+    real(R8), intent(out) :: temp, mil, kl, Twall, h_wall, rho_wall
+    ! Local
+    real(R8) :: pw
+    logical  :: inside, ok
+
+    temp = ph2vars ( p, h, T_tab )
+    mil  = ph2vars ( p, h, mi_tab2D )
+    kl   = ph2vars ( p, h, k_tab2D )
+    ! Heat_Flux is positive into the fluid on every face: the wall is hotter than the cell when it heats the fluid
+    Twall = temp + Heat_Flux / ( 2d0 * kl * dot_product ( Mc(Dir,:), normal ) )
+    pw = p
+    call Table_Bounds ( pw, Twall, inside, ok )
+    if ( .not. inside ) then
+      !$omp atomic
+      n_wall_heat_table = n_wall_heat_table + 1
+    end if
+    if ( ok ) then
+      h_wall = pT2h ( pw, Twall )     ! pw = p within the tables (bit-identical there)
+    else
+      Twall  = temp
+      h_wall = h
+    end if
+    rho_wall = ph2vars ( p, h_wall, rho_tab )
+
+  end subroutine Wall_State_Heat
 
 
   !> The properties of a wall face for the wall output, the same on every face: the stress is the traction of the gas on

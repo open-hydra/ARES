@@ -8,7 +8,6 @@ module ARES_IO_BC
 
   ! BC type counters — populated by Read_BCfile, consumed by Print_BC_Summary
   integer :: nconnect, nwall, nio, nsym, nper, nchimera, ncoupled, ncoupled_ks, next
-  logical :: has_tdep_bc
 
   ! Empty fields of a property line. A null value of list-directed input (two commas with only blanks between) leaves
   ! its variable as it was: undefined for a field without a default value. Read_BCfile sets those fields to EMPTY
@@ -53,6 +52,10 @@ contains
 
       !! Phase 2: Read
       call Read_BCfile ( domain(m) % bc, domain(m) % n_bf, m )
+
+      ! Every record on a cell of its block, next to the face it names, one record per boundary face (before the maps
+      ! of the pairing and of type 200, which index with the cell of each record)
+      if ( index(obj_io_bc%error_message,'ERROR') == 0 ) call Check_BC_Records ( domain(m) )
 
       call Pair_Connections ( domain(m), m )
 
@@ -127,6 +130,18 @@ contains
         do c = 1, ci+cii
           read( unitfile,*,iostat=ios )
         enddo
+      case(200, 300, 400) ! no property line
+      case default
+        ! A type ARES does not have: its property line, if any, would be counted as a record. At the end of the file
+        ! (ios /= 0) ti is the type of the last record, already counted
+        if ( ios == 0 ) then
+          obj_io_bc%error_message = '[ERROR] Boundary file: record '//trim(str(.true.,n_proof+2))//' has type '// &
+            trim(str(.true.,ti))//', which is not a boundary type of ARES (101 102 103 104 200 201 300 301 302 400 '// &
+            '404 405 406)'
+          close(unitfile)
+          ios = 1
+          return
+        end if
       end select
       n_proof = n_proof + 1
     enddo
@@ -148,7 +163,8 @@ contains
     use ARES_Advanced_Types_m
     use ARES_Config_Types_m, only: obj_io, obj_io_bc, obj_rans
     use ARES_Global_m
-    use ARES_Mod_MPI,        only: mpi_abort_all
+    use ARES_Mod_MPI,        only: mpi_abort_all, mpi_stop_all
+    use ARES_Load_ThermoTransport, only: Table_Bounds, Table_Temperatures
     use IR_Precision
     implicit none
     type(ARES_bc_type), dimension(:), intent(inout) :: bc
@@ -160,6 +176,8 @@ contains
     integer :: nline                         ! lines of the file read so far (Next_Line)
     integer :: nzero_chim
     real(R8) :: vf1, vf2
+    real(R8) :: Tlo, Thi, plo, phi, pq, Tq_lo, Tq_hi   ! ranges of the fluid tables (Need_In_Tables)
+    logical  :: inside, ok
     character(len=256) :: msg
     character(len=32) :: p0file
     character(len=32) :: alpha_tok, beta_tok
@@ -194,12 +212,15 @@ contains
       ncoupled = 0
       ncoupled_ks = 0
       next = 0
-      has_tdep_bc = .false.
     endif
 
     ! Counter for number of cells per face in each block
     n_bf = 0
     nzero_chim = 0
+
+    ! The temperatures and the pressures of the fluid tables (loaded before the boundary file), against which the
+    ! values of the property lines are checked
+    call Table_Temperatures ( Tlo, Thi, plo, phi )
 
     ! Read file
     nline = 0
@@ -211,6 +232,13 @@ contains
       call Next_Line ( unitfile, pline, ios, nline )
       if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%b, bc(i)%i, bc(i)%j, bc(i)%k, bc(i)%f, bc(i)%type
       if ( ios /= 0 ) call BC_Line_Error ( i, -1, nline, pline )
+
+      ! Block and face within the mesh, before they index anything (every rank reads every record: collective stop)
+      if ( bc(i)%b < 1 .or. bc(i)%b > size(n_bf,1) .or. bc(i)%f < 1 .or. bc(i)%f > 6 ) then
+        write(msg,'(3A,I0,A,I0,A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', i, &
+          '): block ', bc(i)%b, ' or face ', bc(i)%f, ' out of range (blocks 1 to ', size(n_bf,1), ', faces 1 to 6)'
+        call mpi_stop_all ( trim(msg) )
+      end if
 
       ! n_bf update
       n_bf( bc(i) % b, bc(i) % f ) = n_bf( bc(i) % b, bc(i) % f ) + 1
@@ -352,6 +380,7 @@ contains
           if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%Tw, bc(i)%k_rough, bc(i)%eps_wall ], &
                                              'T_wall k_rough eps_wall' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%Tw ], 'T_wall' )
+          if ( ios == 0 ) call Need_In_Tables ( i, bc(i)%type, nline, bc(i)%Tw, 'T_wall', Tlo, Thi, 'temperatures' )
           
         ! ─────────────────────────────────────────────────────────────────────
         ! Extrapolation
@@ -376,6 +405,7 @@ contains
                                             alpha_tok, beta_tok )
           if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
           if ( ios == 0 ) call Need_Inward ( i, bc(i)%type, nline, bc(i)%f, bc(i)%mdot, 'g' )
+          if ( ios == 0 ) call Need_In_Tables ( i, bc(i)%type, nline, bc(i)%T0, 'T', Tlo, Thi, 'temperatures' )
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Supersonic inlet, M + T (static) + p (static)
@@ -391,6 +421,17 @@ contains
           if ( ios == 0 ) call Need_Inlet ( i, nline, bc(i), [ bc(i)%mach, bc(i)%T0, bc(i)%pamb ], 'mach T p', &
                                             alpha_tok, beta_tok )
           if ( ios == 0 ) call Need_Direction ( i, bc(i)%type, nline, alpha_tok, beta_tok, bc(i)%alpha, bc(i)%beta )
+          if ( ios == 0 ) then
+            ! The pressure within the tables, then the temperature within those of the tables at that pressure
+            ! (Table_Bounds brings a temperature far below and far above to the two ends of that range)
+            call Need_In_Tables ( i, bc(i)%type, nline, bc(i)%pamb, 'p', plo, phi, 'pressures' )
+            pq = bc(i)%pamb ; Tq_lo = -huge(1.0_R8)
+            call Table_Bounds ( pq, Tq_lo, inside, ok )
+            pq = bc(i)%pamb ; Tq_hi = huge(1.0_R8)
+            call Table_Bounds ( pq, Tq_hi, inside, ok )
+            call Need_In_Tables ( i, bc(i)%type, nline, bc(i)%T0, 'T', Tq_lo, Tq_hi, &
+                                  'temperatures (at the p of the line)' )
+          end if
 
         ! ─────────────────────────────────────────────────────────────────────
         ! Outlet, prescribed back pressure (if zero, extrapolation)
@@ -402,7 +443,18 @@ contains
           if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%pamb, bc(i)%rel_fac
           if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%pamb, bc(i)%rel_fac ], 'p_back rel_fac' )
           if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%pamb, bc(i)%rel_fac ], 'p_back rel_fac' )
-          
+          ! p_back = 0: the pressure is extrapolated from the cell
+          if ( ios == 0 .and. bc(i)%pamb /= 0d0 ) &
+            call Need_In_Tables ( i, bc(i)%type, nline, bc(i)%pamb, 'p_back', plo, phi, 'pressures' )
+
+        ! ─────────────────────────────────────────────────────────────────────
+        ! A type ARES does not have: without a property line it would run with no flux on the face (Check_BC stops the
+        ! types with one first, on the count of the records)
+        case default
+          write(msg,'(3A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', i, '): type ', &
+            bc(i)%type, ' is not a boundary type of ARES (101 102 103 104 200 201 300 301 302 400 404 405 406)'
+          call mpi_stop_all ( trim(msg) )
+
       end select
 
       ! A property line that cannot be read as the values of its type stops the run
@@ -440,7 +492,6 @@ contains
     if (nchimera > 0) write(*,'(A,T35,I0)') '   Chimera', nchimera
     if (ncoupled > 0) write(*,'(A,T35,I0)') '   Coupled wall', ncoupled
     if (ncoupled_ks > 0) write(*,'(A,T35,I0)') '   Coupled wall with roughness', ncoupled_ks
-    if (has_tdep_bc) write(*,'(A)') '   Time-dependent BC detected'
     ! Coupled walls (103, 104) without the trailing roughness in bc.txt enter the
     ! nearest-wall roughness map with ks = 0, i.e. as smooth walls.
     if (ncoupled_ks < ncoupled .and. obj_rans%rough) &
@@ -710,6 +761,110 @@ contains
     end do
 
   end subroutine Check_Rotational_Faces
+
+  !> Checks every record of the boundary file against the mesh: its cell lies inside its block and next to the face it
+  !> names (face 1: i = 1, face 2: i = dim(1); 3 and 4: j; 5 and 6: k), and no two records name the same cell and face.
+  !> Check_BC has found as many records as boundary faces, so a face named twice leaves another without a record, which
+  !> would run with no flux and with ghost cells that nothing fills. Every rank reads every record: the first record
+  !> that fails stops the run on every rank (mpi_stop_all), with its number and its cell.
+  subroutine Check_BC_Records ( domain )
+    use ARES_Advanced_Types_m, only: ARES_domain_type
+    use ARES_Mod_MPI,          only: mpi_stop_all
+    implicit none
+    type(ARES_domain_type), intent(in) :: domain
+    ! Local
+    type :: face_mask_type
+      logical, allocatable :: m(:,:)
+    end type face_mask_type
+    type(face_mask_type), allocatable :: seen(:,:)
+    integer :: n, b, f, d, c(3), dims(3), t(2)
+    character(len=160) :: why
+
+    allocate ( seen(domain % nb, 6) )
+    do b = 1, domain % nb
+      dims = domain % blk(b) % dim(1:3)
+      do f = 1, 6
+        t = Along ( f, dims )
+        allocate ( seen(b,f) % m(t(1), t(2)) )
+        seen(b,f) % m = .false.
+      end do
+    end do
+
+    do n = 1, domain % nbound
+      b = domain % bc(n) % b          ! within the mesh (Read_BCfile)
+      f = domain % bc(n) % f
+      c = [ domain % bc(n) % i, domain % bc(n) % j, domain % bc(n) % k ]
+      dims = domain % blk(b) % dim(1:3)
+      if ( any ( c < 1 ) .or. any ( c > dims ) ) then
+        write(why,'(A,3(I0,A))') 'the cell is outside the block, of ', dims(1), ' x ', dims(2), ' x ', dims(3), ' cells'
+        call Fail ( n, why )
+      end if
+      d = ( f + 1 ) / 2
+      if ( c(d) /= merge ( 1, dims(d), mod(f, 2) == 1 ) ) &
+        call Fail ( n, 'the cell is not next to the face it names (faces 1, 3, 5: index 1; faces 2, 4, 6: the last '// &
+                       'cell of the block in that direction)' )
+      t = Along ( f, c )
+      if ( seen(b,f) % m(t(1), t(2)) ) &
+        call Fail ( n, 'an earlier record names the same cell and face: each boundary face has one record' )
+      seen(b,f) % m(t(1), t(2)) = .true.
+    end do
+
+    contains
+
+      !> The two indices of a cell (or the two dimensions of a block) along the face f
+      pure function Along ( f, c ) result ( t )
+        implicit none
+        integer, intent(in) :: f, c(3)
+        integer :: t(2)
+
+        select case ( f )
+          case (1:2)
+            t = [ c(2), c(3) ]
+          case (3:4)
+            t = [ c(1), c(3) ]
+          case default
+            t = [ c(1), c(2) ]
+        end select
+
+      end function Along
+
+      subroutine Fail ( n, why )
+        implicit none
+        integer, intent(in)          :: n
+        character(len=*), intent(in) :: why
+        character(len=400) :: msg
+
+        write(msg,'(3A,I0,A,I0,A,I0,A,3(1X,I0),A,I0,2A)') '[ERROR] ', trim(bc_name), ', record ', n, ' (block ', &
+          domain % bc(n) % b, ', face ', domain % bc(n) % f, ', cell i, j, k =', domain % bc(n) % i, domain % bc(n) % j, &
+          domain % bc(n) % k, ', type ', domain % bc(n) % type, '): ', trim(why)
+        call mpi_stop_all ( trim(msg) )
+
+      end subroutine Fail
+
+  end subroutine Check_BC_Records
+
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_In_Tables: stop the run when the value v (named name) of record n, type btype, line nline of the file lies
+  !   outside the range lo to hi of the fluid tables (what: the quantity of the range, 'temperatures' or 'pressures'):
+  !   the state of the boundary would be read outside their arrays. v is finite (Need_Finite).
+  subroutine Need_In_Tables ( n, btype, nline, v, name, lo, hi, what )
+    use ARES_Mod_MPI, only: mpi_stop_all
+    implicit none
+    integer, intent(in)          :: n, btype, nline
+    real(R8), intent(in)         :: v, lo, hi
+    character(len=*), intent(in) :: name, what
+    ! Local
+    character(len=320) :: msg
+
+    if ( v >= lo .and. v <= hi ) return
+    write(msg,'(3A,I0,A,I0,A,I0,3A,ES12.5,3A,ES12.5,A,ES12.5,A)') '[ERROR] ', trim(bc_name), ' line ', nline, &
+      ' (record ', n, ', type ', btype, '): ', name, ' = ', v, ' is outside the ', what, ' of the fluid tables (', &
+      lo, ' to ', hi, ')'
+    call mpi_stop_all ( trim(msg) )
+
+  end subroutine Need_In_Tables
+
 
   !─────────────────────────────────────────────────────────────────────────────
   ! Next_Line: the next line of the boundary file that is not blank (Read_Line), as a list-directed read skips

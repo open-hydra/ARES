@@ -8,28 +8,32 @@ module ARES_Lib_Multigrid
 
 contains
 
+  !> Every block halves on every level: in each direction a multiple of 2^(levels-1) cells, with at least two cells on
+  !> the coarsest level, which the ghost cells of the neighbours read (gc = 2), and which keep the mesh type (ndir,
+  !> delthe of Check_Mesh_Type) the same on every level; one cell in k is a 2-D mesh. Every rank holds the dimensions
+  !> of every block and reaches the same decision (collective stop).
   subroutine Check_Multigrid ( domain )
     use ARES_Advanced_Types_m
     use ARES_Config_Types_m, only: obj_multigrid
-    use ir_precision, only: str
+    use ARES_Mod_MPI, only: mpi_is_root, mpi_stop_all
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
     ! Local
-    integer :: b, d, rap, check
+    integer :: b, d, rap, n
+    character(len=256) :: msg
 
     rap = 2**(obj_multigrid%MGL-1)
     do b = 1, domain % nb
-      check = 0
       do d = 1, 3
-        if ( Mod ( domain % Blk(b) % Dim(d), rap ) == 0 ) check = check + 1
-        if (d == 3) then
-          if ( domain % Blk(b) % Dim(d) == 1 ) check = check + 1
-        endif
+        n = domain % Blk(b) % Dim(d)
+        if ( d == 3 .and. n == 1 ) cycle          ! a 2-D mesh
+        if ( mod ( n, rap ) /= 0 .or. n / rap < 2 ) then
+          write(msg,'(A,I0,A,I0,A,I0,A,I0,A,I0,A)') '[ERROR] Multigrid: block ', b, ' has ', n, ' cells in direction ', d, &
+            ': levels = ', obj_multigrid%MGL, ' needs a multiple of ', rap, ' with at least two cells on the coarsest level'
+          if (mpi_is_root) write(*,'(1X,A)') trim(msg)
+          call mpi_stop_all ( 'multigrid levels and mesh (see above)' )
+        end if
       enddo
-      if ( check < 3 ) then
-        write(*,'(A90)') ' [ERROR] in Check_Multigrid, block: '//trim(str(.true.,b))
-        stop 1
-      endif
     enddo
 
   end subroutine Check_Multigrid
@@ -45,6 +49,7 @@ contains
     real(R8), intent(in),  dimension(1-gc:cDim(1)+gc,1-gc:cDim(2)+gc,1-gc:cDim(3)+gc) :: cVol
     ! Local
     integer  :: i, j, k, i2, j2, k2, i2d, j2d, k2d
+    real(R8) :: vsum
 
     !$omp do collapse (2)
     do k = 1, cDim(3)
@@ -58,11 +63,13 @@ contains
       j2d = j2-1
       k2d = k2-1
 
+      ! Mean weighted with the fine volumes, divided by their sum (the coarse volume differs from it on curved lines)
       if ( fDim(3) == 1 ) then ! 2D
         cPrim(:,i,j,k) = fPrim(:,i2d,j2d,1) * fVol(i2d,j2d,1)  &
                         + fPrim(:,i2, j2d,1) * fVol(i2, j2d,1)  &
                         + fPrim(:,i2d,j2, 1) * fVol(i2d,j2, 1)  &
                         + fPrim(:,i2, j2, 1) * fVol(i2, j2, 1)
+        vsum = fVol(i2d,j2d,1) + fVol(i2,j2d,1) + fVol(i2d,j2,1) + fVol(i2,j2,1)
       else ! 3D
         cPrim(:,i,j,k) = fPrim(:,i2d,j2d,k2d) * fVol(i2d,j2d,k2d)  &
                         + fPrim(:,i2, j2d,k2d) * fVol(i2, j2d,k2d)  &
@@ -72,9 +79,11 @@ contains
                         + fPrim(:,i2, j2d,k2 ) * fVol(i2, j2d,k2 )  &
                         + fPrim(:,i2d,j2, k2 ) * fVol(i2d,j2, k2 )  &
                         + fPrim(:,i2, j2, k2 ) * fVol(i2, j2, k2 )
+        vsum = fVol(i2d,j2d,k2d) + fVol(i2,j2d,k2d) + fVol(i2d,j2,k2d) + fVol(i2,j2,k2d) &
+             + fVol(i2d,j2d,k2 ) + fVol(i2,j2d,k2 ) + fVol(i2d,j2,k2 ) + fVol(i2,j2,k2 )
       end if ! 2D
 
-      cPrim(:,i,j,k) = cPrim(:,i,j,k) / cVol(i,j,k)
+      cPrim(:,i,j,k) = cPrim(:,i,j,k) / vsum
 
     enddo; enddo; enddo
 

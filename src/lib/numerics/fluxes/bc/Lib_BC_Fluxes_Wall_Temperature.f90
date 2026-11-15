@@ -3,7 +3,7 @@ module ARES_Lib_BC_Fluxes_Wall_Temperature
   use ARES_Advanced_Types_m
   use ARES_Global_m
   use ARES_Parameters_m
-  use ARES_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm, Compute_Wall_Properties
+  use ARES_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm, Compute_Wall_Properties, Wall_State_Temperature
 
   implicit none
   public
@@ -45,7 +45,7 @@ contains
     M => Mc
     ! diffusive-metric = stencil: the metric of the wall face, with the differences of the wall temperature along the
     ! wall below (Wall_Face_Stencils in ARES_Lib_Stencil_Metrics); otherwise the metric of the cell and no tangential
-    ! difference. The wall values of the turbulence variables take the metric of the cell
+    ! difference. The wall values of the turbulence variables take the wall distance of the cell
     wst = .false.
     if ( present(rec) ) wst = rec % wstencil
     if ( wst ) M => rec % wM
@@ -65,17 +65,14 @@ contains
     ! Initialization
     Gradient = 0d0
 
-    ! Boundary layer: p(wall) = p(cell). Also, non catalytic wall, so R(wall) = R(cell) and ci(wall) = ci(cell), but not roi
+    ! Boundary layer: p(wall) = p(cell). Also, non catalytic wall, so R(wall) = R(cell) and ci(wall) = ci(cell), but not roi.
+    ! Laminar viscosity/conductivity at interface computed at Twall. The same wall state as the ghost cells of the wall
+    ! (Ghost_Wall in ARES_Lib_Ghost)
     pressure  = Prim(np) ! wall pressure = cell pressure
-    entalpy   = pT2h(pressure, T_wall ) ! Wall entalpy
-    rho_wall  = ph2vars(pressure, entalpy, rho_tab )   ! Wall density
+    call Wall_State_Temperature ( pressure, T_wall, entalpy, rho_wall, mil, kl )
 
     Prim_Wall = Prim        ! -------------------------------- ! 
     Prim_Wall(nh) = entalpy ! -------------------------------- !     
-
-    ! Laminar viscosity/conductivity at interface computed at Twall
-    mil = ph2vars( pressure, entalpy, mi_tab2D )
-    kl  = ph2vars( pressure, entalpy, k_tab2D  )
 
     ! Difference in Across-face direction: symmetry; tangential direction: null
     Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3                  ! Velocity
@@ -90,12 +87,15 @@ contains
     end if
 
     if (model==2)  then
+      ! Wall values from the cell values per unit mass at the wall density (rho_wall nu~_w of SA-rough: its Robin
+      ! condition across the wall distance of the cell)
       dl = blk % yn(im,jm,km)
-      call RANS_Set_Wall_Values( mil_wall=mil, rans_wall=Prim_Wall(nt:nprim), rans_cell=Prim(nt:nprim), &
+      call RANS_Set_Wall_Values( mil_wall=mil, rans_wall=Prim_Wall(nt:nprim), rans_cell=Prim(nt:nprim) * rho_wall / rho, &
                                  metric=dot_product( Mc(Dir,:), normal ), dist=dl, ks=hs )
       Gradient(nt:nprim,Dir) = ( Prim(nt:nprim)/rho - Prim_Wall(nt:nprim)/rho_wall ) * modfm3 
+      ! The velocity gradient in physical space (the differences above are in index space, turned below)
       call Eddy_Viscosity ( mut=mit, rans_variables=Prim_Wall(nt:nprim), &
-                            mul=mil, rho=rho_wall, vel_gradient=Gradient(nu:nw,:), &
+                            mul=mil, rho=rho_wall, vel_gradient=matmul ( Gradient(nu:nw,:), M ), &
                             walldist=0d0, ks=hs)   ! wall face: y = 0 (dl stays the cell distance for Set_Wall_Values)
     else 
       mit = 0d0

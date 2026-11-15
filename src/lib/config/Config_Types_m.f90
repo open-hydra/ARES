@@ -192,7 +192,6 @@ module ARES_Config_Types_m
     character(len=llen) :: description          ! The solver as input.ini gives it (riemann-solver)
     character(len=llen) :: name = ''            ! Its name in the set-up summary
     ! USER-DEFINED INPUTS
-    real(R8) :: Minf
     ! Useful variables
     logical  :: SD
   end type riemann_t
@@ -344,21 +343,22 @@ module ARES_Config_Types_m
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  type(simulation_parameters_t), public :: obj_sim_param
-  type(io_t), public                    :: obj_io
-  type(io_probes_t), allocatable, public:: obj_io_probes(:)
-  type(io_bc_t), public                 :: obj_io_bc
-  type(time_scheme_t), public           :: obj_time_scheme
-  type(irs_t), public                   :: obj_irs
-  type(space_scheme_t), public          :: obj_space_scheme
-  type(riemann_t), public               :: obj_riemann
-  type(prec_t),public                   :: obj_prec
-  type(multigrid_t), public             :: obj_multigrid
-  type(rans_t), public                  :: obj_rans
-  type(rot_t),  public                  :: obj_rot
-  type(basic_t), public                 :: obj_thermo
-  type(basic_t), public                 :: obj_transport
-  type(basic_t), public                 :: obj_thermoinversion
+  ! TARGET: the registry of input.ini keeps pointers to their components (ARES_Input_Registry, reg%add)
+  type(simulation_parameters_t), public, target :: obj_sim_param
+  type(io_t), public, target :: obj_io
+  type(io_probes_t), allocatable, public, target :: obj_io_probes(:)
+  type(io_bc_t), public, target :: obj_io_bc
+  type(time_scheme_t), public, target :: obj_time_scheme
+  type(irs_t), public, target :: obj_irs
+  type(space_scheme_t), public, target :: obj_space_scheme
+  type(riemann_t), public, target :: obj_riemann
+  type(prec_t), public, target :: obj_prec
+  type(multigrid_t), public, target :: obj_multigrid
+  type(rans_t), public, target :: obj_rans
+  type(rot_t), public, target :: obj_rot
+  type(basic_t), public, target :: obj_thermo
+  type(basic_t), public, target :: obj_transport
+  type(basic_t), public, target :: obj_thermoinversion
   !! ------------------------------------------------------
   !! ------------------------------------------------------
 

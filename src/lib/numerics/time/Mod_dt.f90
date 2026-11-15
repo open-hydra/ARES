@@ -24,7 +24,7 @@ contains
     integer, intent(in)  :: rampa_iter
     ! Local
     integer  :: i, j, k, b
-    real(R8) :: dtcell, dtglobal, dtglobal_mpi, dstiff, ks
+    real(R8) :: dtcell, dtglobal, dtglobal_mpi, dstiff, ks, yw
     real(R8) :: rc, er(3), cen(3)
     logical  :: explicit_sources, rough, wedge
 
@@ -48,19 +48,25 @@ contains
     do b = 1, domain % nb ! loop over blocks
       if (.not. is_local_block(b)) cycle
       !$omp parallel
-      !$omp do collapse(3) private ( dtcell, dstiff, ks, rc, er, cen ), reduction ( min : dtglobal )
+      !$omp do collapse(3) private ( dtcell, dstiff, ks, yw, rc, er, cen ), reduction ( min : dtglobal )
       do k = 1, domain % blk(b) % dim(3)
       do j = 1, domain % blk(b) % dim(2)
       do i = 1, domain % blk(b) % dim(1)
 
+        ! Roughness and distance of the nearest wall for the eddy viscosity of the step (with -rough, as in the sources:
+        ! the roughness term of SA raises it next to the wall; the k-omega models do not read them at zero strain)
+        ks = 0d0
+        yw = 1d-6
+        if ( rough ) then
+          ks = domain%blk(b)%ks(i,j,k)
+          yw = domain%blk(b)%yn(i,j,k)
+        end if
+
         dstiff = 0d0
-        if ( explicit_sources ) then
-          ks = 0d0
-          if ( rough ) ks = domain%blk(b)%ks(i,j,k)
+        if ( explicit_sources ) &
           dstiff = RANS_Stiffness_Bound ( domain%blk(b)%P(nt:nt+nRANS-1,i,j,k), &
                                           ph2vars( domain%blk(b)%P(np,i,j,k), domain%blk(b)%P(nh,i,j,k), rho_tab ), &
                                           domain%blk(b)%yn(i,j,k), ks )
-        end if
 
         ! Wedge: distance of the cell centre (mean of the nodes) from the x axis and radial unit vector
         rc = 0d0
@@ -82,6 +88,7 @@ contains
                        met = domain%blk(b)%m(i,j,k)%c, &
                        rc = rc, er = er, &
                        stiff = dstiff, &
+                       yw = yw, hs = ks, &
                        dtmin = dtcell, &
                        cfl = cfl, &
                        vnn = vnn )
@@ -144,7 +151,7 @@ contains
       ! 1/dt += d, so that dt d <= 1. A forward-Euler stage then keeps nu~, k and omega positive, and so do Heun and
       ! RK3, convex combinations of forward-Euler stages (Hundsdorfer 2000, sec. 6.2, theorem 6.4 and the explicit
       ! trapezoidal rule; C.-W. Shu, S. Osher, J. Comput. Phys. 77, 1988).
-      subroutine compute ( pressure, vel, entalpy, rans_, met, rc, er, stiff, dtmin, cfl, vnn )
+      subroutine compute ( pressure, vel, entalpy, rans_, met, rc, er, stiff, yw, hs, dtmin, cfl, vnn )
         use ARES_Global_m
         use FLINT_Lib_Thermodynamic
         use ARES_Lib_Preconditioning
@@ -155,6 +162,7 @@ contains
         real(R8), intent(in)  :: met(3,3), cfl, vnn
         real(R8), intent(in)  :: rc, er(3)  ! wedge: distance of the cell centre from the x axis (else 0), radial direction
         real(R8), intent(in)  :: stiff    ! bound of the stiffness of the explicit turbulence sources, 0 without [1/s]
+        real(R8), intent(in)  :: yw, hs   ! wall distance and roughness for the eddy viscosity (-rough; else 1e-6 and 0)
         real(R8), intent(out) :: dtmin
         ! Local
         real(R8), parameter :: sigma_SA = 2d0/3d0   ! diffusion constant of Spalart-Allmaras (Lib_Spalart.f90)
@@ -169,8 +177,8 @@ contains
         rho   = ph2vars( pressure, entalpy, rho_tab   )
         if ( obj_prec%enabled ) then
           U_r = comp_Ur ( vel=Norm2( Vel ), sound=Sound )
+          ! The true speed of sound, as the flux (riemann_HLLCprec): Uref, when given, only sets U_r
           Beta = 1.d0/Sound**2
-          if ( Uref > 0.d0 ) Beta = 1.d0/Uref**2 ! in case of reference sound velocity
           Alpha = 5.d-1 * ( 1.d0 - Beta * U_r**2 )
         endif
 
@@ -232,10 +240,11 @@ contains
         mie = 0.d0
         if (model==2) then
           ! Note: approximate mit for 2 equation models.
-          ! velocity gradient assumed 0 and small distance from wall
+          ! velocity gradient assumed 0; the distance and the roughness of the nearest wall with -rough (SA adds the
+          ! roughness term), else a small distance from the wall
           dummy = 0d0
           call Eddy_Viscosity ( mut=mie, rans_variables=rans_, mul=mil, rho=rho, &
-                                vel_gradient=dummy, walldist=1d-6, ks=0d0 )
+                                vel_gradient=dummy, walldist=yw, ks=hs )
         endif
 
         Dmax = max ( 4d0/3d0 * ( mil + mie ) / rho, ( kl + mie * cp / obj_rans%Prt ) / ( rho * cv ) )

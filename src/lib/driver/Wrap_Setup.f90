@@ -29,7 +29,8 @@ contains
     use ARES_Mod_GhostExchange,    only: build_ghost_schedule, build_local_bc_index, &
                                          allocate_exchange_schedules
     implicit none
-    type(ARES_simulation_type), intent(inout) :: simulation
+    ! TARGET: the probes keep pointers to the state of their cells (Setup_Probes)
+    type(ARES_simulation_type), intent(inout), target :: simulation
     ! Local
     integer :: m, ios
     logical :: resume
@@ -126,10 +127,27 @@ contains
       call build_local_bc_index(simulation%domain(m))
     end do
 
-    ! Read grid file and setup metrics in each grid level.
-    do m = 1, obj_multigrid%MGL
+    ! Read grid file and setup metrics in each grid level. The finest level last: the mesh type it finds (ndir,
+    ! delthe of Check_Mesh_Type, globals) is the one the run uses on every level
+    do m = obj_multigrid%MGL, 1, -1
       call Setup_Metrics ( simulation%domain(m) )
     end do
+
+    ! HLLC Rotated builds its second direction in the x-y plane: it holds on 2-D meshes (plane or wedge) only.
+    ! Every rank has the same ndir
+    if ( ndir == 3 .and. trim(obj_riemann%description) == 'HLLC Rotated' ) then
+      if (mpi_is_root) write(*,'(A)') ' [ERROR] riemann-solver = HLLC Rotated is for 2-D meshes (plane or wedge): '// &
+                                      'the mesh is 3-D'
+      call mpi_stop_all ( 'riemann-solver = HLLC Rotated on a 3-D mesh (see above)' )
+    end if
+
+    ! SSG/LRR on a 3-D sector closed by type 200: the ghost cells and the fluxes of those faces turn the velocity by the
+    ! sector angle but copy the Reynolds stresses unturned. Every rank holds the records of every face
+    if ( obj_rans%RSM .and. ndir == 3 .and. Sector_Closed_By_200 ( simulation%domain(1) ) ) then
+      if (mpi_is_root) write(*,'(A)') ' [ERROR] turbulence = SSGLRR on a 3-D sector closed by type 200 faces: '// &
+                                      'the Reynolds stresses are not turned across them'
+      call mpi_stop_all ( 'SSGLRR with rotational periodicity (type 200) of a 3-D sector (see above)' )
+    end if
 
     ! Quasi-2D case with symmetry k faces: w = 0 and the z momentum is not integrated (needs ndir, the BC types
     ! and the initial field; before the ghost cells and the coarse multigrid levels are filled)
@@ -223,6 +241,9 @@ contains
           simulation%domain(1)%iter    = obj_io%restart%iteration
           obj_sim_param%time_from_call = obj_io%restart%last_output_time
           obj_io%output_number         = obj_io%restart%output_number
+          ! A run with numbered outputs killed before its end leaves a numbered solution newer than the field<ext> the
+          ! restart reads (written at the end of a run only): say so, the file read stays the same
+          if (mpi_is_root) call Warn_Newer_Solution ()
           ! The unit of res-threshold, when the solution holds it: the first iteration of the restart keeps it
           obj_sim_param%res_reference  = obj_io%restart%res_reference
           obj_sim_param%res_restored   = obj_io%restart%res_found
@@ -248,6 +269,8 @@ contains
           call Restart_Probes ( simulation%domain(1)%time, &
                                 resume = .not. ( obj_io%restart%steady .and. obj_time_scheme%time_accurate ) )
         endif
+        ! Turbulence variables of the initial condition at the floors every stage applies: the sources divide by k and omega
+        if ( model == 2 ) call Floor_IC_Turbulence ( simulation%domain(1) )
         call Fill_Ghost_Cell ( simulation%domain(1) )
 
         ! Interpolate initial solution on coarser domains
@@ -312,8 +335,12 @@ contains
 
 
     subroutine Check_Tables ( has_error )
+      use FLINT_Lib_Thermodynamic,   only: pmin, deltap, hmin, deltah, rho_tab
+      use ARES_Load_ThermoTransport, only: Table_Temperatures
       implicit none
       logical, intent(out) :: has_error
+      ! Local
+      real(R8) :: Tlo, Thi, plo, phi
 
       has_error = .false.
 
@@ -347,6 +374,14 @@ contains
       else
         write(*,'(A,T35,A)') '   Thermo inversion', 'OK'
       endif
+
+      ! The range of the tables: a state of the run outside it stops the run (Outside_Tables)
+      if ( .not. has_error .and. allocated(rho_tab) ) then
+        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table pressure [Pa]', pmin, ' to ', pmin + ubound(rho_tab,1) * deltap
+        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table enthalpy [J/kg]', hmin, ' to ', hmin + ubound(rho_tab,2) * deltah
+        call Table_Temperatures ( Tlo, Thi, plo, phi )
+        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table temperature [K]', Tlo, ' to ', Thi
+      end if
 
     end subroutine Check_Tables
 
@@ -392,13 +427,17 @@ contains
     !> of the value. Not_Finite reads the bits of each value, an operation on integers that raises no floating-point
     !> exception: a build that traps the invalid operations (the DEBUG build; a comparison with a NaN is one) stopped
     !> with SIGFPE at the first such operation on the value, at the end of the set-up, and -ffast-math cannot fold the
-    !> test away. Each rank checks the values it holds: the nodes of every block, the cells of the blocks whose state it
-    !> holds. The ranks take the decision together (the largest of a flag), the first rank that found a value writes it,
-    !> and every rank stops with mpi_stop_all: exit code 1, in every build.
+    !> test away. A state of a cell whose pressure or enthalpy lies outside the fluid tables stops the run too: the reads
+    !> of the tables would leave their arrays (Outside_Tables; for a new run's initial condition strict, also within the
+    !> cell below their first node, where ph2vars would extrapolate; a restart solution, written by a run that went on
+    !> there, is held to the test of the run). Each rank checks the values it holds: the nodes of every block, the cells of the blocks
+    !> whose state it holds. The ranks take the decision together (the largest of a flag), the first rank that found a
+    !> value writes it, and every rank stops with mpi_stop_all: exit code 1, in every build.
     subroutine Check_IC_Values ( domain, IOfield )
       use Lib_ORION_data,    only: ORION_data
       use ARES_Finite_m,     only: Not_Finite
       use ARES_Mod_MPI,      only: mpi_rank_, mpi_allreduce_max_r8, mpi_allreduce_min_r8
+      use ARES_Load_ThermoTransport, only: Outside_Tables
       implicit none
       type(ARES_domain_type), intent(in) :: domain
       type(ORION_data), intent(in)       :: IOfield
@@ -407,9 +446,11 @@ contains
       character(len=hlen) :: what
       character(len=40)   :: name
       integer  :: b, i, j, k, d, off
+      integer  :: failure   ! 1: a value that is not finite; 2: a state outside the fluid tables
       real(R8) :: flag, flag_all, first
 
       what = ''
+      failure = 1
       blocks: do b = 1, domain%nb
         do k = 0, domain%blk(b)%dim(3)
           do j = 0, domain%blk(b)%dim(2)
@@ -442,6 +483,12 @@ contains
                   exit blocks
                 end if
               end do
+              if ( Outside_Tables ( domain%blk(b)%P(np,i,j,k), domain%blk(b)%P(nh,i,j,k), strict=obj_sim_param%newrun ) ) then
+                write(what,'(2(A,ES12.5),A,I0,A,2(I0,A),I0)') 'p = ', domain%blk(b)%P(np,i,j,k), ', h = ', &
+                  domain%blk(b)%P(nh,i,j,k), ' of block ', b, ', cell i, j, k = ', i, ', ', j, ', ', k
+                failure = 2
+                exit blocks
+              end if
             end do
           end do
         end do
@@ -453,13 +500,52 @@ contains
       if ( flag_all > 0.0_R8 ) then
         ! Written once, by the first rank that found a value (rank 0 when every rank holds it)
         call mpi_allreduce_min_r8 ( merge(real(mpi_rank_, R8), huge(1.0_R8), flag > 0.0_R8), first )
-        if ( flag > 0.0_R8 .and. nint(first) == mpi_rank_ ) &
-          write(*,'(A)') ' [ERROR] '//trim(obj_io%nameinit)//' holds a value that is not finite (NaN or infinity): '// &
-                         trim(what)
+        if ( flag > 0.0_R8 .and. nint(first) == mpi_rank_ ) then
+          if ( failure == 2 ) then
+            write(*,'(A)') ' [ERROR] '//trim(obj_io%nameinit)//' holds a state outside the fluid tables (their range '// &
+                           'of p and h is printed at loading): '//trim(what)
+          else
+            write(*,'(A)') ' [ERROR] '//trim(obj_io%nameinit)//' holds a value that is not finite (NaN or infinity): '// &
+                           trim(what)
+          end if
+        end if
         call mpi_stop_all ( 'initial condition error (see above)' )
       end if
 
     end subroutine Check_IC_Values
+
+
+    !> The turbulence variables of the initial condition brought to the floors of RANS_Enforce_Realizability, which
+    !> the stages apply after every update. Every block whose P this rank holds is floored (the copies of the remote
+    !> chimera donors too, so that they agree with their owner); one line gives the number of cells changed, counted
+    !> on the local blocks and summed over the ranks (collective).
+    subroutine Floor_IC_Turbulence ( domain )
+      use ARES_Lib_RANS, only: RANS_Enforce_Realizability
+      use ARES_Mod_MPI,  only: is_local_block, mpi_allreduce_sum_r8
+      implicit none
+      type(ARES_domain_type), intent(inout) :: domain
+      ! Local
+      integer  :: b, i, j, k, n
+      real(R8) :: before(nrans), total
+
+      n = 0
+      do b = 1, domain%nb
+        if ( .not. allocated(domain%blk(b)%P) ) cycle
+        do k = 1, domain%blk(b)%dim(3)
+          do j = 1, domain%blk(b)%dim(2)
+            do i = 1, domain%blk(b)%dim(1)
+              before = domain%blk(b)%P(nt:nprim,i,j,k)
+              call RANS_Enforce_Realizability ( domain%blk(b)%P(nt:nprim,i,j,k) )
+              if ( is_local_block(b) .and. any ( domain%blk(b)%P(nt:nprim,i,j,k) /= before ) ) n = n + 1
+            end do
+          end do
+        end do
+      end do
+      call mpi_allreduce_sum_r8 ( real(n, R8), total )
+      if ( mpi_is_root .and. total > 0.0_R8 ) write(*,'(A,I0,A)') ' [WARNING] Initial condition: ', nint(total), &
+        ' cells with a turbulence variable below its floor, set to the floor'
+
+    end subroutine Floor_IC_Turbulence
 
 
     subroutine Check_Input ( has_error )
@@ -480,6 +566,13 @@ contains
            index(obj_io%decomposition_map, '/') > 0 ) &
         out = '[ERROR] input.ini, ['//trim(codename)//'-IO] decomposition-map = '//trim(obj_io%decomposition_map)// &
               ': the value is the name of a file in INPUT/, without a folder'
+#ifndef TECIO
+      ! Binary Tecplot (.szplt) is read and written through TecIO: a build without it would compute up to its first
+      ! output, or its read of the initial condition, and stop there
+      if ( index(out,'ERROR') == 0 .and. ( index(obj_io%sol_format,'tecplot binary') > 0 .or. &
+           ( obj_sim_param%newrun .and. index(obj_io%ini_format,'tecplot binary') > 0 ) ) ) &
+        out = '[ERROR] input.ini: tecplot binary needs a build with TecIO; this one has none (use tecplot ascii or vtk)'
+#endif
       has_error = index(out,'ERROR') > 0
       if ( has_error ) then
         write(*,'(A,T35,A)') '   Input file', 'FAIL'
@@ -507,8 +600,51 @@ contains
     end subroutine Check_BC
 
 
+    !> The warning of a restart that reads the un-numbered solution OUTPUT/<prefix>field<ext> when the numbered solution
+    !> that follows its output number exists: the outputs of a later run that did not write its final solution.
+    subroutine Warn_Newer_Solution ()
+      use IR_Precision, only: str
+      implicit none
+      character(len=llen) :: base, next
+      integer :: dot
+      logical :: there
+
+      dot = index ( obj_io%nameinit, '.', back=.true. )
+      if ( dot <= 1 ) return
+      base = 'OUTPUT/'//trim(ARES_phase_prefix)//'field'
+      if ( obj_io%nameinit(1:dot-1) /= trim(base) ) return     ! a numbered solution is read
+      next = trim(base)//trim(str(.true., obj_io%output_number + 1))//obj_io%nameinit(dot:len_trim(obj_io%nameinit))
+      inquire ( file=trim(next), exist=there )
+      if ( there ) write(*,'(A)') ' [WARNING] The restart reads '//trim(obj_io%nameinit)//', but '//trim(next)// &
+        ' exists: a later numbered solution of a run that did not write its final one. To restart from it, copy it '// &
+        'over '//trim(obj_io%nameinit)//'.'
+
+    end subroutine Warn_Newer_Solution
+
+
+    !> True when the mesh is a sector turned about the x axis (delthe not zero, Check_Mesh_Type) and the domain has
+    !> faces of type 200, which close it by rotational periodicity.
+    logical function Sector_Closed_By_200 ( domain )
+      use ARES_Lib_Metrics, only: delthe
+      implicit none
+      type(ARES_domain_type), intent(in) :: domain
+      integer :: i
+
+      Sector_Closed_By_200 = .false.
+      if ( delthe >= 0d0 .and. delthe <= 0d0 ) return   ! delthe exactly zero: no sector (two ordered comparisons)
+      do i = 1, domain%nbound
+        if ( domain%bc(i)%type == 200 ) then
+          Sector_Closed_By_200 = .true.
+          return
+        end if
+      end do
+
+    end function Sector_Closed_By_200
+
+
     subroutine Print_Warnings
       implicit none
+      integer :: lev
 
       ! IO warnings
       if (index(obj_io%warning_message,'WARNING')>0) write(*,'(A)') obj_io%warning_message
@@ -528,6 +664,13 @@ contains
       if (index(obj_riemann%warning_message,'WARNING')>0) write(*,'(A)') obj_riemann%warning_message
       if (index(obj_space_scheme%warning_message,'WARNING')>0) write(*,'(A)') obj_space_scheme%warning_message
       if (index(obj_irs%warning_message,'WARNING')>0) write(*,'(A)') obj_irs%warning_message
+      ! Multigrid: a coarse level without levelN-iter ends after its first iteration
+      if ( obj_multigrid%MGL > 1 ) then
+        do lev = 2, obj_multigrid%MGL
+          if ( obj_multigrid%iter_threshold(lev) == 0 ) write(*,'(A,I0,A,I0,A)') '[WARNING] level', lev, &
+            '-iter = 0: multigrid level ', lev, ' runs one iteration'
+        end do
+      end if
 
     end subroutine Print_Warnings
 

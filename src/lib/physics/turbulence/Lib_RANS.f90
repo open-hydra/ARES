@@ -59,10 +59,10 @@ module ARES_Lib_RANS
     subroutine RANS_Set_Wall_Values_if(rans_cell, mil_wall, rans_wall, metric, dist, ks)
       use ARES_Global_m
       implicit none
-      real(kind=8), intent(out), dimension(nRANS)  :: rans_wall        ! : ... at wall
-      real(kind=8), intent(in),  dimension(nRANS)  :: rans_cell        ! : ... at cell center
+      real(kind=8), intent(out), dimension(nRANS)  :: rans_wall        ! : ... at wall (rho_wall times each)
+      real(kind=8), intent(in),  dimension(nRANS)  :: rans_cell        ! : ... at cell center, times rho_wall/rho_cell
       real(kind=8), intent(in)                     :: mil_wall         ! : laminar viscosity at wall
-      real(kind=8), intent(in)                     :: metric           ! MetricTensor(dir) dot_product FaceNormal
+      real(kind=8), intent(in)                     :: metric           ! MetricTensor(dir) dot_product FaceNormal (not used)
       real(kind=8), intent(in)                     :: dist             ! : cell center-wall distance
       real(kind=8), intent(in)                     :: ks               ! roughness nearest wall
     end subroutine RANS_Set_Wall_Values_if

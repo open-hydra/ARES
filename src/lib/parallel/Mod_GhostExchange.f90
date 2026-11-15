@@ -162,7 +162,7 @@ contains
 
 
 
-  !> Build the communication schedule by scanning all BC entries of type 1 (connection).
+  !> Build the communication schedule by scanning all BC entries of the connection types (101, 201).
   !> Entries are sorted by remote rank for aggregated MPI messaging.
   !> Must be called after partition_blocks and domain setup.
   subroutine build_ghost_schedule(domain)
@@ -322,7 +322,7 @@ contains
     if (allocated(domain%local_bc_idx)) deallocate(domain%local_bc_idx)
     allocate(domain%local_bc_idx(n))
 
-    ! Build local_bs_idx (Bs is local, type-1 only — for Pg computation)
+    ! Build local_bs_idx (Bs is local, connections 101 and 201 only — for Pg computation)
     domain%n_local_bs = ns
     if (allocated(domain%local_bs_idx)) deallocate(domain%local_bs_idx)
     allocate(domain%local_bs_idx(ns))

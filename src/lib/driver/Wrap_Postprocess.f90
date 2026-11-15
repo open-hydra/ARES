@@ -28,7 +28,7 @@ contains
     use ARES_Mod_Timers,     only: timer_summary
     use ARES_Lib_Newstate,   only: Report_Negative_Turbulence
     use ARES_Lib_Ghost,      only: Report_Wall_Ghosts
-    use ARES_Lib_BC_Fluxes_Extrapolation, only: Report_400_Entering
+    use ARES_Lib_BC_Fluxes_Extrapolation, only: Report_400_Entering, Report_Closed_Faces
     use IR_precision
     implicit none
     type(ARES_simulation_type), intent(inout) :: simulation
@@ -63,6 +63,31 @@ contains
       dgsfile  = '/'//trim(ARES_phase_prefix)//'diagnostic-level'//trim(str(.true.,level))
       mgsol    = '/'//trim(ARES_phase_prefix)//'field-prolongated'
       mgwall   = '/'//trim(ARES_phase_prefix)//'wall-prolongated'
+    endif
+
+    ! Output asked by a HYDRA coupling step (a second call for an iteration whose own call has already run): the field
+    ! and the wall of the current level (and the prolongated ones from a coarse level), nothing else. The residual and
+    ! probe rows, the shell line, the outputs, the change of level and the runtime reading of input.ini due at this
+    ! iteration were done by the call that followed it. Collective, as the writes of the other branches.
+    if ( obj_sim_param%HYDRA_postprocess ) then
+      if (level == 1) then
+        ! One numbered file per coupling output, as an output of the run
+        obj_io%output_number = obj_io%output_number + 1
+        if (.not.obj_io%sol_overwrite) solfile  = trim(solfile)//trim(str(.true.,obj_io%output_number))
+        if (.not.obj_io%sol_overwrite) wallfile = trim(wallfile)//trim(str(.true.,obj_io%output_number))
+      endif
+      if (mpi_is_root) write(*,*) ' ... writing HYDRA-coupling solution'
+      call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
+      if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
+      if (obj_multigrid%MGL > 1 .and. level > 1) then
+        if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
+        do m = obj_multigrid%MG_level, 2, -1
+          call Prolongation ( Fine=simulation%domain(m-1), Coarse=simulation%domain(m) )
+        enddo
+        call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
+        if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), mgwall )
+      endif
+      return
     endif
 
     ! END OF SIMULATION
@@ -144,6 +169,9 @@ contains
 
       ! Flux evaluations of 400 faces with gas entering, over the run (collective)
       call Report_400_Entering()
+
+      ! Flux evaluations in which an inlet or an outlet acted as a wall, over the run (collective)
+      call Report_Closed_Faces()
 
       ! Write output solution (collective — all ranks participate in gather)
       call Write_Solution ( simulation%domain(1), simulation%IOfield(1), solfile )
@@ -307,6 +335,8 @@ contains
         do m = 1, obj_multigrid%MGL
           simulation%domain(m)%itermax = obj_multigrid%iter_threshold(m)
         enddo
+        ! level1-iter left out: the finest level runs to iter-threshold, as a run with one level (Setup_Multigrid)
+        if ( obj_multigrid%iter_threshold(1) == 0 ) simulation%domain(1)%itermax = obj_sim_param%iter_threshold
       else
         simulation%domain(1)%itermax = obj_sim_param%iter_threshold
       endif
@@ -320,21 +350,6 @@ contains
       endif
     end if
     
-
-    ! PRINT FOR HYDRA-COUPLING PROBLEMS
-    if ( obj_sim_param%HYDRA_postprocess ) then
-      if (mpi_is_root) write(*,*) ' ... writing HYDRA-coupling solution'
-      call Write_Solution (  simulation%domain(level), simulation%IOfield(level), solfile )
-      if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(level), wallfile )
-      if (obj_multigrid%MGL > 1 .and. level > 1) then
-        if (mpi_is_root) write(*,*) ' ... writing prolongated solution to grid-level 1'
-        do m = obj_multigrid%MG_level, 2, -1
-          call Prolongation ( Fine=simulation%domain(m-1), Coarse=simulation%domain(m) )
-        enddo
-        call Write_Solution (  simulation%domain(1), simulation%IOfield(1), mgsol )
-        if (obj_io % write_wall) call Write_Wall_Solution ( simulation%domain(1), mgwall )
-      endif
-    endif
 
   contains
 

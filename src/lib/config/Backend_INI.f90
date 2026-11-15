@@ -116,7 +116,7 @@ contains
   end subroutine Scan_Ini
 
 
-  !> Keys of the input layout ARES had before it took the one of MOSE. The registry no longer
+  !> Keys of the earlier input layout of ARES. The registry no longer
   !  reads them, so they would be ignored without a word (a turbulent case would run laminar):
   !  Check_Input stops on the message returned here, empty when there is none.
   function Obsolete_Keys(fini) result(out)
@@ -140,7 +140,7 @@ contains
     if (fini%index(section_name=s//'-IO', option_name='ini-format') > 0) &
       out = trim(out)//item//'ini-format of ['//s//'-IO] is now ic-format'
     if (len_trim(out) > 0) &
-      out = '[ERROR] input.ini uses keys of the earlier ARES layout, ARES now reads the same keys as MOSE:'//trim(out)
+      out = '[ERROR] input.ini uses keys of the earlier ARES layout:'//trim(out)
 
   end function Obsolete_Keys
 

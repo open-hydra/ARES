@@ -22,7 +22,7 @@ contains
     use ARES_Lib_Preconditioning
     implicit none
 
-    ! Setting simulation type, as in MOSE: navier-stokes is laminar without a turbulence model
+    ! Setting simulation type: navier-stokes is laminar without a turbulence model
     if (obj_sim_param%simulation_type=='euler') then
       model = 0
       if (obj_rans%model /= 'none' .and. obj_rans%model /= '') &
@@ -143,16 +143,19 @@ contains
       obj_irs%description = 'Beta set to '//trim(str(.true.,real(obj_irs%beta)))// &
                             ', variables: '//trim(obj_irs%variables)
     end if
-    ! IRS accelerates steady runs: the smoothed residual changes the transient of a time-accurate run
-    if (obj_irs%enabled .and. obj_time_scheme%time_accurate) then
+    ! IRS accelerates steady runs: the smoothed residual changes the transient of a time-accurate run, also of a
+    ! time-accurate coupling (hydra sets HYDRA_time_accurate before the set-up)
+    if (obj_irs%enabled .and. (obj_time_scheme%time_accurate .or. obj_sim_param%HYDRA_time_accurate)) then
       obj_irs%error_message = '[ERROR] Implicit residual smoothing (irs, irs-beta > 0) is supported only for '// &
                               'steady/pseudo-time runs.'
     end if
     ! Space scheme
     ! ... written in Mod_Space ...
     ! Transport
+    ! (an error message, on which the set-up stops: Stop_Simulation)
     if (model>0 .and. obj_transport%description=='Unavailable') &
-    write(*,'(A)') '[ERROR] Transport properties are unavailable for the selected phase: cannot run Navier-Stokes simulation'
+      obj_transport%error_message = '[ERROR] Transport properties are unavailable for the selected phase: '// &
+                                    'cannot run Navier-Stokes simulation'
 
   end subroutine Assign_Setup
 

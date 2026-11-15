@@ -150,7 +150,7 @@ contains
     integer :: ii, i, ig, jg, kg
     integer :: bm, im, jm, km, fm, bs, is, js, ks
 
-    ! MPI: exchange residual data for inter-rank type-1 connections.
+    ! MPI: exchange residual data for inter-rank connections (101, 201).
     ! exchange_ghost_R is a no-op on one rank; skipping it also skips the
     ! barrier, once per direction per stage. Under MPI_THREAD_FUNNELED only
     ! the primary thread may call MPI (master); the barrier publishes the

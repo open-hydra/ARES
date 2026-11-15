@@ -102,7 +102,7 @@ contains
     cs = cos_delthe                                         ! computed once with delthe (Check_Mesh_Type)
     sn = sin_delthe
 
-    !$omp do schedule (dynamic) private(ii, r, b, bs, f, g, s, Rot)
+    !$omp do schedule (dynamic, 64) private(ii, r, b, bs, f, g, s, Rot)
     do ii = 1, domain % n_local_bc
       r = domain % local_bc_idx(ii)
       b = domain % bc(r) % b

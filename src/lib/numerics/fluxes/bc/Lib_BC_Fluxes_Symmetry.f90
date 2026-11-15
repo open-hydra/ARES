@@ -72,8 +72,14 @@ contains
     Slope32 = ( Prim3 - Bound_Prim ) / Dist23
     Slope21 = ( Bound_Prim - Prim1 ) / Dist12
     
+    ! The slope next to the face first, as in the interior reconstruction: 2-1 on odd faces (point 1 is the ghost
+    ! cell), 3-2 on even ones (point 3 is the ghost cell)
     do s = 1, nh
-      Slope(s) = rlimiter ( Slope32(s), Slope21(s) )
+      if ( modfm == 1 ) then
+        Slope(s) = rlimiter ( Slope21(s), Slope32(s) )
+      else
+        Slope(s) = rlimiter ( Slope32(s), Slope21(s) )
+      end if
     end do
 
     ! extrapolation at the boundary face

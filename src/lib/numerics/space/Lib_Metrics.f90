@@ -722,7 +722,9 @@ contains
         if ( wall_meridional ) then
           ! Faces 1-4 of a wedge cell cross the meridional plane along a segment,
           ! whose ends are nodes 1 and 2 (the same x and r as nodes 4 and 3).
-          if ( Fm > 4 ) error stop 'Compute_Yn: a wall on a face of the axisymmetric wedge (faces 5-6) is not possible'
+          ! Every rank goes through every wall record: the stop is collective
+          if ( Fm > 4 ) call mpi_stop_all ( 'Compute_Yn: a wall on a face of the axisymmetric wedge (faces 5-6) is not '// &
+                                            'possible' )
           wall_corner(:,1,nwall) = Meridional ( corner(:,1) )
           wall_corner(:,2,nwall) = Meridional ( corner(:,2) )
           wall_corner(:,3,nwall) = wall_corner(:,2,nwall)
@@ -1850,7 +1852,11 @@ contains
         sk_lb(nsk) = klb(nc)
       enddo
     enddo
-    call Polish ( bs, bt )
+    ! Polish writes bs and bt (host variables) when it improves on them: it starts from copies, which its dummies do
+    ! not alias (s0 and t0 are free after the loop)
+    s0 = bs
+    t0 = bt
+    call Polish ( s0, t0 )
 
     d = best
     if ( present(cert) ) cert = best - min ( lbmin, best )
@@ -2585,20 +2591,12 @@ contains
     ! Local
     integer      :: g, Is1, Js1, Ks1
     integer      :: II, JJ, KK, III, JJJ, KKK
-    integer      :: guidem(6,3), guides(6,3), guidem2(6,3), guides2(6,3)
+    integer      :: guides(6,3), guides2(6,3)
     type(ARES_vector_3D_type), dimension(0:gc) :: N1, N2, N3, N4, N5, N6, N7, N8
     type(ARES_vector_3D_type) :: T
     
     ! ---------------------------------------------------------------------------------------------
     ! Preliminary definitions
-    guidem(1,1)=-2 ; guidem(1,2)= 0 ; guidem(1,3)= 0 ; guidem(2,1)=1 ; guidem(2,2)=0 ; guidem(2,3)=0
-    guidem(3,1)= 0 ; guidem(3,2)=-2 ; guidem(3,3)= 0 ; guidem(4,1)=0 ; guidem(4,2)=1 ; guidem(4,3)=0
-    guidem(5,1)= 0 ; guidem(5,2)=0  ; guidem(5,3)=-2 ; guidem(6,1)=0 ; guidem(6,2)=0 ; guidem(6,3)=1
-
-    guidem2(1,1)=-3 ; guidem2(1,2)= 0 ; guidem2(1,3)= 0 ; guidem2(2,1)=2 ; guidem2(2,2)=0 ; guidem2(2,3)=0
-    guidem2(3,1)= 0 ; guidem2(3,2)=-3 ; guidem2(3,3)= 0 ; guidem2(4,1)=0 ; guidem2(4,2)=2 ; guidem2(4,3)=0
-    guidem2(5,1)= 0 ; guidem2(5,2)= 0 ; guidem2(5,3)=-3 ; guidem2(6,1)=0 ; guidem2(6,2)=0 ; guidem2(6,3)=2
-
     guides(1,1)= 0 ; guides(1,2)= 0 ; guides(1,3)= 0 ; guides(2,1)=-1 ; guides(2,2)= 0 ; guides(2,3)= 0
     guides(3,1)= 0 ; guides(3,2)= 0 ; guides(3,3)= 0 ; guides(4,1)= 0 ; guides(4,2)=-1 ; guides(4,3)= 0
     guides(5,1)= 0 ; guides(5,2)= 0 ; guides(5,3)= 0 ; guides(6,1)= 0 ; guides(6,2)= 0 ; guides(6,3)=-1

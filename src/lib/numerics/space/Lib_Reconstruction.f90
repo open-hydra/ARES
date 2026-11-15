@@ -16,12 +16,14 @@ contains
     ! Local
     real(R8) :: slope0, slope1, slope2, slopel, sloper
 
-    ! Piecewise Linear Reconstruction
+    ! Piecewise Linear Reconstruction. rlimiter(x, y) = phi(y/x) x: x is the slope next to the face (between local and
+    ! next, for both states), y the slope on the far side of the cell that extrapolates. The two states are mirror
+    ! images of each other, which a limiter that is not symmetric (phi(r)/r /= phi(1/r), LIMO3) needs for its order
     slope0  = ( local - prev ) / dl0
     slope1  = ( next - local ) / dl1
     slope2  = ( next2 - next ) / dl2
     slopel = rlimiter ( slope1, slope0 )
-    sloper = rlimiter ( slope2, slope1 )
+    sloper = rlimiter ( slope1, slope2 )
     priml = local + slopel * dll
     primr =  next - sloper * dlr
 

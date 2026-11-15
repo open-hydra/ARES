@@ -126,8 +126,10 @@ contains
     real(kind=8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: WDist
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M    ! velocity
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variables
-    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
-    real(kind=8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
+    ! Allocated with -RC only (SpalartShur), and read only then: optional, so that the unallocated arrays of the other
+    ! runs are not present (an unallocated actual argument of an optional dummy)
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in), optional :: gradv
+    real(kind=8), dimension(n(1), n(2), n(3)), intent(in), optional :: rc1, rc2
     real(kind=8), dimension(n(1), n(2), n(3)), intent(in) :: dt
     ! Local
     integer :: i, j, k, ii, jj

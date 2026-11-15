@@ -174,12 +174,11 @@ contains
       logical, intent(in) :: Prt_corr
       ! Local
       !integer :: s
-      real(R8) :: rho, T, cp, mil, kl, mie, kappa
+      real(R8) :: rho, cp, mil, kl, mie, kappa
       real(R8) :: stress(3), DiffHFlux !, DmGradYi ,Dm(np) 
       real(R8) :: dPrt
 
       ! Thermodynamic and transport properties at the interface
-      T   = ph2vars( Prim(np), Prim(nh), T_tab )
       rho = ph2vars( Prim(np), Prim(nh), rho_tab )
       cp  = ph2vars( Prim(np), Prim(nh), hT_tab )
 

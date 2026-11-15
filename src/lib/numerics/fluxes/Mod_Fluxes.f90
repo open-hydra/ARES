@@ -256,8 +256,10 @@ contains
       real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(out) :: Res
       type(d_metrics_type), dimension(3), intent(in), target :: Dir
       type(ARES_vector_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: dl
-      real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: yn
-      real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: ks
+      ! Allocated in viscous runs only (model > 0), and read only then: optional, so that the unallocated arrays of an
+      ! Euler run are not present (an unallocated actual argument of an optional dummy)
+      real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in), optional :: yn
+      real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in), optional :: ks
       type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M
       real(R8), intent(in) :: Sc, Sct, Prt
       logical, intent(in)  :: Prt_corr

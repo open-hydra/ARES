@@ -2,7 +2,6 @@ module ARES_Advanced_Types_m
   use iso_fortran_env, only: I4 => int32, R8 => real64
   use ARES_Base_Types_m
   use ARES_Parameters_m
-  use ARES_Series_Data_m
   use Lib_ORION_Data
   
   implicit none
@@ -73,8 +72,6 @@ module ARES_Advanced_Types_m
     real(R8)                  :: mdot                              ! BC 4 (inflow/outflow) specifications
     real(R8)                  :: rel_fac                           ! BC 4 (inflow/outflow) specifications
     real(R8), allocatable     :: ci(:)                             ! BC 4 (inflow/outflow) specifications
-    type(time_series_type)    :: p0time         
-    logical                   :: q2d_periodic = .false.            ! BC 667 (Q2D mapped) periodic time signal flag
   end type ARES_bc_type
 
 
@@ -105,6 +102,16 @@ module ARES_Advanced_Types_m
     type(ARES_domain_type), dimension(:), allocatable  :: domain
     type(ORION_data), dimension(:), allocatable        :: IOfield
   end type ARES_simulation_type
+
+
+  abstract interface
+    !> The procedure that the caller of ARES%solve passes to it (the program of ARES and the couplings of hydra pass an
+    !> empty one): called once per stage by every thread of the team, inside the parallel region of Explicit_Step, after
+    !> the fluxes and before the turbulence sources. It takes no argument; a loop over cells in it needs a worksharing
+    !> construct, anything done once a single or master construct
+    subroutine ARES_external_function ()
+    end subroutine ARES_external_function
+  end interface
 
 
 end module ARES_Advanced_Types_m
