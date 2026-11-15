@@ -285,10 +285,15 @@ $$
 
 $$
 \bar{s}_L = \phi(s_1, s_0),\qquad
-\bar{s}_R = \phi(s_2, s_1),
+\bar{s}_R = \phi(s_1, s_2),
 $$
 
-where $\phi$ is the chosen limiter.
+where $\phi$ is the chosen limiter. Its first argument is the slope next to the face ($s_1$, between the two
+cells, for both states) and the second the slope on the far side of the cell that extrapolates, so that the
+right state is the mirror image of the left one. The symmetric limiters, $\phi(r)/r = \phi(1/r)$ (minmod, van
+Leer, van Albada, MC, superbee), give the same slopes with the arguments swapped; LIMO3 does not, and needs
+this order for its third order. The one-sided reconstructions of the symmetry, inlet and outlet faces take the
+same order.
 
 3. Reconstruct interface values:
 
@@ -322,10 +327,10 @@ The limiter $\phi(a,b)$ is selected by `flux-limiter`. All are expressed via the
 | `minmod` | Most diffusive TVD limiter; strictly monotone |
 | `vanleer` | Smooth, differentiable; good dissipation/accuracy balance |
 | `vanalbada` | Smooth; less dissipative than van Leer near extrema |
-| `MC` (or `mc`, as in MOSE) | Monotonized-central; steepest gradients inside the TVD region |
+| `MC` (or `mc`) | Monotonized-central; steepest gradients inside the TVD region |
 | `superbee` | Sharpest TVD limiter; excellent at steep gradients |
 | `LIMO3` | Third-order limiter (Čada–Torrilhon) — third-order accurate in smooth regions while remaining non-oscillatory |
-| `none` | No limiting (unlimited reconstruction) |
+| `none` | With `space-reconstruction = MUSCL`, van Leer (with a warning): MUSCL is always limited |
 
 **MinMod**
 
@@ -342,8 +347,10 @@ $$
 **Van Albada**
 
 $$
-\phi(a,b)=\frac{r^2+r}{1+r^2}\,a
+\phi(a,b)=\begin{cases}\dfrac{r^2+r}{1+r^2}\,a & ab>0\\ 0 & \text{otherwise}\end{cases}
 $$
+
+(without the second case the formula gives a non-zero slope for $r<0$, outside the TVD region).
 
 **MC (monotonized central)**
 
@@ -365,13 +372,15 @@ $$
 0 \le \phi(r) \le \min(2r,\,2),\qquad \phi(r)=0\ \text{for } r\le 0 .
 $$
 
-A limiter sitting near the lower (minmod) edge is the most dissipative and monotone; one near the upper (superbee) edge is the sharpest but can steepen smooth extrema. Van Leer and van Albada are smooth ($C^\infty$) curves through the middle of the region; MC follows the monotonized-central envelope. LIMO3 is a third-order limiter that leaves the strict second-order TVD region in smooth flow to recover third-order accuracy, while staying non-oscillatory.
+minmod, van Leer, van Albada, MC and superbee vanish for $r \le 0$; LIMO3 does not (below).
+
+A limiter sitting near the lower (minmod) edge is the most dissipative and monotone; one near the upper (superbee) edge is the sharpest but can steepen smooth extrema. Van Leer and van Albada are smooth curves through the middle of the region for $r > 0$; their slope jumps at $r = 0$, where they meet $\phi = 0$ ($\phi'(0^+) = 2$ and $1$); MC follows the monotonized-central envelope. LIMO3 is a third-order limiter that leaves the strict second-order TVD region in smooth flow to recover third-order accuracy, while staying non-oscillatory.
 
 | Limiter | Dissipation | Smoothness | Position in TVD region |
 |---------|:-----------:|:----------:|------------------------|
 | minmod | High | $C^0$ | lower envelope |
-| van Leer | Medium | $C^\infty$ | mid (smooth) |
-| van Albada | Medium-low | $C^\infty$ | mid (smooth) |
+| van Leer | Medium | smooth for $r>0$, $C^0$ at $r=0$ | mid (smooth) |
+| van Albada | Medium-low | smooth for $r>0$, $C^0$ at $r=0$ | mid (smooth) |
 | MC | Low | $C^0$ | monotonized-central edge |
 | superbee | Lowest | $C^0$ | upper envelope |
 | LIMO3 | Low (3rd-order smooth) | piecewise | third-order (leaves 2nd-order TVD region) |
@@ -596,8 +605,10 @@ of SSG/LRR, $C\mu_l/(\rho\,d^2)$ with $d$ the distance of the cell centre from
 the wall, which follow the height of the first cell, nor that of $\tilde\nu$ on a
 rough wall, taken from the value of the cell. Their derivative along the wall is
 left out, with the error above on skewed cells. The wall temperature of a `301`
-wall and the wall values of the turbulence variables are estimated with the
-metric of the cell.
+wall is estimated with the metric of the cell and the laminar conductivity alone,
+also on a rough wall (exact when adiabatic; the energy flux is the prescribed
+heat flux regardless), the wall values of the turbulence variables with the wall
+distance of the cell.
 
 ### Metrics of the ghost cells
 
@@ -690,10 +701,12 @@ $l_1 = (\Delta l_1 + \Delta l_2)/2$: $s = 2\Delta l_1/(\Delta l_1 + \Delta l_2)$
 the temperature and each turbulence variable within $[q_1/2,\ 2q_1]$ (with the
 sign of $q_1$); the velocity is not limited ($\psi = s$). The wall values of the
 turbulence variables are those of the wall fluxes, from the same wall state
-(`302`: the state at $T_w$ and the pressure of the cell; `301`: the state of the
-wall cell, as the wall flux takes it; the coupled walls `103` and `104`, whose
-viscous flux the other solver gives: the state of the wall cell, as an
-adiabatic wall, smooth or rough as their `ks`). Every wall takes the roughness
+(`302`: the state at $T_w$ and the pressure of the cell; `301`: the pressure of
+the cell and the wall temperature that the heat flux gives across the half cell
+with the laminar conductivity of the cell, as the wall flux takes it; the
+coupled walls `103` and `104`, whose viscous flux the other solver gives: the
+state of the wall cell, as an adiabatic wall, smooth or rough as their `ks`),
+from the cell values per unit mass at the density of that state. Every wall takes the roughness
 of the nearest wall, as its wall flux and the source terms of the cell do
 (`SA-rough`; $k_s = 0$ gives the value of a smooth wall). With one cell across
 the face the extrapolated quantities are copied (position $\mathbf{x}_1$). In an inviscid run the walls carry no wall
@@ -765,9 +778,8 @@ Declared limits:
   variables of an adiabatic wall at the state of the cell: exact for $k$,
   $R_{ij}$ and $\tilde\nu$ on a smooth wall (zero); on a rough wall
   (`SA-rough`, $k_s > 0$) $\tilde\nu$ takes the value of the rough-wall
-  condition from the state of the cell, as the wall flux of the other solver
-  does, per unit mass with the density of the cell where that flux takes the
-  density at the interface temperature; that of $\omega$, $C\mu/(\rho\,d^2)$,
+  condition, $\tilde\nu_c\,d_0/(y_1 + d_0)$ per unit mass, the same as the
+  wall flux of the other solver whatever the density of the wall state; that of $\omega$, $C\mu/(\rho\,d^2)$,
   differs from the value at the state of the coupled surface by the ratio
   $\nu(T_1)/\nu(T_s)$ of the kinematic viscosities at the two temperatures: of
   order one but bounded, it enters only the source terms (the gradient of

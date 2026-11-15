@@ -561,6 +561,9 @@ contains
                                                cycle=int(obj_sim_param%iter_general,I4P), &
                                                fldnames=restart_counter_names,fldvalues=counters)
       end if
+      ! A failed write (disk full, quota, permission) leaves a cut file: say so, and go on (the next output may succeed)
+      if ( E_IO /= 0 ) write(*,'(A,I0,A)') ' [WARNING] '//trim(path)//trim(file)//' was not written (status ', E_IO, &
+                                           '): disk full, quota or permission?'
     end if
 
     ! Synchronize all ranks after I/O
@@ -603,8 +606,7 @@ contains
       rho = ph2vars( p, entalpy, rho_tab )
       sound = ph2vars( p, entalpy, sound_tab )
       pv = 3; out(nprim+1,i,j,k) = T; out(nprim+2,i,j,k) = rho
-      out(nprim+3,i,j,k) = sound
-      if ( Uref > 0.d0 ) out(nprim+3,i,j,k) = Uref
+      out(nprim+3,i,j,k) = sound   ! the speed of sound of the state (the reference velocity is "Ur", with thermo)
       if (obj_io%write_thermo) then
         pv = pv + 1; out(nprim+pv,i,j,k) = ph2vars( p, entalpy, hT_tab ) ! cp = dh/dT
         if (obj_prec%enabled) then

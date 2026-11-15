@@ -138,7 +138,7 @@ Each `Explicit_Step` performs one time step:
     - Evaluate diffusive fluxes.
     - Apply boundary fluxes: first one flux per face between blocks (`Connection_Fluxes`), then every boundary record.
     - Add RANS source terms (if turbulent), with the ghost cells of the fluxes.
-    - Update state via `Newstate` (optional IRS smoothing + RK combination + thermo inversion).
+    - Update state via `Newstate` (primitive residual through $\partial\mathbf P/\partial\mathbf U$, optional IRS smoothing, RK combination, state checks).
 3. **Compute residual** (pressure residual) and write diagnostics.
 
 The RK stages run inside one OpenMP parallel region. The MPI calls made inside it (the halo

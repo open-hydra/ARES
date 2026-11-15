@@ -246,7 +246,7 @@ contains
 
     select case ( domain % bc(r) % type )
 
-      case (0, 404:406)                         ! zero gradient: the ghost value is the cell value
+      case (404:406)                            ! zero gradient: the ghost value is the cell value
         xc(b) % x(:,Ig,Jg,Kg) = x1
 
       case (300)                                ! symmetry: mirror image across the face

@@ -10,8 +10,8 @@ program ARES_program
   use ARES_Mod_GhostExchange, only: cleanup_ghost_schedule
 #endif
   implicit none
-  type(ARES_type)            :: ARES
-  type(ARES_simulation_type) :: simulation
+  type(ARES_type)                    :: ARES
+  type(ARES_simulation_type), target :: simulation   ! the probes point at the state of their cells
 
   ! Initialize MPI environment (no-op if USE_MPI is not defined)
   call mpi_init_env()

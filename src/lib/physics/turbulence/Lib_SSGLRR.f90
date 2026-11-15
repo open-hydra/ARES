@@ -453,6 +453,9 @@ contains
       rhoRij(6) = Sign( 1d0, rhoRij(6) ) * Sqrt( rhoRij(2)*rhoRij(3) )
     end if
 
+    ! 3rd condition: rho omega > 0, the floor of the k-omega models (the eddy viscosity divides by it)
+    if ( rhoRij(7) < 1d-10 ) rhoRij(7) = 1d-10
+
   end subroutine SSGLRR_Enforce_Realizability
 
 

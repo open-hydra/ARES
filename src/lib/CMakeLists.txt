@@ -1,7 +1,7 @@
 # Relative to this directory, NOT ${CMAKE_SOURCE_DIR}/src/lib: when ARES is
 # built as a subproject (hydra) CMAKE_SOURCE_DIR is the superproject root, so
-# the absolute form swept in every sibling under its src/lib -- MOSE, FUSS,
-# GROOT, ARES's own src/app programs and FUSS's vendored TecIO examples.
+# the absolute form swept in every sibling under its src/lib -- the other
+# solvers of the suite, ARES's own src/app programs and the vendored TecIO examples.
 file(GLOB_RECURSE ARES_SRC
     CONFIGURE_DEPENDS
     *.f90
@@ -13,6 +13,11 @@ target_link_libraries(ARESL PRIVATE FiNeR::FiNeR ORION)
 link_FLINT_dependencies(ARESL)
 
 target_include_directories(ARESL INTERFACE $<BUILD_INTERFACE:${CMAKE_Fortran_MODULE_DIRECTORY}>)
+
+# The binary Tecplot path of ORION exists only in a build with TecIO: the set-up refuses tecplot binary without it
+IF(USE_TECIO)
+    target_compile_definitions(ARESL PRIVATE TECIO)
+ENDIF(USE_TECIO)
 
 IF(USE_OPENMP)
     # Use the imported target so compile *and* link flags propagate

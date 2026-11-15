@@ -12,6 +12,7 @@ contains
     use ARES_Global_m
     use Lib_ORION_data
     use ARES_Config_Types_m, only: obj_io
+    use ARES_Mod_MPI,        only: mpi_is_root, mpi_stop_all
 
     implicit none
     type(ARES_domain_type), intent(inout) :: domain
@@ -45,10 +46,13 @@ contains
     enddo
 
     ! Check if number of simulation variables in orion-field matches ARES expectation
+    ! (every rank has read the initial condition: written once, and the ranks stop together)
     if ( size(IOfield%block(1)%vars, 1) < nprim ) then
-      write(*,'(A)')         '[ERROR] Number of variables in IOfield does not match ARES expectation.'
-      write(*,'(A,I0,A,I0)') '        Expected: ', nprim, ', Found: ', size(IOfield%block(1)%vars, 1)
-      stop 1
+      if (mpi_is_root) then
+        write(*,'(A)')         '[ERROR] Number of variables in IOfield does not match ARES expectation.'
+        write(*,'(A,I0,A,I0)') '        Expected: ', nprim, ', Found: ', size(IOfield%block(1)%vars, 1)
+      end if
+      call mpi_stop_all ( 'initial condition with too few variables (see above)' )
     end if
 
     call Check_Turbulence_Names ( IOfield )
@@ -88,6 +92,7 @@ contains
     use ARES_Global_m
     use Lib_ORION_data
     use ARES_Config_Types_m, only: obj_io
+    use ARES_Mod_MPI,        only: mpi_is_root, mpi_stop_all
     use strings, only: lowercase
 
     implicit none
@@ -125,12 +130,13 @@ contains
         ! an earlier file names it omega, next to the stresses
         if ( name(7) == 'rhoomega' .or. name(7) == 'omega' ) cycle
       end select
-      write(*,'(A,I0,A)') '[ERROR] '//trim(obj_io%nameinit)//': variable ', off + nt + d - 1, ' is named '''// &
-        trim(adjustl(IOfield%varnames(off + nt + d - 1)))//''', where ARES reads the density-weighted '// &
+      ! Every rank reads the names of the file: written once, and the ranks stop together
+      if (mpi_is_root) write(*,'(A,I0,A)') '[ERROR] '//trim(obj_io%nameinit)//': variable ', off + nt + d - 1, &
+        ' is named '''//trim(adjustl(IOfield%varnames(off + nt + d - 1)))//''', where ARES reads the density-weighted '// &
         trim(expected)//' (the turbulence variables of an initial condition are density-weighted: ATLAS ICB'// &
         ' writes rhoNuTilde, rhoK, rhoOmega, and the Reynolds stresses with their rhoOmega, from the'// &
         ' density-weighted keys of a real-fluid zone)'
-      stop 1
+      call mpi_stop_all ( 'turbulence variables of the initial condition not density-weighted (see above)' )
     end do
 
   end subroutine Check_Turbulence_Names

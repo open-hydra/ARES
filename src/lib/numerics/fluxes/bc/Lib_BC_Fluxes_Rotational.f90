@@ -10,29 +10,6 @@ module ARES_Lib_BC_Fluxes_Rotational
 
 contains
 
-  subroutine BC_Rotational_Symmetry_Eul ( Im, Jm, Km, Fm, Blk )
-
-    implicit none
-    integer, intent(in) :: Im, Jm, Km, Fm
-    type(ARES_block_type), intent(inout) :: Blk
-    ! Local
-    integer :: modfm, modfm1, modfm2, modfm3, dir, Face_i, Face_j, Face_k
-    real(R8) :: Normal(3), Area
-    real(R8) :: Prim(nprim), Flux(nprim)
-
-
-    call Compute_Modfm ( fm, modfm, modfm1, modfm2, modfm3 )
-    call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
-    normal = Blk % dir(dir) % f(Face_i,Face_j,Face_k) % n
-    area = Blk % dir(dir) % f(Face_i,Face_j,Face_k) % a
-    Prim = Blk % P(:,Im,Jm,Km)
-    Flux(nv) = Prim(np) * Area * Normal(2)
-    ! Residual update
-    Blk % r(nv,Im,Jm,Km) = Blk % r(nv,Im,Jm,Km) + modFm2 * Flux(nv)
-
-  end subroutine BC_Rotational_Symmetry_Eul
-
-
   subroutine BC_Rotational_Periodic_Eul ( Im, Jm, Km, Fm, Blk )
     use ARES_Lib_Reconstruction, only : Reconstruction
     use ARES_Lib_Metrics, only : cos_delthe, sin_delthe

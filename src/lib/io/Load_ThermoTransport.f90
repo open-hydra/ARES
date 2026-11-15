@@ -4,7 +4,7 @@ module ARES_Load_ThermoTransport
 
   implicit none
   private
-  public :: Load_ThermoTransport
+  public :: Load_ThermoTransport, Outside_Tables, Table_Bounds, Table_Temperatures
 
 contains
 
@@ -88,5 +88,76 @@ contains
     end select
 
   end subroutine Load_ThermoTransport
+
+
+  !> True when ph2vars would index outside the tables at (p, h): more than one cell below their first pressure or enthalpy
+  !> (within one cell below, ph2vars extrapolates from the first cell), or at or beyond the last. With strict, also the
+  !> cell below (for values given by the user: initial and boundary conditions). A value that is not a number is outside.
+  pure logical function Outside_Tables ( p, h, strict )
+    use FLINT_Lib_Thermodynamic, only: pmin, deltap, hmin, deltah, rho_tab
+    implicit none
+    real(R8), intent(in)          :: p, h
+    logical, intent(in), optional :: strict
+    ! Local
+    real(R8) :: xp, xh
+
+    xp = ( p - pmin ) / deltap
+    xh = ( h - hmin ) / deltah
+    ! ph2vars reads the nodes i and i+1 (j and j+1): i = int(xp) must lie in 0 .. ubound - 1. The test is written so that
+    ! a value that is not a number fails it
+    Outside_Tables = .not. ( xp > -1d0 .and. xp < real ( ubound(rho_tab,1), R8 ) .and. &
+                             xh > -1d0 .and. xh < real ( ubound(rho_tab,2), R8 ) )
+    if ( present(strict) ) then
+      if ( strict ) Outside_Tables = Outside_Tables .or. xp < 0d0 .or. xh < 0d0
+    end if
+
+  end function Outside_Tables
+
+
+  !> The pressure and the temperature of a state brought within the fluid tables, where h(p, T) (pT2h) and rho(p, h)
+  !> (ph2vars) read them without leaving their arrays: p within the pressures of the tables, T within the temperatures of
+  !> both rows of the tables that bracket p, from h_min to h_max. inside: they were already within. ok: the two rows have
+  !> temperatures in common (false only on tables whose T range jumps from one pressure to the next, where the caller
+  !> takes the state of the cell).
+  subroutine Table_Bounds ( p, T, inside, ok )
+    use FLINT_Lib_Thermodynamic, only: pmin, deltap, Tmin2, deltaT, h_tab2D
+    implicit none
+    real(R8), intent(inout) :: p, T
+    logical,  intent(out)   :: inside, ok
+    ! Local
+    integer  :: i, ip, ih                ! ip, ih: the last pressure and enthalpy indices of the tables
+    real(R8) :: q, lo, hi
+
+    ip = ubound ( h_tab2D, 1 )
+    ih = ubound ( h_tab2D, 2 )
+    q  = min ( max ( p, pmin ), pmin + ( ip - 1d-6 ) * deltap )
+    i  = int ( ( q - pmin ) / deltap )
+    lo = max ( Tmin2(i), Tmin2(i+1) )
+    hi = min ( Tmin2(i) + ( ih - 1d-6 ) * deltaT(i), Tmin2(i+1) + ( ih - 1d-6 ) * deltaT(i+1) )
+    ok = lo <= hi
+    inside = ok .and. q == p .and. T >= lo .and. T <= hi
+    p = q
+    T = min ( max ( T, lo ), hi )
+
+  end subroutine Table_Bounds
+
+
+  !> The lowest and the highest temperature of the fluid tables over all their pressures, and the range of their
+  !> pressures: for the check of the values of the boundary file, which give a temperature or a pressure alone
+  subroutine Table_Temperatures ( Tlo, Thi, plo, phi )
+    use FLINT_Lib_Thermodynamic, only: pmin, deltap, Tmin2, deltaT, h_tab2D
+    implicit none
+    real(R8), intent(out) :: Tlo, Thi, plo, phi
+    ! Local
+    integer :: ip, ih
+
+    ip  = ubound ( h_tab2D, 1 )
+    ih  = ubound ( h_tab2D, 2 )
+    Tlo = minval ( Tmin2(0:ip) )
+    Thi = maxval ( Tmin2(0:ip) + ih * deltaT(0:ip) )
+    plo = pmin
+    phi = pmin + ip * deltap
+
+  end subroutine Table_Temperatures
 
 end module ARES_Load_ThermoTransport

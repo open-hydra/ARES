@@ -12,15 +12,16 @@ Reference:
 
 Test case (axisymmetric, uniformly heated channel, high roughness) -- Prt-correction2:
   - Real fluid: water (Pr ~ 6.033)
-  - Re (nominal, inlet) ~ 2.7356e4   [paper Sec.4.1; local Re grows along x]
+  - Re (nominal, inlet) ~ 2.7356e4   [paper Sec.4.1; constant-property table]
   - hs/D = 0.08   (relative roughness, equivalent sand grain; read from 1d.dat)
-  - inlet pressure p ~ 50 bar, imposed wall heat flux q_w = 3 MW/m^2
+  - inlet pressure p ~ 18 bar, imposed wall heat flux q_w = 3 MW/m^2
   Corresponds to the calibration point of Fig. 9(a)/Fig.15 of the paper.
 
 NOTE on the Reynolds number:
-  The strong wall heating lowers the viscosity downstream, so the LOCAL Re in
-  1d.dat is far from constant.  The reference correlations (Colebrook,
-  Dipprey-Sabersky) are evaluated at a SINGLE Reynolds number: the value taken
+  The case runs on a constant-property table (make-ares-table.py), so the
+  local Re in 1d.dat stays close to its inlet value.  The reference
+  correlations (Colebrook, Dipprey-Sabersky) are evaluated at a SINGLE
+  Reynolds number: the value taken
   at the smallest x of the region used for the correlations, i.e. the start of
   the developed region (x >= 0.8 L).  All reference quantities are therefore
   single scalars (horizontal lines); the per-section f_D and Nu coming from the

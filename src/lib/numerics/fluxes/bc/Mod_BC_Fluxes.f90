@@ -74,7 +74,7 @@ contains
         lower = bf_first(b,f)
         upper = lower + bf_count(b,f) - 1
 
-        !$omp do schedule ( dynamic ) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, T0, g, pstat, r_fc, dR)
+        !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, T0, g, pstat, r_fc, dR)
         do ii = lower, upper
           i  = bf_idx(ii)
           Bm = bc(i) % b
@@ -134,7 +134,10 @@ contains
                                           bc(i) % alpha, bc(i) % beta, &
                                           bc(i) % ci(1:nrans), &
                                           error )
-              if (error == 1) call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
+              if (error == 1) then
+                call Count_Closed ( .true. )
+                call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
+              end if
 
             case (405) ! inlet: supersonic — Mach + static temperature and static pressure
               call BC_Inlet_Supersonic_Static ( Bm, Im, Jm, Km, Fm, blk(Bm), &
@@ -144,12 +147,16 @@ contains
                                                 bc(i) % alpha, bc(i) % beta, &
                                                 bc(i) % ci(1:nrans), &
                                                 bc(i) % mdot, error )
-              if (error == 1) call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
+              if (error == 1) then
+                call Count_Closed ( .true. )
+                call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
+              end if
 
             case (406) ! outlet
               call BC_Outflow ( Bm, Im, Jm, Km, Fm, blk(Bm),bc(i) % pAmb, bc(i) % rel_fac, &
                                        bc(i) % mdot, error )
               if (error == 1) then
+                call Count_Closed ( .false. )
                 call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
               endif
 
@@ -191,7 +198,7 @@ contains
     integer  :: ii, i, p, Bm
     real(R8) :: dR(nprim)
 
-    !$omp do schedule (dynamic) private(ii, i, p, Bm, dR)
+    !$omp do schedule (dynamic, 64) private(ii, i, p, Bm, dR)
     do ii = 1, domain % n_local_bc
       i = domain % local_bc_idx(ii)
       if (domain % bc(i) % type /= 101 .and. domain % bc(i) % type /= 201) cycle

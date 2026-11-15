@@ -42,16 +42,23 @@ contains
 
 
   !> Prints a warning for every line "key = value" of input.ini whose key the INI reader (FiNeR) does not give in its
-  !> section: that key is not read, and its parameter keeps its default. Comment lines (they start with !, ; or #) are
-  !> skipped, as the reader skips them since FiNeR 2.1.0, also when they hold "=" or a bracket.
+  !> section: that key is not read, and its parameter keeps its default; and for every key of a section of ARES that is
+  !> not a key of ARES (a misspelled key, or one that ARES does not have), which is ignored. The sections of ARES are
+  !> [ARES-...] and those of the probes; the [HYDRA-...] sections of a coupled input are read by the other solvers too,
+  !> and the sections of the other solvers are not of ARES: their keys are not checked. levels of the multigrid
+  !> section is read outside the registry (Scan_Ini). Comment lines (they start with !, ; or #) are skipped, as the
+  !> reader skips them since FiNeR 2.1.0, also when they hold "=" or a bracket.
   subroutine Warn_Unread_Keys(fini)
     use Finer,        only: file_ini
     use ARES_Mod_MPI, only: mpi_is_root
+    use ARES_Input_Registry, only: Key_Is_Registered, Section_Is_Registered
+    use ARES_Parameters_m,   only: codename
     implicit none
     type(file_ini), intent(in) :: fini
     ! Local
     character(len=1024) :: line, section, key, val
     integer :: unit, ios, n, eq, error
+    logical :: own
 
     if (.not. mpi_is_root) return
     open(newunit=unit, file='input.ini', status='old', action='read', iostat=ios)
@@ -75,6 +82,14 @@ contains
       call fini%get(section_name=trim(section), option_name=trim(key), val=val, error=error)
       if (error /= 0) write(*,'(A,I0,A)') '[WARNING] input.ini, line ', n, ': '//trim(key)//' of ['//trim(section)// &
         '] is not read (the INI reader does not give it): its parameter keeps its default'
+      if (error == 0) then
+        own = index(trim(section), trim(codename)//'-') == 1 .or. &
+              (Section_Is_Registered(trim(section)) .and. index(trim(section), 'HYDRA-') /= 1)
+        if (own .and. .not. Key_Is_Registered(trim(section), trim(key)) .and. &
+            .not. (trim(key) == 'levels' .and. index(trim(section), '-Multigrid') > 0)) &
+          write(*,'(A,I0,A)') '[WARNING] input.ini, line ', n, ': '//trim(key)//' of ['//trim(section)// &
+            '] is not a key of ARES: ignored'
+      end if
     end do
     close(unit)
 

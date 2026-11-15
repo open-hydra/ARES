@@ -5,14 +5,14 @@ At every cell interface the convective flux is computed by approximately (or, wi
 | `riemann-solver` | Internal name | Family | Preconditioned | Notes |
 |------------------|---------------|--------|:--------------:|-------|
 | `Rusanov` | Local Lax–Friedrichs (Rusanov) | central + max-eigenvalue dissipation | no | Most robust, most diffusive |
-| `PLLF` | Preconditioned Local Lax–Friedrichs | central + preconditioned dissipation | **yes** | Low-Mach companion of Rusanov |
+| `PLLF` | Preconditioned Local Lax–Friedrichs | central + preconditioned dissipation | no (own $U_r$) | Rusanov with a low-Mach spectral radius; without `prec` only |
 | `HLLE` | HLLE | HLL two-wave | no | Positivity-preserving; smears contacts |
 | `HLLC` | HLLC (Batten) | HLL three-wave | no | Default; resolves the contact/shear |
 | `HLLC Prec` | Preconditioned HLLC | HLL three-wave | **yes** | HLLC with preconditioned wave speeds |
-| `HLLC Rotated` | Rotated HLLC Batten / HLLE | hybrid | no | Carbuncle-resistant rotated-Riemann |
+| `HLLC Rotated` | Rotated HLLC Batten / HLLE | hybrid | no | Carbuncle-resistant rotated-Riemann; 2-D meshes (plane or wedge) only |
 
 !!! tip "Choosing a solver"
-    Start from **HLLC** (the default) for most flows — it resolves contact and shear layers that HLLE smears. For **low-Mach** runs combine the preconditioner (`integration-variables = prec`) with **`HLLC Prec`** or **`PLLF`**, whose dissipation is scaled consistently so accuracy does not collapse as $M\to0$. For strong-shock / blunt-body flows prone to the carbuncle, use **`HLLC Rotated`**. Use **`Rusanov`** when robustness matters more than resolution.
+    Start from **HLLC** (the default) for most flows — it resolves contact and shear layers that HLLE smears. For **low-Mach** runs combine the preconditioner (`integration-variables = prec`) with **`HLLC Prec`**, whose dissipation is scaled consistently so accuracy does not collapse as $M\to0$ (the set-up refuses any other solver with `prec`, and `HLLC Prec` without it). For strong-shock / blunt-body flows prone to the carbuncle, use **`HLLC Rotated`**. Use **`Rusanov`** when robustness matters more than resolution.
 
 ---
 
@@ -76,21 +76,24 @@ ARES uses the Batten et al. formulation of the intermediate states. HLLC resolve
 For low-Mach flows the acoustic eigenvalues $u_n\pm a$ are enormous compared with the convective speed $u_n$, so the upwind dissipation $\propto|\lambda|$ overwhelms the physical fluxes and accuracy collapses. The **preconditioned** solvers replace the acoustic speed by the *preconditioned* eigenvalues built from the reference velocity $U_r$ (see [Low-Mach Preconditioning](preconditioning.md)):
 
 $$
-u_n' = \tfrac12 u_n\,(1+\alpha),\qquad
-a' = \sqrt{\tfrac14 u_n^2(1-\alpha)^2 + U_r^2},\qquad
-\alpha = \frac{U_r^2}{a^2}\ \ (\text{schematically}),
+u_n' = u_n\,(1-\alpha),\qquad
+a' = \sqrt{\alpha^2 u_n^2 + U_r^2},\qquad
+\alpha = \tfrac12\Bigl(1 - \frac{U_r^2}{a^2}\Bigr),
 $$
 
-so the dissipation scales with $U_r$ (the convective scale) instead of $a$. `PLLF` applies this to the Rusanov dissipation; `HLLC Prec` applies it to the HLLC wave speeds $S_L, S_R$. They are the solvers to use whenever `integration-variables = prec`.
+with $a$ the speed of sound of each state, so the dissipation scales with $U_r$ (the convective scale) instead of $a$.
 
-!!! warning "Match the solver to the update"
-    The preconditioned solvers are only consistent when the preconditioned update is active. Using `HLLC Prec` / `PLLF` without `integration-variables = prec` (or vice-versa) mixes scalings and is not recommended.
+- **`HLLC Prec`** applies this to the HLLC wave speeds $S_L, S_R$ (with the Roe averages of $u_n'$ and $a'$), with $U_r$ from `comp_Ur` (`preconditioning-Uref`, `preconditioning-eps-min`). It is the solver of `integration-variables = prec`: the set-up stops on `prec` with any other solver, and on `HLLC Prec` without `prec`.
+- **`PLLF`** applies it to the Rusanov dissipation, with its own reference velocity, the normal velocity of each state bounded within $[10^{-5} a, a]$ (it does not read the preconditioning keys). It is used with the standard update (without `prec`): a Rusanov flux whose dissipation scales with the normal velocity.
 
 ---
 
 ## Rotated HLLC (carbuncle cure)
 
 Strong grid-aligned shocks can trigger the *carbuncle* instability with single-direction upwind solvers. The **rotated** solver of Nishikawa & Kitamura evaluates the Riemann problem in two locally-defined directions: one aligned with the velocity-difference vector (where it uses the diffusive **HLLE** flux to damp the instability) and one orthogonal (where it uses the sharp **HLLC** flux). Blending the two yields a flux that is carbuncle-resistant at shocks yet accurate elsewhere — useful for blunt-body and hypersonic cases.
+
+!!! warning "2-D meshes only"
+    The second direction is built in the $x$–$y$ plane, and the $z$ flux is set to zero on faces with $n_z = 0$: the solver holds on plane and wedge (axisymmetric) meshes only, and the set-up stops when `HLLC Rotated` is chosen on a 3-D mesh.
 
 ---
 
@@ -103,16 +106,16 @@ For most real-fluid wall-bounded simulations, start with the default **`HLLC`** 
 | Flow type | Recommended `riemann-solver` | Reason |
 |-----------|------------------------------|--------|
 | General subsonic / transonic | `HLLC` | Accurate, robust default |
-| **Low-Mach** (with `integration-variables = prec`) | `HLLC Prec` or `PLLF` | Dissipation scaled consistently as $M\to0$ |
-| Strong-shock / blunt-body / hypersonic | `HLLC Rotated` | Carbuncle-resistant |
+| **Low-Mach** (with `integration-variables = prec`) | `HLLC Prec` | Dissipation scaled consistently as $M\to0$ (the only solver taken with `prec`) |
+| Strong-shock / blunt-body / hypersonic, 2-D | `HLLC Rotated` | Carbuncle-resistant (plane or wedge meshes only) |
 | Robustness over resolution (start-up, bad cells) | `Rusanov` / `HLLE` | Most diffusive, most stable |
 | Emergency (solver divergence) | `Rusanov` | Maximum stability; accept extra diffusion |
 
 ### Convergence Tips
 
 1. **Start robust, refine if needed.** Begin a difficult case on `HLLE`/`Rusanov`, then switch to `HLLC` once the residual is descending cleanly.
-2. **Pair preconditioned solvers with the preconditioned update.** `HLLC Prec` / `PLLF` are only consistent with `integration-variables = prec` (and vice-versa) — mixing the two scalings is not recommended.
-3. **Carbuncle on blunt bodies.** If a bow shock develops odd-even decoupling, move to `HLLC Rotated`.
+2. **Pair the preconditioned solver with the preconditioned update.** `integration-variables = prec` takes `HLLC Prec`, and `HLLC Prec` takes `prec`: the set-up stops on any other pairing.
+3. **Carbuncle on blunt bodies.** If a bow shock develops odd-even decoupling on a 2-D mesh, move to `HLLC Rotated`.
 4. **Coarse vs. fine meshes.** Coarse meshes tolerate the more dissipative solvers; fine meshes benefit from `HLLC` to avoid smearing boundary layers.
 
 ---

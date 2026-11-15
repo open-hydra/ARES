@@ -8,6 +8,7 @@ contains
   subroutine Setup_RANS_Model ()
     use ARES_Config_Types_m, only: obj_rans
     use ARES_Global_m
+    use ARES_Mod_MPI,        only: mpi_is_root, mpi_stop_all
     use ARES_Lib_RANS
     use ARES_Lib_Fluid
     use ARES_Lib_Spalart
@@ -61,8 +62,10 @@ contains
     ! Spalart-Allmaras: it is only meaningful with a SA model and active roughness.
     if ( obj_rans%Prt_correction ) then
       if ( index(trim(obj_rans%model), 'SA') == 0 .or. .not. obj_rans%rough ) then
-        write(*,'(A)') '[ERROR] Prt-correction requires a Spalart-Allmaras model with roughness (-rough) enabled.'
-        stop 1
+        ! Every rank sets the model up from the same input: the ranks stop together
+        if (mpi_is_root) &
+          write(*,'(A)') '[ERROR] Prt-correction requires a Spalart-Allmaras model with roughness (-rough) enabled.'
+        call mpi_stop_all ( 'Prt-correction without a rough Spalart-Allmaras model (see above)' )
       end if
       ! The correlation was calibrated for the standard turbulent Prandtl number Prt = 0.9.
       if ( abs(obj_rans%Prt - 0.9d0) > 1.0d-6 ) then
@@ -81,17 +84,18 @@ contains
     ! 'practical'  -> C = 60/beta_1 = 800 : Menter's robust form, as the NASA TMR gives it on the SST
     !                 page (with the beta_1 of SST) and as its Wilcox 2006 page refers to it, for every
     !                 model; meant for meshes that do not resolve the viscous sublayer.
-    ! 'asymptotic' -> C = 6/beta : exact y->0 limit of the omega equation of the model, beta_1 for SST
-    !                 and SSGLRR (80: the omega equation of SSGLRR takes beta = 0.075 at the wall, as SST)
-    !                 and beta_0 for Wilcox 2006 (84.7, set with the model below); the consistent choice on a
-    !                 wall-resolved (y+ < 1) mesh.
+    ! 'asymptotic' -> C = 6/beta : the value of the y->0 limit of the omega equation of the model set at the
+    !                 wall face, beta_1 for SST and SSGLRR (80: the omega equation of SSGLRR takes beta = 0.075
+    !                 at the wall, as SST) and beta_0 for Wilcox 2006 (84.7, set with the model below). Kept for
+    !                 comparison: the TMR Wilcox page (after Menter 1994) calls it not appropriate as a wall
+    !                 value; the consistent use of the limit is sst-asymptotic (imposed in the first cells).
     select case ( trim(obj_rans%omega_wall_bc) )
     case ( 'practical' )
       obj_rans%omega_wall_coef = 8d2
     case ( 'asymptotic' )
       obj_rans%omega_wall_coef = SST_omega_wall_asymptotic
     case default
-      error stop ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
+      call mpi_stop_all ( 'Error: omega-wall-bc must be "practical" or "asymptotic".' )
     end select
 
     ! SST production term.
@@ -104,13 +108,13 @@ contains
     case ( 'compressible' )
       obj_rans%sst_compressible = .true.
     case default
-      error stop ( 'Error: sst-production must be "incompressible" or "compressible".' )
+      call mpi_stop_all ( 'Error: sst-production must be "incompressible" or "compressible".' )
     end select
 
     obj_rans%description = 'RANS model: '//trim(obj_rans%model)
 
     ! Setting RANS or NS model
-    ! 'none' is laminar Navier-Stokes (viscous, no turbulence model), as in MOSE:
+    ! 'none' is laminar Navier-Stokes (viscous, no turbulence model):
     ! Assign_Setup sets it for equations = navier-stokes without a model and for euler.
     if ( index ( trim(obj_rans%model), 'none' ) > 0 ) then
       nRANS = 0

@@ -9,7 +9,7 @@ contains
 
   subroutine Setup_Multigrid ( simulation )
     use ARES_Advanced_Types_m
-    use ARES_Config_Types_m, only: obj_multigrid
+    use ARES_Config_Types_m, only: obj_multigrid, obj_sim_param
     use ARES_Lib_Multigrid, only: Check_Multigrid, Coarse_Grid, Coarse_IOfield
     use ARES_Mod_Allocate_Data, only: Allocate_Block
     implicit none
@@ -53,6 +53,8 @@ contains
     do m = 1, obj_multigrid%MGL
       simulation%domain(m)%itermax = obj_multigrid%iter_threshold(m)
     enddo
+    ! level1-iter left out: the finest level runs to iter-threshold, as a run with one level
+    if ( obj_multigrid%iter_threshold(1) == 0 ) simulation%domain(1)%itermax = obj_sim_param%iter_threshold
 
   end subroutine Setup_Multigrid
 

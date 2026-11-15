@@ -21,6 +21,10 @@ module ARES_Lib_BC_Fluxes_Extrapolation
   real(R8), allocatable :: w_400_line(:,:)
   real(R8), allocatable :: x_400_line(:,:,:)
   integer :: count_400_line = 0
+  !> Flux evaluations in which an inlet (404, 405) took the face as a slip wall because the gas of the boundary cell was
+  !> not moving into the domain (at rest included), and in which an outlet (406) did so because it was moving in:
+  !> reported at the end of a run in which it happened (Report_Closed_Faces)
+  integer(I8) :: n_inlet_closed = 0, n_outlet_closed = 0
 
 contains
 
@@ -187,5 +191,41 @@ contains
                                                                nint(n, I8), ', largest |w|/a: ', x
 
   end subroutine Report_400_Entering
+
+
+  !> Counts one flux evaluation in which an inlet (inlet = true) or an outlet acted as a slip wall (thread-safe)
+  subroutine Count_Closed ( inlet )
+    implicit none
+    logical, intent(in) :: inlet
+
+    if ( inlet ) then
+      !$omp atomic
+      n_inlet_closed = n_inlet_closed + 1
+    else
+      !$omp atomic
+      n_outlet_closed = n_outlet_closed + 1
+    end if
+
+  end subroutine Count_Closed
+
+
+  !> One line at the end of a run in which an inlet (404, 405) acted as a slip wall because the gas of its boundary cell
+  !> was not moving into the domain (a cell at rest included: an initial condition at rest with a mass-flux inlet never
+  !> starts), and one when an outlet (406) did because the gas was moving in: the flux evaluations, over every stage,
+  !> grid level and rank. A run in which none did prints no line. Collective: every rank calls it, and both reductions,
+  !> in every run, so that no rank takes another MPI path; rank 0 writes the lines when their totals are not zero.
+  subroutine Report_Closed_Faces ()
+    use ARES_Mod_MPI, only: mpi_is_root, mpi_allreduce_sum_r8
+    implicit none
+    real(R8) :: nin, nout
+
+    call mpi_allreduce_sum_r8 ( real(n_inlet_closed, R8), nin )
+    call mpi_allreduce_sum_r8 ( real(n_outlet_closed, R8), nout )
+    if ( mpi_is_root .and. nin > 0d0 ) write(*,'(A,I0)') &
+      ' Inlet faces (404, 405) taken as walls (gas of the cell not moving inward), flux evaluations: ', nint(nin, I8)
+    if ( mpi_is_root .and. nout > 0d0 ) write(*,'(A,I0)') &
+      ' Outlet faces (406) taken as walls (gas of the cell moving inward), flux evaluations: ', nint(nout, I8)
+
+  end subroutine Report_Closed_Faces
 
 end module ARES_Lib_BC_Fluxes_Extrapolation

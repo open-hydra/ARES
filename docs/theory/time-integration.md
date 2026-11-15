@@ -64,14 +64,15 @@ The row index $s$ is the scheme order (1 = `euler`, 2 = `RK2`, 3 = `RK3`) and th
 
 ### State update per stage
 
-At each RK stage:
+At each RK stage ARES updates the primitive variables $\mathbf P = (p, u, v, w, h)$ (and the density-weighted turbulence variables) directly; no conservative state is formed and no table is inverted:
 
-1. Form the conservative state from primitives via the real-fluid table, $\mathbf U = \text{prim2cons}(\mathbf P)$.
-2. Scale the residual, $\mathbf R^\ast = -\mathbf R\,\Delta t / V$.
+1. Map the residual of the conservative equations to the primitive variables with the Jacobian $\partial\mathbf P/\partial\mathbf U$ of the stage state, built from $\rho$, $\partial\rho/\partial p|_h$ and $\partial\rho/\partial h|_p$ of the table (with `prec`, $\partial\rho/\partial p$ is replaced by the preconditioned $\Theta = 1/U_r^2 - (\partial\rho/\partial h)/\rho$); the turbulence variables take their residual as it is.
+2. Scale it, $\mathbf R^\ast = -\mathbf R\,\Delta t / V$.
 3. *(Optional)* apply [implicit residual smoothing](#implicit-residual-smoothing-irs) to $\mathbf R^\ast$.
 4. Combine according to the RK coefficients.
-5. Recover primitives by **thermo inversion**, $\mathbf P^{(k)} = \text{cons2prim}(\mathbf U^{(k)})$, inverting the $(p,h)$ table from the updated $(\rho,e)$.
-6. Enforce realizability (positive pressure, in-range enthalpy).
+5. Check the state: a value that is not finite, a negative pressure, or a pressure or enthalpy outside the fluid tables stop the run with the cell; the turbulence variables are brought to their floors (realizability).
+
+The update is exact at steady state (a zero residual leaves the state unchanged), but it is not discretely conservative in time, since the Jacobian is that of the stage state. The "Thermo inversion" line of the loading report is the inverse table $h(p, T)$ that ARES builds from $T(p, h)$ at loading, for the wall and boundary temperatures.
 
 !!! note "Primitive vs. preconditioned update"
     With `integration-variables = prim` the residual is applied in primitive variables directly. With `integration-variables = prec` the update is performed in the preconditioned variables, scaling the pseudo-time term by the preconditioning matrix — see [Low-Mach Preconditioning](preconditioning.md).
@@ -113,7 +114,9 @@ $(\partial\rho/\partial p)_T = (\partial\rho/\partial p)_h + (\partial\rho/\part
 ([Thermodynamics](thermo.md)); for a perfect gas it is $c_p - R$. The last term enters with
 Spalart–Allmaras ($\sigma = 2/3$). The $k$ and $\omega$ diffusivities of SST and Wilcox 2006,
 $(\mu_\ell + \sigma\mu_t)/\rho$ with $\sigma \le 1$, stay below the momentum one. The eddy viscosity
-is that of the state of the cell at zero strain. Euler runs have no diffusive term.
+is that of the state of the cell at zero strain; with a `-rough` model it takes the distance and the roughness
+of the nearest wall, so that the roughness term of Spalart–Allmaras ($c_{R1}k_s/(y + 0.03\,k_s)$ in $\chi$,
+[Turbulence](turbulence.md)) raises it next to rough walls as in the fluxes. Euler runs have no diffusive term.
 
 In 3-D, on a cell whose three directions are skewed against each other, the viscous rate is
 multiplied by $F = (2 + m + 1/m)/4$: with $a$, $b$, $c$ the cosines of the angles between the three
@@ -298,7 +301,7 @@ $$
 \mathbf R^\ast_i = \frac{\mathbf R_i + \varepsilon(\mathbf R^\ast_{i-1} + \mathbf R^\ast_{i+1})}{1 + 2\varepsilon},
 $$
 
-approximated with a couple of Jacobi sweeps. The stable CFL limit is amplified by roughly $1+2\varepsilon$; typical $\varepsilon$ (`irs-beta`) is 0.1–0.5. Enable it with `irs = .true.`.
+approximated with two Jacobi sweeps from $\mathbf R^\ast = \mathbf R$. On the shortest wave ($\mathbf R_{i\pm1} = -\mathbf R_i$) the two sweeps give the gain $g = (1 + 4\varepsilon^2)/(1 + 2\varepsilon)^2$, smallest, $1/2$, at $\varepsilon = 1/2$: `irs-beta = 0.5` damps that wave the most, and a larger value damps it less. Enable it with `irs = .true.`.
 
 ### Steady runs only
 
@@ -328,27 +331,30 @@ off.
 
 ## Multigrid Acceleration
 
-ARES supports **geometric multigrid** with $2\!:\!1$ coarsening per direction to accelerate convergence to steady state. The number of levels is set by `levels` in `[ARES-Multigrid]`, and the work per level by the `levelN-iter` counts.
+ARES supports **geometric grid sequencing** with $2\!:\!1$ coarsening per direction to accelerate convergence to steady state: the run starts on the coarsest level, runs its `levelN-iter` iterations, prolongates the solution to the next finer level, and so on down to the finest, one way, from coarse to fine. The number of levels is set by `levels` in `[ARES-Multigrid]`, and the work per level by the `levelN-iter` counts; the finest level runs `level1-iter` iterations, or `iter-threshold` when `level1-iter` is not given (or 0), and a coarse level whose `levelN-iter` is 0 runs one iteration (with a warning).
 
 ### Grid hierarchy
 
 - Each coarse cell aggregates $2^d$ fine cells ($d$ = active spatial dimensions); for 2-D grids ($n_k=1$) coarsening acts only in $i$ and $j$.
-- The fine-grid dimensions must be divisible by $2^{\text{levels}-1}$ in each active direction.
+- The fine-grid dimensions must be divisible by $2^{\text{levels}-1}$ in each active direction, with at least two
+  cells on the coarsest level (the ghost cells of the neighbouring blocks read two cells); otherwise the set-up stops
+  and names the block and the direction.
 - One boundary-condition table per level is required (ATLAS generates the coarse tables).
 
 ### Restriction (fine → coarse)
 
-Conservative volume averaging:
+At set-up the initial field of every coarse level is the volume average of the primitive variables of its fine cells:
 
 $$
-\mathbf U_\text{coarse} = \frac{1}{V_\text{coarse}}\sum_{\text{fine}\in\text{coarse}} \mathbf U_\text{fine}\,V_\text{fine}
+\mathbf P_\text{coarse} = \frac{\sum_{\text{fine}\in\text{coarse}} \mathbf P_\text{fine}\,V_\text{fine}}{\sum_{\text{fine}\in\text{coarse}} V_\text{fine}}
 $$
 
-(8-cell average in 3-D, 4-cell in 2-D). Coarse-grid primitives are recovered by thermo inversion of the averaged conservative state.
+(divided by the sum of the fine volumes, not by the coarse volume, which differs from it on curved lines, so that a
+uniform field stays uniform; 8-cell average in 3-D, 4-cell in 2-D).
 
 ### Prolongation (coarse → fine)
 
-The coarse-grid correction is transferred back with cubic interpolation (3-D) or biquadratic interpolation (2-D); each fine cell receives a weighted contribution from its parent and neighbouring coarse cells according to its position within the coarse cell.
+When a level has run its iterations, its solution (not a correction) is transferred to the next finer level with trilinear interpolation (3-D) or bilinear interpolation (2-D) between cell centres; each fine cell receives a weighted contribution from its parent and neighbouring coarse cells according to its position within the coarse cell.
 
 **Interpolation weights.** In 3-D each fine cell is built from its parent coarse cell plus the three face-, three edge- and one corner-neighbour selected toward its octant:
 
@@ -367,11 +373,11 @@ a_2 = \tfrac{3}{16},\quad
 a_3 = \tfrac{1}{16},
 $$
 
-with $a_1 + 2\,a_2 + a_3 = 1$. The weights are normalised by construction, so the prolongation is conservative in the mean.
+with $a_1 + 2\,a_2 + a_3 = 1$. The weights sum to one, so a uniform field stays uniform.
 
-### Cycle
+### No cycles
 
-A V-cycle (pre-smooth → restrict → coarse solve → prolong → post-smooth) is the default; the driver can recurse for W-cycles. Multigrid can also accelerate each physical step of a transient run.
+There is no V- or W-cycle and no coarse-grid forcing term: each level solves its own discrete equations, and the coarse levels only provide the starting field of the finer ones. Once the finest level runs, the coarse levels are not visited again.
 
 ---
 

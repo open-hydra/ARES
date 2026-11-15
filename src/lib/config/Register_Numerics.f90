@@ -35,13 +35,13 @@ contains
     call reg%add( trim(section), 'vnn', obj_time_scheme%vnn, '0.3', &
                   'Diffusion number of the largest diffusivity summed over the directions (RK2 <= 0.5, RK3 <= 0.62)', &
                   '> 0', .false. )
-    call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'CFL rise threshold', '>= 0', .false. )
+    call reg%add( trim(section), 'cfl-rise-threshold', obj_time_scheme%rampa_cfl_iter, '0', 'Iterations over which the time step is ramped up from 1/N of its value (0 = off)', '>= 0', .false. )
 
     ! Time-accurate switch
-    call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time accurate switch', 'logical', .true. )
+    call reg%add( trim(section), 'time-accurate', obj_time_scheme%time_accurate, '.false.', 'Time-accurate switch (false = march to steady state)', 'logical', .true. )
 
     ! New state
-    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'prim', 'Integration variables (prim/prec)', 'prim, prec', .false. )
+    call reg%add( trim(section), 'integration-variables', obj_time_scheme%integration_variables, 'prim', 'Update variables: primitive (prim) or preconditioned (prec, with riemann-solver = HLLC Prec)', 'prim, prec', .false. )
 
     ! Implicit residual smoothing --------------------------
     obj_irs%description     = 'none'
@@ -50,7 +50,8 @@ contains
     call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
           'Implicit Residual Smoothing (steady runs only; switched on only at setup)', 'logical', .false. )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
-          'IRS beta parameter (> 0 also enables IRS; steady runs only)', '>= 0', .false. )
+          'IRS smoothing coefficient (> 0 also enables IRS; steady runs only; 0.5 damps the shortest wave the most)', &
+          '>= 0', .false. )
     call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'all', &
           'Residuals smoothed by IRS: all (also the RANS equations; for Spalart-Allmaras: the k-omega models can '// &
           'diverge with all) or flow (mass, momentum, energy)', 'flow, all', .false. )
@@ -61,8 +62,8 @@ contains
     obj_prec%warning_message = 'none'
     obj_prec%error_message   = 'none'
     obj_prec%enabled         = .false.
-    call reg%add( trim(section), 'preconditioning-Uref', obj_prec%Uref, '-1.0', 'Reference velocity for preconditioning (< 0 = sound speed)', '', .false. )
-    call reg%add( trim(section), 'preconditioning-eps-min', obj_prec%emin, '-1.0', 'Minimum epsilon for preconditioning (< 0 = default 0.10)', '', .false. )
+    call reg%add( trim(section), 'preconditioning-Uref', obj_prec%Uref, '-1.0', 'Reference velocity for preconditioning (< 0 = local sound speed; it sets U_r only: alpha takes the speed of sound)', '', .false. )
+    call reg%add( trim(section), 'preconditioning-eps-min', obj_prec%emin, '-1.0', 'Minimum cut-off epsilon of the preconditioning parameter (< 0 = default 0.10)', '', .false. )
 
     !! ------------------------------------------------------
     !! Space Scheme ------------------------------------------
@@ -74,7 +75,8 @@ contains
     obj_space_scheme%error_message   = 'none'
     call reg%add( trim(section), 'space-reconstruction', obj_space_scheme%space_reconstruction, 'none', 'Space reconstruction method', 'MUSCL, first-order, none', .true. )
     call reg%add( trim(section), 'flux-limiter', obj_space_scheme%flux_limiter, 'none', &
-          'Flux limiter for MUSCL reconstruction (van Leer if omitted; ignored with first-order)', &
+          'Flux limiter for MUSCL reconstruction (van Leer if omitted or none; ignored with first-order; mc and MC are the '// &
+          'same limiter)', &
           'vanalbada, minmod, superbee, vanleer, mc, MC, LIMO3, none', .false. )
     call reg%add( trim(section), 'diffusive-metric', obj_space_scheme%diffusive_metric, 'stencil', &
                   'Face metric of the viscous fluxes: stencil takes the face Jacobian from the same differences of '// &
@@ -92,8 +94,7 @@ contains
     obj_riemann%description     = 'none'
     obj_riemann%warning_message = 'none'
     obj_riemann%error_message   = 'none'
-    call reg%add( trim(section), 'riemann-solver', obj_riemann%description, 'HLLC', 'Riemann solver', 'Rusanov, PLLF, HLLE, HLLC, HLLC Prec, HLLC Rotated', .false. )
-    call reg%add( trim(section), 'riemann-options-Minf', obj_riemann%Minf, '0.0', 'Mach infinity for AUSM+-up', '>= 0', .false. )
+    call reg%add( trim(section), 'riemann-solver', obj_riemann%description, 'HLLC', 'Riemann (numerical flux) solver (HLLC Prec with prec only, and prec with HLLC Prec only; HLLC Rotated on 2-D meshes only)', 'Rusanov, PLLF, HLLE, HLLC, HLLC Prec, HLLC Rotated', .false. )
 
 
     ! Multigrid levels --------------------------------------
@@ -119,19 +120,20 @@ contains
     allocate( obj_multigrid%iter_threshold(obj_multigrid%MGL) )
     obj_multigrid%iter_threshold = 0
 
-    ! Register per-level iteration parameters (level-2-iter, level-3-iter, ...)
+    ! Register per-level iteration parameters (level1-iter, level2-iter, ...): 0, the default, runs the finest level to
+    ! iter-threshold (Setup_Multigrid) and a coarse level for one iteration
     ! HYDRA coupling registers them under a dedicated section.
     if (.not. obj_sim_param%HYDRA_MG) then
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
+        call reg%add( trim(codename)//'-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime; 0 = iter-threshold on level 1, one iteration on a coarse level)', '>= 0', .false. )
       enddo
       call reg%add( trim(codename)//'-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
         'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime)', '>= 0', .false. )
     else
       do m = 1, obj_multigrid%MGL
         write(option,'(A5,I0,A5)') 'level', m, '-iter'
-        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime)', '>= 0', .false. )
+        call reg%add( 'HYDRA-Multigrid', trim(option), obj_multigrid%iter_threshold(m), '0', 'Iterations for multigrid level '//trim(str(.true.,m))//' (re-read at runtime; 0 = iter-threshold on level 1, one iteration on a coarse level)', '>= 0', .false. )
       enddo
       call reg%add( 'HYDRA-Multigrid', 'prolongated-diter', obj_multigrid%prolongated_diter, '0', &
         'Coarse levels: least level iterations between two writes of field/wall-prolongated, which are always written at the end of a level (0 = with every field write; re-read at runtime)', '>= 0', .false. )

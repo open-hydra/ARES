@@ -4,7 +4,7 @@ module ARES_Lib_QCR2000
   use ARES_Lib_Fluid, only: Vorticity_Vector, Vorticity_Tensor
 
   implicit none
-  real(R8), parameter, private :: C_cr1 = 0.3
+  real(R8), parameter, private :: C_cr1 = 0.3_R8
 
 contains
 

@@ -4,18 +4,18 @@ Shared helpers for the NASA-TMR turbulent flat-plate validation scripts
 (validate_sst.py, validate_wilcox2006.py, validate_ssglrr.py).
 
 All three cases are the NASA Turbulence Modeling Resource 2D zero-pressure
-gradient flat plate, defined at Re = 5e6, M = 0.2. The ARES runs use the
-real-fluid air table (mu ~ 2.9e-5 at T~555 K), so unless the inflow mass flux
-is rescaled the run sits at a LOWER Reynolds than the nominal 5e6:
+gradient flat plate, defined at Re = 5e6, M = 0.2. The three cases set a
+constant mu = 1.18587e-5 in transport.dat (set_constant_transport.py), so that
+with g = 59.29 the run is at Re/m = 5e6:
 
-  * cf(x)  -> compared in a Reynolds-consistent way: the tabulated NASA cf is
-             re-expressed at the run's own Re_x (cf_ref(x) = cf_NASA(Re_x(x))),
-             exactly as the laminar script evaluates Blasius at the run's Re_x.
+  * cf(x)  -> compared against x (validate_cf), which holds at Re/m = 5e6
+             only; the script warns when the run is more than 10 % away.
+             (Only validate_sa.py compares in Re_x space.)
   * wall-normal profiles at the NASA station x~0.97 (mut/mu, k+, omega+) are
              Reynolds-sensitive and DO NOT collapse if the run is not at
              Re = 5e6. The scripts print a clear warning in that case.
 
-cf definition (from each PLOT.lay):
+cf definition:
     Tau_x = mu * |dU/dy|_wall ,   c_f = Tau_x / (0.5 * rho_inf * U_inf^2)
 Here the solver's own wall shear tau (column 25 of 1d.dat) is used.
 """
@@ -179,7 +179,7 @@ def wall_profile(xN, yN, cv, varlist, x_station):
 
 # --------------------------------------------------------------------------- #
 def reference_curves(zones):
-    """Reference zones to plot, as MOSE's verify.py does: finest grid (level 1)
+    """Reference zones to plot: finest grid (level 1)
        or single-zone references, skipping coarse levels and the TAU solver."""
     out = []
     for name, arr in zones.items():
@@ -192,8 +192,8 @@ def reference_curves(zones):
     return out
 
 
-def validate_cf(f_field, f_wall, f_cf, cell_vars, case_name, ares_color="C0"):
-    """Skin friction cf(x), computed exactly like MOSE's verify.py:
+def validate_cf(f_field, f_wall, f_cf, cell_vars, case_name):
+    """Skin friction cf(x):
          - wall shear tauX read from wall.tec (solver value, AT the wall),
          - free-stream U_inf, rho_inf from the field edge,
          - Cf = tauX / (0.5 * rho_inf * U_inf**2),
@@ -219,7 +219,7 @@ def validate_cf(f_field, f_wall, f_cf, cell_vars, case_name, ares_color="C0"):
     m = xc > 0.0
     xp, cf = xc[m], tau[m] / (0.5 * rho_inf * U_inf**2)
 
-    # error vs the primary reference (CFL3D if present, else FUN3D), MOSE-style
+    # error vs the primary reference (CFL3D if present, else FUN3D)
     zones = read_tecplot_zones(f_cf)
     zname, ref = pick_zone(zones)
     x_hi = min(xp.max(), ref[:, 0].max())
@@ -234,7 +234,7 @@ def validate_cf(f_field, f_wall, f_cf, cell_vars, case_name, ares_color="C0"):
     verdict = "PASS" if rms < 5.0 else "FAIL"
     print(f"  -> cf consistent with NASA-TMR reference : {verdict}  (tol 5% RMS)")
 
-    # ---- plot Cf vs x (MOSE verify.py style) ----
+    # ---- plot Cf vs x ----
     fig, ax = plt.subplots(figsize=(9, 6), num="cf")
     ax.plot(xp, cf, "o", ms=5, mfc="none", color='red', label=f"ARES ({case_name})")
     for name, arr in reference_curves(zones):

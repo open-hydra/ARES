@@ -163,7 +163,7 @@ omega = 6250.0       ; freestream omega
 
 Two optional groups apply to every inlet:
 
-- **Flow direction** — `alpha` (in-plane angle), `beta` (out-of-plane angle); with no angles the inflow is face-normal.
+- **Flow direction** — `alpha` and `beta`; with no angles the inflow is face-normal. The two inlets read them differently: on the mass-flux inlet (`404`) they are the angles of the velocity in the $x$–$y$ and $x$–$z$ planes, $V_y/V_x = \tan\alpha$ and $V_z/V_x = \tan\beta$; on the supersonic inlet (`405`) $\alpha$ is an azimuth and $\beta$ an elevation, direction $(\cos\alpha\cos\beta, \sin\alpha\cos\beta, \sin\beta)$. The two agree when one of the angles is zero.
 - **Turbulence inflow** — `nuTilde` for the SA models, `k` + `omega` for the two-equation models, `Rij` + `omega` for the RSM. `rf` is a relaxation factor (default 1).
 
 !!! info "Boundary turbulence values are specific"
@@ -186,7 +186,7 @@ type = outlet
 p    = 46.11e5       ; back (ambient) pressure [Pa]
 ```
 
-The inlet and outlet routines fall back to a symmetry wall if the local state would make the boundary ill-posed (e.g. reversed flow). An outlet with `p = 0` reverts to extrapolation.
+An inlet (`404`, `405`) takes its face as a slip (symmetry) wall, for that evaluation, when the gas of its boundary cell is not moving into the domain — a cell at rest included: a mass-flux inlet takes nothing from the velocity of the cell, so a case started at rest, with the outlet at the initial pressure, never starts moving. An outlet (`406`) does the same when the gas of its cell moves into the domain. At the end of a run in which it happened one line gives the number of flux evaluations of each kind; start such a case with a velocity into the domain at the inlet. An outlet with `p = 0` reverts to extrapolation.
 
 ---
 
@@ -267,7 +267,6 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 
 | Code | `[BCB]` `type` | Meaning | Data line |
 |:----:|----------------|---------|-----------|
-| `0`   | `null`          | Interior / no BC | — |
 | `101` | `connection`    | Abutting inter-block interface | — |
 | `102` | `chimera`       | Overset interface: the two ghost cells take the volume-fraction mean of the donor-cell primitives | `n1 n2`, then `n1+n2` lines `bD iD jD kD vol_frac` |
 | `103` | —               | Multi-solver (HYDRA) coupling: symmetry wall + external flux | `bS iS jS kS fS d11 d12 d21 d22 [ks]` |
@@ -282,7 +281,7 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 | `405` | `inlet` (`mach`,…) | Supersonic inlet: Mach + static `T` + static `p` | `M, T, p, α, β, rel[, turb]` |
 | `406` | `outlet` (`p`)  | Subsonic outlet: back pressure `pAmb` | `p, rel` |
 
-where `α`, `β` are the in-plane / out-of-plane inflow angles (`normal` = face-normal) and `rel` a relaxation factor. The mass flux `g` of the inlet `404` is positive into the domain on every face: zero, or a negative value on a face 1, 3 or 5, stops the run at set-up (an inlet only lets gas in; give a face where the gas leaves an outlet type, `406` or `400`); on a face 2, 4 or 6 a negative value is taken as its magnitude. The supersonic inlet `405` with `α` and `β` both `normal` lets the gas in along the normal of the face into the domain, on every face; with one angle `normal`, that angle is the one of that normal (`α` its azimuth, `β` its elevation). On an inlet, `turb` is the trailing group of as many values as the model transports (1, 2 or 7), read by position as the **specific** quantities `nuTilde`, `k`, `omega`, `Rij` — see [Inlets](#inlets) above. The inlet/outlet routines fall back to a symmetry wall if the local state would make the BC ill-posed (e.g. reversed flow).
+where `α`, `β` are the inflow angles (`normal` = face-normal; `404`: $V_y/V_x = \tan\alpha$, $V_z/V_x = \tan\beta$; `405`: azimuth and elevation, see [Inlets](#inlets)) and `rel` a relaxation factor: required on the three lines, it is used by the supersonic inlet `405` only, which blends its Mach number and pressure with those of the cell, $\text{rel}\,M_\text{bc} + (1-\text{rel})\,M_\text{cell}$. A type that is not in this table stops the run at set-up with the line of `bc.txt`; so do a block or a face out of range, a cell outside its block or not next to the face it names, two records for the same cell and face, and a temperature or a pressure of a data line (`302` `T`; `404` `T`; `405` `p` and `T`; `406` `p` when not zero) outside the range of the fluid tables. The mass flux `g` of the inlet `404` is positive into the domain on every face: zero, or a negative value on a face 1, 3 or 5, stops the run at set-up (an inlet only lets gas in; give a face where the gas leaves an outlet type, `406` or `400`); on a face 2, 4 or 6 a negative value is taken as its magnitude. The supersonic inlet `405` with `α` and `β` both `normal` lets the gas in along the normal of the face into the domain, on every face; with one angle `normal`, that angle is the one of that normal (`α` its azimuth, `β` its elevation). On an inlet, `turb` is the trailing group of as many values as the model transports (1, 2 or 7), read by position as the **specific** quantities `nuTilde`, `k`, `omega`, `Rij` — see [Inlets](#inlets) above. An inlet or an outlet whose cell has the gas moving the wrong way, or at rest on an inlet, acts as a slip wall for that evaluation, and the end of the run counts the evaluations (see [Outlets](#outlets)).
 
 ### Example — mass-flux inlet (type 404)
 

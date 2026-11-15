@@ -324,16 +324,20 @@ contains
       case (3) ; pivot = pz(hi)
     end select
 
+    ! Keys equal to the pivot go to the two sides in turn (by the parity of i): with all of them on one side, a set of
+    ! equal keys (the z of every wall face of a 2-D mesh, the normal coordinate of a plane wall) would be split one
+    ! point at a time, in quadratic time and with a recursion as deep as the points. The queries need left <= pivot
+    ! <= right only, which holds with equal keys on either side
     p = lo
     do i = lo, hi - 1
       select case (axis)
-        case (1) ; if (px(i) < pivot) then
+        case (1) ; if (px(i) < pivot .or. (px(i) <= pivot .and. mod(i, 2) == 0)) then
                      call swap_point(px, py, pz, perm, p, i); p = p + 1
                    end if
-        case (2) ; if (py(i) < pivot) then
+        case (2) ; if (py(i) < pivot .or. (py(i) <= pivot .and. mod(i, 2) == 0)) then
                      call swap_point(px, py, pz, perm, p, i); p = p + 1
                    end if
-        case (3) ; if (pz(i) < pivot) then
+        case (3) ; if (pz(i) < pivot .or. (pz(i) <= pivot .and. mod(i, 2) == 0)) then
                      call swap_point(px, py, pz, perm, p, i); p = p + 1
                    end if
       end select

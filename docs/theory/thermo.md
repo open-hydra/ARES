@@ -35,7 +35,6 @@ The state variable is the pair $(p,h)$. Every other thermodynamic or transport q
 | Density | $\rho$ | `rho_tab` |
 | Temperature | $T$ | `T_tab` |
 | Speed of sound | $a$ | `sound_tab` |
-| Specific heat ratio | $\gamma$ | `gamma_tab` |
 | $\partial h/\partial T\big|_p$ ($=c_p$) | $c_p$ | `hT_tab` |
 | Dynamic viscosity | $\mu_\ell$ | transport table |
 | Thermal conductivity | $k_\ell$ | transport table |
@@ -61,9 +60,9 @@ The real-fluid EOS enters the solver at three points:
 
 1. **Primitive → conservative.** Given $(p,h)$, density $\rho=\texttt{ph2vars}(p,h,\texttt{rho\_tab})$ closes the conservative vector $\mathbf U = [\rho,\rho\mathbf u,\rho E_0]$ with $e=h-p/\rho$.
 
-2. **Conservative → primitive (thermo inversion).** From $(\rho,e)$ recovered after a time step, ARES inverts the table to find the $(p,h)$ consistent with the stored $\rho(p,h)$ and $e(p,h)=h-p/\rho$. This local two-variable inversion is the real-fluid replacement for the ideal-gas temperature Newton iteration, and is the "Thermo inversion … OK" line in the loading report.
+2. **No conservative → primitive inversion.** The time integration updates $(p,\mathbf u,h)$ directly ([State update per stage](time-integration.md#state-update-per-stage)), with $\rho$, $\partial\rho/\partial p|_h$ and $\partial\rho/\partial h|_p$ of the table. The "Thermo inversion … OK" line in the loading report is the inverse table $h(p,T)$ (`pT2h`) that ARES builds from $T(p,h)$ at loading: it gives the enthalpy of a prescribed temperature (302 walls, 404 and 405 inlets) and of the ghost cells of the walls.
 
-3. **Fluxes and time step.** The speed of sound, $\gamma$, $c_p$, and the transport coefficients needed by the [Riemann solvers](riemann-solvers.md), the [viscous fluxes](governing-equations.md#viscous-fluxes), the [CFL/VNN time step](time-integration.md#stability-conditions), and the [preconditioner](preconditioning.md) are all read from the table at the local $(p,h)$.
+3. **Fluxes and time step.** The speed of sound, $c_p$, and the transport coefficients needed by the [Riemann solvers](riemann-solvers.md), the [viscous fluxes](governing-equations.md#viscous-fluxes), the [CFL/VNN time step](time-integration.md#stability-conditions), and the [preconditioner](preconditioning.md) are all read from the table at the local $(p,h)$.
 
 ---
 

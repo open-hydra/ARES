@@ -1,18 +1,18 @@
 #!/bin/bash -
 #===============================================================================
 #
-#          FILE: MOSE.sh
+#          FILE: ARES.sh
 #
-#         USAGE: run "./MOSE.sh [options]" in the current shell
+#         USAGE: run "./ARES.sh [options]" in the current shell
 #
-#   DESCRIPTION: A script to compile and run MOSE
+#   DESCRIPTION: A script to compile and run ARES
 #===============================================================================
 
 function print_usage {
   echo
   echo "Tasks"
   echo " compile               -->     compile accordingly with the presets file"
-  echo " solve                 -->     run MOSE"
+  echo " solve                 -->     run ARES"
   echo " kill                  -->     kill the process"
   echo
   echo "Solver options"
@@ -96,7 +96,13 @@ if [[ $1 == solve ]]; then
     # qui serve solo per la localita' dei thread dentro il set di core del rank.
     export OMP_PROC_BIND=close
     export OMP_PLACES=cores
-    CMD="mpirun -np $NPROCS --map-by socket:PE=$NTHREADS $LOCAL"
+    # Le opzioni di mappatura dipendono dal lanciatore: Intel MPI (quello della build) vuole
+    # I_MPI_PIN_DOMAIN=omp (un dominio di OMP_NUM_THREADS core per rank), Open MPI --map-by.
+    if mpirun --version 2>&1 | grep -qi intel; then
+      CMD="mpirun -np $NPROCS -genv I_MPI_PIN_DOMAIN=omp $LOCAL"
+    else
+      CMD="mpirun -np $NPROCS --map-by socket:PE=$NTHREADS $LOCAL"
+    fi
   else
     # OpenMP puro: NIENTE pinning. Con OMP_PROC_BIND=close+OMP_PLACES=cores ogni
     # processo lanciato separatamente fisserebbe i thread sugli stessi primi

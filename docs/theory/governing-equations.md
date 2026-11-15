@@ -60,9 +60,7 @@ where $\rho = \rho(p,h)$ is read from the table.
 
 ### Transformation between primitive and conservative variables
 
-**Forward ($\mathbf{P} \to \mathbf{U}$).** With $(p,h)$ known, $\rho(p,h)$ comes from the table, momentum is $\rho\mathbf{u}$, and the total energy follows from $e = h - p/\rho$ plus the kinetic energy.
-
-**Inverse ($\mathbf{U} \to \mathbf{P}$).** Recovering $(p,h)$ from $(\rho, \rho\mathbf{u}, \rho E_0)$ is the *thermo inversion* reported during loading. The velocity is $\mathbf{u} = (\rho\mathbf{u})/\rho$, the static specific energy is $e = E_0 - \tfrac12|\mathbf{u}|^2$, and $(p,h)$ are recovered from the pair $(\rho, e)$ by inverting the real-fluid table (a local two-variable lookup/iteration). Because the table stores $(\rho, T, a, \dots)$ as functions of $(p,h)$, this inversion replaces the Newton iteration on temperature used by an ideal-gas solver.
+With $(p,h)$ known, $\rho(p,h)$ comes from the table, momentum is $\rho\mathbf{u}$, and the total energy follows from $e = h - p/\rho$ plus the kinetic energy: the fluxes are those of the conservative variables $\mathbf U$. The state itself is never converted back from $\mathbf U$: each stage of the time integration updates the primitive variables $(p, \mathbf u, h)$ directly, mapping the residual of the conservative equations with the Jacobian $\partial\mathbf P/\partial\mathbf U$ of the stage state ([State update per stage](time-integration.md#state-update-per-stage)). No inversion of the table is needed at run time. The *thermo inversion* line of the loading report is the inverse table $h(p, T)$ built from $T(p,h)$ at loading, which gives the enthalpy of a prescribed temperature (walls, inlets).
 
 !!! note "Why pressure-based primitives?"
     Carrying $p$ (rather than $\rho$) as the primitive thermodynamic variable is what makes the [low-Mach preconditioned](preconditioning.md) update natural: the acoustic stiffness as $M\to0$ is handled cleanly in pressure–velocity form.
@@ -100,7 +98,7 @@ $$
 - \frac{2}{3}\,\mu\,(\nabla\!\cdot\!\mathbf{u})\,\delta_{ij}
 $$
 
-where $\mu = \mu_\ell + \mu_t$ is the sum of the molecular and eddy viscosities. For two-equation models the isotropic Reynolds-stress part $-\tfrac23\rho k\,\delta_{ij}$ is added.
+where $\mu = \mu_\ell + \mu_t$ is the sum of the molecular and eddy viscosities. For two-equation models the isotropic Reynolds-stress part $-\tfrac23\rho k\,\delta_{ij}$ is added only with `k-energy-coupling = .true.` ([ARES-Turbulence]); by default it is left out of the momentum and energy equations.
 
 ### Heat conduction
 

@@ -103,8 +103,8 @@ type = outlet
 p    = 46.11d5     ; back pressure [Pa]  (above the H₂ critical pressure ≈ 12.8 bar)
 ```
 
-!!! note "Genuinely supercritical"
-    At ~46 bar and ~31 K the hydrogen is above its critical pressure and temperature, so it is a single supercritical phase whose density and specific heat change by an order of magnitude across the heated section. This is the regime the real-fluid table is built for.
+!!! note "Supercritical pressure"
+    At ~46 bar the hydrogen is at supercritical pressure; it enters at ~31.4 K, below its critical temperature (32.9 K), as a compressed liquid, and is heated across the pseudo-critical line into a single supercritical phase, whose density and specific heat change by an order of magnitude across the heated section. This is the regime the real-fluid table is built for.
 
 ---
 
@@ -119,7 +119,15 @@ The script reads:
 | `OUTPUT/1d.dat` | Section-averaged 1-D profiles ($x$, $T_w$, $T$, …) extracted from the 2-D solution |
 | `INPUT/thermo.dat` | The $(p,h)$ table, used for the optional bulk-temperature cross-check |
 
-`OUTPUT/1d.dat` is produced by the shared **`extract1d`** tool (`test/common/Extract1D.f90`), which extracts wall and bulk 1-D profiles from `field.tec` / `wall.tec` using the real-fluid tables:
+`OUTPUT/1d.dat` is produced by the shared **`extract1d`** tool (`test/common/Extract1D.f90`), which extracts wall and bulk 1-D profiles from `field.tec` / `wall.tec` using the real-fluid tables.
+
+The tracked `test/common/extract1d` binary predates the current solution format; build the tool from its source before the first use (any Fortran compiler, no library):
+
+```bash
+gfortran -O2 -J /tmp -o ../common/extract1d ../common/Extract1D.f90
+```
+
+Then:
 
 ```bash
 cd test/HTD
@@ -146,15 +154,18 @@ The script plots the bulk- and wall-temperature distributions along the tube aga
 
 ![Wall temperature along the tube showing the heat-transfer-deterioration peak](img/htd_Twall.png){ width="600" }
 
-*`test/HTD/reference/Twall.png`.* Wall temperature along the tube. The sharp **peak near $x\approx0.1$ m** ($T_w\approx410$ K) is the **heat-transfer deterioration**: where the near-wall fluid crosses the pseudo-critical line the local heat-transfer coefficient collapses and, at fixed wall heat flux, $T_w$ overshoots before recovering downstream. ARES reproduces both the location and the height of the peak, which is the headline result of the case — it can only be captured with the full real-fluid EOS.
+*`test/HTD/reference/Twall.png`.* Wall temperature along the tube. The sharp **peak** of the experiment ($T_w\approx380$ K at $x\approx0.127$ m) is the **heat-transfer deterioration**: where the near-wall fluid crosses the pseudo-critical line the local heat-transfer coefficient collapses and, at fixed wall heat flux, $T_w$ overshoots before recovering downstream. It can only be captured with the full real-fluid EOS.
+
+!!! warning "The figure is of an earlier version"
+    The figure and `test/HTD/reference/field.szplt` were made before ARES took the standard form of the Spalart–Allmaras equation of the NASA TMR (the term $-(\nu+\tilde\nu)\,\nabla\rho\cdot\nabla\tilde\nu/\sigma$ of the [SA diffusion](../theory/turbulence.md#transport-equation)), and show a peak of about 410 K near $x\approx0.1$ m. With the standard form the peak rises by about 45 K, and the RMS difference of $T_w$ from the experiment grows from 16.7 K to 40.3 K: the standard SA over-predicts the peak of this case. The figure and the reference are to be made again with the current version.
 
 ---
 
 ## What this validates
 
-- The **real-fluid $(p,h)$ table and thermo inversion** under steep property variation near the pseudo-critical line.
+- The **real-fluid $(p,h)$ tables** under steep property variation near the pseudo-critical line.
 - The **low-Mach preconditioned** scheme on a genuine internal flow.
-- The wall-heating boundary condition and the model's ability to capture the **wall-temperature peak** characteristic of heat-transfer deterioration.
+- The wall-heating boundary condition, and the location of the **wall-temperature peak** of heat-transfer deterioration (its height is over-predicted by the standard SA, above).
 
 !!! warning "Long run"
     HTD is a deep-convergence case (`iter-threshold = 6,000,000`, `cfl = 0.3`). Run it in the background and monitor `logfile`.

@@ -11,10 +11,10 @@ The single switch that changes the meaning of everything else is `time-accurate`
 | | `time-accurate = .false.` (default) | `time-accurate = .true.` |
 |---|---|---|
 | Time step | **local** — every cell marches at its own stability limit | **global** — every cell is overwritten with the domain-wide minimum |
-| Physical time | set to the sentinel $-1$ and never advanced | accumulated as $t \mathrel{+}= \Delta t_\text{global}$ |
+| Physical time | set to $-1$ and never advanced (the output files carry minus the global iteration count as their time) | accumulated as $t \mathrel{+}= \Delta t_\text{global}$ |
 | Use for | steady RANS, fastest route to a converged field | unsteady/URANS, anything where the transient is the answer |
 
-Local time stepping is a convergence accelerator, not a physical integration: cells with small volumes take small steps and large cells take large ones, so the field reaches steady state in far fewer iterations. The price is that intermediate states are meaningless. In steady mode the `time` column printed to the shell is the $-1$ sentinel — **watch the residual, not the time**.
+Local time stepping is a convergence accelerator, not a physical integration: cells with small volumes take small steps and large cells take large ones, so the field reaches steady state in far fewer iterations. The price is that intermediate states are meaningless. In steady mode the shell line has no time column (`Iter`, `Global iter`, the pressure residual), and the output files carry minus the global iteration count as their time — **watch the residual, not the time**.
 
 ---
 
@@ -66,7 +66,7 @@ $$
 R^\ast_i = \frac{R_i + \beta\,(R^\ast_{i-1} + R^\ast_{i+1})}{1 + 2\beta}
 $$
 
-Smoothing the residual widens the stability envelope of the explicit scheme, so IRS is how you run at a CFL the bare Runge–Kutta would not tolerate. `irs-beta = 0` makes it a no-op; the useful range is a few tenths. It costs a sweep per direction per stage, so it pays only if it lets you raise `cfl` by more than that overhead. See [Time Integration](../theory/time-integration.md) for the derivation.
+Smoothing the residual widens the stability envelope of the explicit scheme, so IRS is how you run at a CFL the bare Runge–Kutta would not tolerate. `irs-beta = 0` makes it a no-op; the useful range is a few tenths, and `irs-beta = 0.5` damps the shortest wave the most (the two Jacobi sweeps give it the gain $(1+4\beta^2)/(1+2\beta)^2$, $1/2$ at $\beta = 0.5$; a larger $\beta$ damps it less). It costs a sweep per direction per stage, so it pays only if it lets you raise `cfl` by more than that overhead. See [Time Integration](../theory/time-integration.md) for the derivation.
 
 ---
 
@@ -74,7 +74,7 @@ Smoothing the residual widens the stability envelope of the explicit scheme, so 
 
 When the Mach number is low the acoustic and convective scales separate and a density-based scheme stalls. `integration-variables = prec` switches the update to preconditioned variables; `preconditioning-Uref` sets the reference velocity (negative ⇒ local sound speed) and `preconditioning-eps-min` the lower cut-off (negative ⇒ 0.10).
 
-Pair it with a preconditioned flux — `riemann-solver = HLLC Prec` or `PLLF` — otherwise the dissipation of the Riemann solver still scales on the acoustic speed and you lose most of the benefit. Full treatment in [Low-Mach Preconditioning](../theory/preconditioning.md).
+It takes the preconditioned flux `riemann-solver = HLLC Prec` (the set-up stops on any other solver): with another flux the dissipation would still scale on the acoustic speed. Full treatment in [Low-Mach Preconditioning](../theory/preconditioning.md).
 
 ---
 
@@ -89,8 +89,8 @@ Pair it with a preconditioned flux — `riemann-solver = HLLC Prec` or `PLLF` �
 Two keys, both in `[ARES-Numerics]`, ordered here from most robust to most accurate:
 
 - `space-reconstruction` — `first-order`/`none` is unconditionally the most forgiving; `MUSCL` is second order and what you want for the final answer.
-- `flux-limiter` — only read when `space-reconstruction = MUSCL`: specify one without the other and it is ignored with a warning, while MUSCL without a limiter silently falls back to Van Leer (also warned). `minmod` is the most dissipative and most robust; `vanalbada`, `vanleer` and `MC` sit in the middle; `superbee` is the sharpest and the most likely to ring. `LIMO3` is third-order.
-- `riemann-solver` — `Rusanov` is the most dissipative, `HLLE` and `PLLF` intermediate, `HLLC` the most accurate. `HLLC Rotated` helps on grid-aligned shocks.
+- `flux-limiter` — only read when `space-reconstruction = MUSCL`: specify one without the other and it is ignored with a warning, while MUSCL without a limiter silently falls back to Van Leer (also warned). `minmod` is the most dissipative and most robust; `vanalbada`, `vanleer` and `MC` sit in the middle; `superbee` is the sharpest and the most likely to ring. `LIMO3` is third-order in smooth regions.
+- `riemann-solver` — `Rusanov` is the most dissipative, `HLLE` and `PLLF` intermediate, `HLLC` the most accurate. `HLLC Rotated` helps on grid-aligned shocks (2-D meshes only).
 
 A reliable recipe for a case that will not start: run first-order until the field is established, then switch to `MUSCL` with `minmod`, and only then sharpen the limiter. Details in [Spatial Discretization](../theory/numerics.md) and [Riemann Solvers](../theory/riemann-solvers.md).
 
@@ -100,7 +100,7 @@ A reliable recipe for a case that will not start: run first-order until the fiel
 
 Convergence you cannot see is convergence you cannot diagnose.
 
-- `res-diter` — how often the residual history is appended. Keep it at `1` while tuning; this is the curve that tells you whether you are converging, stalled, or diverging.
+- `res-diter` — how often the residual history is appended. Keep it at `1` while tuning; this is the curve that tells you whether you are converging, stalled, or diverging. The residual is the L2 norm (the square root of the sum over the cells, not a mean) of the change of each primitive variable in one iteration: a change per iteration, not a time derivative, so it grows with `cfl`. With `res-diter = N` the stop test of `res-threshold` and the shell line see it every N iterations only. Its unit, for `res-threshold`, is the pressure residual of the first iteration: with `cfl-rise-threshold = N` that first step is N times smaller than the nominal one, and so is the unit.
 - `shell-diter` — console refresh. Large values on long batch runs, small while watching.
 - `sol-diter` / `sol-dtime` — field output by iteration or by physical time. Both default to effectively never, so a run left alone writes only at the end.
 - `sol-overwrite = false` — write **numbered snapshots** instead of overwriting. This is the key to use when a run diverges and you need to see *where* it went wrong: without it the only surviving field is the corrupted one.
@@ -117,7 +117,7 @@ Every `ini-diter` iterations the solver re-reads `input.ini` and re-validates th
 - `sol-diter`, `res-diter`, `shell-diter`, `sol-overwrite` — start dumping snapshots the moment a run starts misbehaving
 
 !!! warning "What hot-reload does *not* change"
-    Keys consumed **once at setup** are copied into the running state and will not change mid-run even though the registry value updates: anything that binds the solver's structure — turbulence model, mesh, multigrid level count, output format — and the switch-on of IRS, whose arrays are allocated at set-up (`irs` or `irs-beta > 0` added to a run started without IRS is ignored, with a warning). `iter-threshold` and `level<n>-iter` do take effect at the reading: they set the iteration limit of each level again.
+    Keys consumed **once at setup** are copied into the running state and will not change mid-run even though the registry value updates: anything that binds the solver's structure — turbulence model, mesh, multigrid level count, reconstruction, Riemann solver —, `preconditioning-Uref` and `preconditioning-eps-min`, and the switch-on of IRS, whose arrays are allocated at set-up (`irs` or `irs-beta > 0` added to a run started without IRS is ignored, with a warning). `iter-threshold` and `level<n>-iter` do take effect at the reading: they set the iteration limit of each level again. `sol-format`, `time-accurate`, `Prt-correction`, `point-implicit` and `sst-asymptotic` are read at run time too, so a change takes effect (without the checks of the set-up): they are not meant to change during a run. A key removed or commented out keeps the value it had: give it its off value to switch it off ([Input File](input.md)).
 
 Set `ini-diter` small enough to be responsive and large enough not to hammer the filesystem; the default is 10000. The file is re-validated on every reload: with `ini-error = warn`, the default, a reading with an error (a value out of its rule, a value that does not read as its type) is not taken, the run keeps the values it held and says so; with `ini-error = stop` the run stops.
 

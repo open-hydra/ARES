@@ -58,15 +58,15 @@ c_f = \frac{\tau_w}{\tfrac12\rho_\infty U_\infty^2} = 2\left(\frac{u_\tau}{U_\in
 \tau_w = \mu\,\frac{\partial u}{\partial y}\bigg|_{w}.
 $$
 
-For an incompressible turbulent boundary layer the skin friction follows the Kármán–Schoenherr / power-law trend $c_f \approx 0.026\,\mathrm{Re}_x^{-1/7}$; the NASA TMR data provide the model-specific reference curve each ARES model is checked against. Because the comparison is made in $\mathrm{Re}_x$ space, the $c_f(\mathrm{Re}_x)$ curve collapses onto the reference independently of the exact run Reynolds number.
+For an incompressible turbulent boundary layer the skin friction follows the Kármán–Schoenherr / power-law trend $c_f \approx 0.026\,\mathrm{Re}_x^{-1/7}$; the NASA TMR data provide the model-specific reference curve each ARES model is checked against. The SST, Wilcox 2006 and SSG-LRR cases run at the TMR Reynolds number (constant $\mu$) and compare $c_f$ against $x$; the SA case compares in $\mathrm{Re}_x$ space, where the $c_f(\mathrm{Re}_x)$ curve collapses onto the reference independently of the exact run Reynolds number.
 
 ---
 
 ## Reference quantities
 
-`validate_sst.py` (and its siblings) reproduce the quantities plotted in the case's `PLOT.lay`, comparing against the NASA TMR data in `reference/`:
+`validate_sst.py` (and its siblings) compare against the NASA TMR data in `reference/`:
 
-1. **Skin-friction coefficient** $c_f(x)$ vs. `reference/cf.dat`. Because the run may not sit exactly at the TMR Reynolds number, the comparison is done in $\mathrm{Re}_x$ space.
+1. **Skin-friction coefficient** $c_f(x)$ vs. `reference/cf.dat`. SST, Wilcox 2006 and SSG-LRR run with a constant $\mu$ (`set_constant_transport.py`) at $\mathrm{Re}/\mathrm{m} = 5\times10^6$ and compare against $x$, which holds at that Reynolds number only (the script warns when the run is more than 10 % away); `validate_sa.py` compares in $\mathrm{Re}_x$ space. The SA case runs at $M = 0.49$ ($\mathrm{Re}/\mathrm{m} = 5.1\times10^6$), above the $M = 0.2$ of TMR: compressibility lowers its $c_f$ by about 2.3 %.
 2. **Turbulence profiles** at $x \approx 0.97$ vs. `reference/kw.dat`, in wall-scaled form:
 
 $$
@@ -76,7 +76,7 @@ k^+ = \frac{k}{a_\infty^2},
 $$
 
 !!! note "Reynolds consistency"
-    The $c_f(\mathrm{Re}_x)$ curve collapses onto the reference regardless of the exact run Reynolds number, but the $x\approx0.97$ profiles only collapse if the run is at the TMR Reynolds number ($\mathrm{Re}=5\times10^{6}$). The verification scripts document this so a profile mismatch is not misread as a model error.
+    In $\mathrm{Re}_x$ space (SA) the $c_f$ curve collapses onto the reference regardless of the exact run Reynolds number, but the $x\approx0.97$ profiles only collapse if the run is at the TMR Reynolds number ($\mathrm{Re}=5\times10^{6}$). The verification scripts document this so a profile mismatch is not misread as a model error.
 
 ---
 
@@ -118,7 +118,7 @@ python3 validate_sst.py
 
 The script reads `OUTPUT/field.tec` and `OUTPUT/wall.tec`, computes $c_f(x)$ and the wall-scaled $k^+,\omega^+$ profiles, overlays them on the NASA TMR reference, and prints the RMS / max relative $c_f$ error with a **PASS/FAIL** verdict (PASS for RMS < 5 %). The shared comparison logic lives in `test/common/_fp_turb_common.py`.
 
-The **SA** case is the exception — it does **not** need the constant-property scripts, because `validate_sa.py` compares $c_f$ in $\mathrm{Re}_x$ space (so the curve collapses at any Reynolds number). It validates $c_f$ from `OUTPUT/1d.dat`, which must first be generated with the shared extractor:
+The **SA** case is the exception — it does **not** need the constant-property scripts, because `validate_sa.py` compares $c_f$ in $\mathrm{Re}_x$ space (so the curve collapses at any Reynolds number; the Mach number, 0.49 against the 0.2 of TMR, still lowers $c_f$ by about 2.3 %). It validates $c_f$ from `OUTPUT/1d.dat`, which must first be generated with the shared extractor (the tracked `test/common/extract1d` binary predates the current solution format: build it first from its source, `gfortran -O2 -J /tmp -o ../common/extract1d ../common/Extract1D.f90`):
 
 ```bash
 cd test/Flat_Plate_SA

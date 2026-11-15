@@ -6,10 +6,14 @@ module ARES_Mod_Diagnostic
   private
   public :: Compute_Residual, Write_Diagnostic
 
-  character(len=llen), private :: Dvarnames = '"rho" "rhou" "rhov" "rhow" "rhoe" "dt"'
+  character(len=llen), private :: Dvarnames = '"dp" "du" "dv" "dw" "dh" "dt"'
 
 contains
 
+  !> The residual of an iteration: for each primitive variable (p, u, v, w, h and the turbulence variables), the sum over
+  !> the cells of the square of its change in the iteration (new - old), added to total; average is the root mean square
+  !> over the cells of the block. It is a change per iteration, not a time derivative: dt is not used, so the residual
+  !> grows with cfl (and cfl-rise-threshold changes the unit of res-threshold, which is taken at the first iteration).
   !> The sum over the cells of the block is taken in a fixed order, the same for any number of threads: each thread sums
   !> whole i lines, and the sums of the lines are added in turn.
   subroutine Compute_Residual ( new, old, dt, n, average, total )
@@ -48,7 +52,7 @@ contains
     enddo; enddo
 
     ! Average residual of this block
-    average = sqrt ( residuo / float ( n(1)*n(2)*n(3) ) )
+    average = sqrt ( residuo / real ( n(1)*n(2)*n(3), R8 ) )
     ! Overall residual
     total = total + residuo
     deallocate ( line )
@@ -91,16 +95,16 @@ contains
       ! nrans turbulence residuals, and dt). Build the name list to match that
       ! count; a fixed string omits the RANS residual(s) and makes the binary
       ! writer declare fewer variable names than the data written.
-      Dvarnames = '"rho" "rhou" "rhov" "rhow" "rhoe"'
-      ! The residuals carry the names of the variables they belong to: the turbulence ones are
-      ! the density-weighted variables ARES advances (rhoNuTilde = rho*nu_tilde, rhoK, rhoOmega),
-      ! as in the solution file (see IO_Solution)
+      ! blk%r holds, at output time, the increments of the last stage of the primitive variables ARES advances (times
+      ! dt/V, smoothed by IRS when it is on): p, u, v, w, h, then the density-weighted turbulence variables
+      ! (rhoNuTilde = rho*nu_tilde, rhoK, rhoOmega, as in the solution file, see IO_Solution). Each is named d<variable>
+      Dvarnames = '"dp" "du" "dv" "dw" "dh"'
       if (nrans==1) then
-        Dvarnames = trim(Dvarnames)//' "rhoNuTilde"'
+        Dvarnames = trim(Dvarnames)//' "drhoNuTilde"'
       elseif (nrans==2) then
-        Dvarnames = trim(Dvarnames)//' "rhoK" "rhoOmega"'
+        Dvarnames = trim(Dvarnames)//' "drhoK" "drhoOmega"'
       elseif (nrans==7) then
-        Dvarnames = trim(Dvarnames)//' "ruu" "rvv" "rww" "ruv" "ruw" "rvw" "rhoOmega"'
+        Dvarnames = trim(Dvarnames)//' "druu" "drvv" "drww" "druv" "druw" "drvw" "drhoOmega"'
       endif
       Dvarnames = trim(Dvarnames)//' "dt"'
 
@@ -120,6 +124,7 @@ contains
       ndiag = nres + 1
 
       ! Write the IOfield accordingly to the solution format
+      E_IO = 0
       select case(trim(format(1)))
       case('vtk')
         IOfield%vtk%format = trim(format(2))
@@ -151,6 +156,9 @@ contains
         IOfield%tec%format = trim(format(2))
         E_IO = tec_write_structured_multiblock(Nvars=ndiag,orion=IOfield,varnames=Dvarnames,filename=trim(path)//trim(file)//trim(IOfield%tec%extension))
       end select
+      ! A failed write (disk full, quota, permission) leaves a cut file: say so, and go on (the next output may succeed)
+      if ( E_IO /= 0 ) write(*,'(A,I0,A)') ' [WARNING] '//trim(path)//trim(file)//' was not written (status ', E_IO, &
+                                           '): disk full, quota or permission?'
     end if
 
     ! Synchronize all ranks after I/O

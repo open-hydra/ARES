@@ -6,7 +6,8 @@ module ARES_Input_Registry
 
   integer, parameter :: TYPE_INT=1, TYPE_REAL=2, TYPE_LOG=3, TYPE_STR=4
 
-  public :: registry_t, Validate_Registry, Save_Values, Restore_Values, Key_Is_Set
+  public :: registry_t, Validate_Registry, Save_Values, Restore_Values, Key_Is_Set, Key_Is_Registered, &
+            Section_Is_Registered
 
   !--------------------------------------------------------
   ! Value container (typed pointers)
@@ -570,6 +571,44 @@ contains
   end function Key_Is_Set
 
 
+  !> True when the registry holds the key name of the section section of input.ini
+  logical function Key_Is_Registered(section, name)
+
+  implicit none
+
+  character(len=*), intent(in) :: section, name
+  integer :: i
+
+  Key_Is_Registered = .false.
+  do i = 1, reg%size
+    if (reg%params(i)%section == section .and. reg%params(i)%name == name) then
+      Key_Is_Registered = .true.
+      return
+    end if
+  end do
+
+  end function Key_Is_Registered
+
+
+  !> True when the registry holds a key of the section section of input.ini
+  logical function Section_Is_Registered(section)
+
+  implicit none
+
+  character(len=*), intent(in) :: section
+  integer :: i
+
+  Section_Is_Registered = .false.
+  do i = 1, reg%size
+    if (reg%params(i)%section == section) then
+      Section_Is_Registered = .true.
+      return
+    end if
+  end do
+
+  end function Section_Is_Registered
+
+
   !> The key i of input.ini, as the messages of Validate_Registry give it: the file, the section, the key and the value as
   !> written, when the file holds one
   function Key_And_Value(i) result(out)
@@ -778,6 +817,8 @@ contains
 
     open(newunit=unit,file=fileout,status="replace")
 
+    ! The tables of docs/user/registry.md, in the order of registration: a section header (## and its name), the
+    ! columns of each key; the notes of the page between the tables are written by hand
     write(unit,'(A)') "# ARES Input Parameters"
     write(unit,'(A)') ""
 
@@ -792,17 +833,25 @@ contains
         if (new_section) then
             current_section = this%params(i)%section
             write(unit,'(A)') ""
-            write(unit,'(A)') "## ["//trim(current_section)//"]"
+            write(unit,'(A)') "## "//trim(current_section)
             write(unit,'(A)') ""
             write(unit,'(A)') "| Parameter | Default | Allowed | Required | Description |"
             write(unit,'(A)') "|-----------|---------|---------|----------|-------------|"
         end if
 
-        write(unit,'(A)') "| "//trim(this%params(i)%name)// &
-            " | "//trim(this%params(i)%default_str)// &
-            " | "//trim(this%params(i)%allowed)// &
-            " | "//merge("yes"," no",this%params(i)%required)// &
-            " | "//trim(this%params(i)%description)//" |"
+        if (len_trim(this%params(i)%default_str) > 0) then
+            write(unit,'(A)') "| "//trim(this%params(i)%name)// &
+                " | "//trim(this%params(i)%default_str)// &
+                " | "//trim(this%params(i)%allowed)// &
+                " | "//trim(merge("**yes**","no     ",this%params(i)%required))// &
+                " | "//trim(this%params(i)%description)//" |"
+        else
+            write(unit,'(A)') "| "//trim(this%params(i)%name)// &
+                " | *(none)*"// &
+                " | "//trim(this%params(i)%allowed)// &
+                " | "//trim(merge("**yes**","no     ",this%params(i)%required))// &
+                " | "//trim(this%params(i)%description)//" |"
+        end if
 
     end do
 

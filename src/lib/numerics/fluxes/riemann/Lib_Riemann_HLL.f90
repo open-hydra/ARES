@@ -177,7 +177,6 @@ contains
   ! HLLC Batten precondizionato secondo Luo–Baum–Löhner (2005)
   subroutine riemann_HLLCprec(pl,ul,vl,wl,hl,pr,ur,vr,wr,hr,nx,ny,nz,F_r,F_u,F_v,F_w,F_E )
 
-    use ARES_Global_m, only: Uref
     use FLINT_Lib_Thermodynamic
     use ARES_Lib_Preconditioning
 
@@ -215,13 +214,10 @@ contains
     dl = dltot
     dr = drtot
     
-    if ( Uref < 0.0d0 ) then
-      al = ph2vars ( pl, hl, sound_tab )
-      ar = ph2vars ( pr, hr, sound_tab )
-    else
-      al = Uref
-      ar = Uref
-    end if
+    ! The speed of sound of the two states: alpha = (1 - Ur^2/c^2)/2 of the preconditioned eigenvalues takes the true c;
+    ! Uref, when given, only sets the reference velocity Ur (comp_Ur)
+    al = ph2vars ( pl, hl, sound_tab )
+    ar = ph2vars ( pr, hr, sound_tab )
 
     unl=ul*nx+vl*ny+wl*nz
     unr=ur*nx+vr*ny+wr*nz

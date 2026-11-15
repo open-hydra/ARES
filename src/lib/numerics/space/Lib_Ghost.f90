@@ -7,8 +7,9 @@ module ARES_Lib_Ghost
   implicit none
 
   !> Ghost fills of a wall or 400 face (Ghost_Wall) in which the cut of an extrapolated quantity acted, in which the
-  !> temperature of a 302 wall took the floor T_w/2, and in which the pressure or the temperature of a ghost cell was brought
-  !> back within the fluid tables: reported at the end of a run in which any of them happened (Report_Wall_Ghosts)
+  !> temperature of a 302 wall took the floor T_w/2, and in which the pressure or the temperature of a ghost cell (or of
+  !> the extrapolated viscous state of a chimera face) was brought back within the fluid tables: reported at the end of a
+  !> run in which any of them happened (Report_Wall_Ghosts)
   integer(I8) :: n_ghost_cut = 0, n_ghost_floor = 0, n_ghost_table = 0
 
 contains
@@ -74,7 +75,7 @@ contains
 
     ! Process LOCAL BC entries while MPI communication is in flight
     ! Uses pre-filtered local_bc_idx to avoid scanning all nbound entries
-    !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs)
+    !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, Bs, Is, Js, Ks, Fs)
     do ii = 1, domain % n_local_bc
       i  = domain % local_bc_idx(ii)
       Bm = domain % bc(i) % b
@@ -97,7 +98,7 @@ contains
           call Ghost_Axysimmetry ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(300)
           call Ghost_Symmetry ( Im, Jm, Km, Fm, domain % blk(Bm) )
-        case(0,404:406) ! inlet/outlet/extrapolation: zero-gradient
+        case(404:406) ! inlet/outlet: zero-gradient
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(103,104,301,302,400) ! walls (103, 104: coupled to another solver) and extrapolation faces
           call Ghost_Wall ( domain % bc(i), domain % blk(Bm) )
@@ -105,6 +106,7 @@ contains
           ! Chimera: processed after the donor-cell MPI exchange completes (below)
           continue
         case default
+          ! Not reached: the boundary file is read with the types above only (Read_BCfile stops on any other)
           call Ghost_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
       end select
     enddo
@@ -129,12 +131,21 @@ contains
       end do
     end if
 
-    ! Compute Pg(:,3:6) for type-1 connections where source block is local.
+    ! Chimera ghost fill: all donor data (local and remote) is now current
+    !$omp do schedule (dynamic, 64) private(ii, i)
+    do ii = 1, domain % n_local_bc
+      i = domain % local_bc_idx(ii)
+      if (domain % bc(i) % type /= 102) cycle
+      call Ghost_Chimera ( domain % nb, domain % blk, domain % bc(i) )
+    enddo
+
+    ! Compute Pg(:,3:6) for the connections (101, 201) whose source block is local.
     ! The four tangential neighbours of a source cell on the edge of its face are
-    ! ghost cells of Bs, and those can be filled from another rank: this loop must
-    ! follow the P unpack above, or it reads them one stage old (MPI-only drift at
-    ! block edges and junctions).
-    !$omp do schedule (dynamic) private(ii, i, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
+    ! ghost cells of Bs, and those can be filled from another rank or by a chimera
+    ! face of Bs: this loop must follow the P unpack and the chimera ghost fill
+    ! above, or it reads them one stage old (drift at block edges and junctions).
+    ! Ghost_Chimera reads donor cells only, never Pg, so it does not need this loop.
+    !$omp do schedule (dynamic, 64) private(ii, i, Bs, Is, Js, Ks, Fs, d11s, d12s, d21s, d22s)
     do ii = 1, domain % n_local_bs
       i  = domain % local_bs_idx(ii)
       Bs = domain % bc(i) % bs
@@ -150,21 +161,13 @@ contains
                                       domain % blk(Bs), domain % bc(i) % Pg )
     enddo
 
-    ! Chimera ghost fill: all donor data (local and remote) is now current
-    !$omp do schedule (dynamic) private(ii, i)
-    do ii = 1, domain % n_local_bc
-      i = domain % local_bc_idx(ii)
-      if (domain % bc(i) % type /= 102) cycle
-      call Ghost_Chimera ( domain % nb, domain % blk, domain % bc(i) )
-    enddo
-
-    ! Chimera Pg(:,3:6): reads the ghost columns written just above, so it
-    ! must stay a separate loop (implicit barrier in between). Each entry
+    ! Chimera Pg(:,3:6): reads the ghost columns written by the chimera ghost
+    ! fill above, so it must stay a separate loop (implicit barriers in between). Each entry
     ! writes its own Pg only: beyond the edges of a block face the ghost row
     ! is extrapolated into Pg, not written in the block (Fill_BC_Ghost_Chimera),
     ! so the entries of two chimera faces of a block that meet at an edge write
     ! no common location, and one loop over all the entries has no data race
-    !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm)
+    !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm)
     do ii = 1, domain % n_local_bc
       i = domain % local_bc_idx(ii)
       if (domain % bc(i) % type /= 102) cycle
@@ -176,9 +179,9 @@ contains
       call Fill_BC_Ghost_Chimera ( Im, Jm, Km, Fm, domain % blk(Bm), domain % bc(i) % Pg )
     enddo
 
-    ! Process INTER-RANK type-1 entries (Bm local, Bs remote)
+    ! Process INTER-RANK connection entries (101, 201; Bm local, Bs remote)
     if (mpi_on) then
-      !$omp do schedule (dynamic) private(ii, i, Bm, Im, Jm, Km, Fm, Bs)
+      !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, Bs)
       do ii = 1, domain % n_local_bc
         i  = domain % local_bc_idx(ii)
         if (domain % bc(i) % type /= 101 .and. domain % bc(i) % type /= 201) cycle
@@ -531,18 +534,31 @@ contains
     !> pressure, and the turbulence variables times the density of that state
     function Visc_Extrapolated ( a, b ) result ( q )
       use FLINT_Lib_Thermodynamic
+      use ARES_Load_ThermoTransport, only: Table_Bounds
       implicit none
       real(R8), intent(in) :: a(nprim), b(nprim)
       real(R8)             :: q(nprim)
       ! Local
       real(R8) :: rho_a, rho_b, rho_q, temperature
+      logical  :: inside, ok
 
       rho_a = ph2vars( a(np), a(nh), rho_tab )
       rho_b = ph2vars( b(np), b(nh), rho_tab )
       temperature = 2d0 * ph2vars( a(np), a(nh), T_tab ) - ph2vars( b(np), b(nh), T_tab )
       q(np)    = a(np)
       q(nu:nw) = 2d0 * a(nu:nw) - b(nu:nw)
-      q(nh)    = pT2h( q(np), temperature )
+      ! The extrapolated temperature within the fluid tables, as the ghost cells of the walls (counted with them)
+      call Table_Bounds ( q(np), temperature, inside, ok )
+      if ( .not. inside ) then
+        !$omp atomic
+        n_ghost_table = n_ghost_table + 1
+      end if
+      if ( ok ) then
+        q(nh) = pT2h( q(np), temperature )
+      else
+        q(np) = a(np)
+        q(nh) = a(nh)
+      end if
       if ( nprim > nh ) then
         rho_q = ph2vars( q(np), q(nh), rho_tab )
         q(nt:nprim) = ( 2d0 * a(nt:nprim) / rho_a - b(nt:nprim) / rho_b ) * rho_q
@@ -570,7 +586,8 @@ contains
   subroutine Ghost_Wall ( rec, blk )
     use ARES_Config_Types_m, only: obj_rans
     use ARES_Lib_RANS, only: RANS_Set_Wall_Values
-    use ARES_Lib_BC_Fluxes, only: Face_Index
+    use ARES_Lib_BC_Fluxes, only: Face_Index, Wall_State_Temperature, Wall_State_Heat
+    use ARES_Load_ThermoTransport, only: Table_Bounds
     use FLINT_Lib_Thermodynamic, only: ph2vars, pT2h, rho_tab, T_tab, mi_tab2D
     implicit none
     type(ARES_bc_type), intent(in)       :: rec
@@ -579,7 +596,7 @@ contains
     integer  :: Im, Jm, Km, Fm, Ig, Jg, Kg, c(3,2), l, s, Dir, Face_i, Face_j, Face_k
     real(R8) :: p(2), T(2), rho(2), u(3,2), phi(nrans,2)
     real(R8) :: pG(2), TG(2), uG(3,2), phiG(nrans,2), phiw(nrans), rw(nrans)
-    real(R8) :: sx, h_w, rho_w, mil, hs, metric, hG
+    real(R8) :: sx, h_w, rho_w, mil, kl, hs, metric, hG, temp, Twall
     logical  :: wall, cut, cutq, inside, ok, table
 
     Im = rec % i ; Jm = rec % j ; Km = rec % k ; Fm = rec % f
@@ -595,7 +612,7 @@ contains
       rho(l)   = ph2vars ( p(l), blk % P(nh,c(1,l),c(2,l),c(3,l)), rho_tab )
       T(l)     = ph2vars ( p(l), blk % P(nh,c(1,l),c(2,l),c(3,l)), T_tab )
       u(:,l)   = blk % P(nu:nw,c(1,l),c(2,l),c(3,l))
-      phi(:,l) = blk % P(nt:nprim,c(1,l),c(2,l),c(3,l)) / rho(l)
+      if ( nrans > 0 ) phi(:,l) = blk % P(nt:nprim,c(1,l),c(2,l),c(3,l)) / rho(l)   ! with no turbulence model nt = nprim = nh
     enddo
 
     cut = .false.
@@ -626,25 +643,29 @@ contains
       uG(:,2) = u(:,1) + 2d0 * sx * ( u(:,1) - u(:,2) )
     end if
 
-    ! Turbulence variables: the wall values of the wall routines (302: BC_Wall_Temperature, the wall state at T_w; 301:
-    ! BC_Wall_Heat, the state of the cell; the coupled walls 103 and 104, whose viscous flux the other solver gives: the
-    ! state of the cell, as an adiabatic wall). Every wall, the coupled ones too, takes the roughness of the nearest wall
-    ! (blk%ks, with SA-rough only), as the wall flux and the source terms of the cell take it: ks = 0 gives the smooth value
+    ! Turbulence variables: the wall values of the wall routines, from their wall state (302: BC_Wall_Temperature, the
+    ! state at T_w; 301: BC_Wall_Heat, the wall temperature from the heat flux with the laminar conductivity of the cell;
+    ! the coupled walls 103 and 104, whose viscous flux the other solver gives: the state of the cell, as an adiabatic
+    ! wall), from the cell values per unit mass at the wall density. Every wall, the coupled ones too, takes the roughness
+    ! of the nearest wall (blk%ks, with SA-rough only), as the wall flux and the source terms of the cell take it: ks = 0
+    ! gives the smooth value
     if ( wall .and. model == 2 ) then
       call Face_Index ( Fm, Dir, Im, Jm, Km, Face_i, Face_j, Face_k )
       metric = dot_product ( blk % M(Im,Jm,Km) % c(Dir,:), blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n )
       hs = 0d0
       if ( obj_rans % rough ) hs = blk % ks(Im,Jm,Km)
-      if ( rec % type == 302 ) then
-        h_w   = pT2h ( p(1), rec % Tw )
-        rho_w = ph2vars ( p(1), h_w, rho_tab )
-        mil   = ph2vars ( p(1), h_w, mi_tab2D )
-      else
-        rho_w = rho(1)
-        mil   = ph2vars ( p(1), blk % P(nh,Im,Jm,Km), mi_tab2D )
-      end if
-      call RANS_Set_Wall_Values ( rans_cell=blk % P(nt:nprim,Im,Jm,Km), mil_wall=mil, rans_wall=rw, metric=metric, &
-                                  dist=blk % yn(Im,Jm,Km), ks=hs )
+      select case ( rec % type )
+        case (302)
+          call Wall_State_Temperature ( p(1), rec % Tw, h_w, rho_w, mil, kl )
+        case (301)
+          call Wall_State_Heat ( p(1), blk % P(nh,Im,Jm,Km), rec % qw, blk % M(Im,Jm,Km) % c, &
+                                 blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n, Dir, temp, mil, kl, Twall, h_w, rho_w )
+        case default
+          rho_w = rho(1)
+          mil   = ph2vars ( p(1), blk % P(nh,Im,Jm,Km), mi_tab2D )
+      end select
+      call RANS_Set_Wall_Values ( rans_cell=blk % P(nt:nprim,Im,Jm,Km) * rho_w / rho(1), mil_wall=mil, rans_wall=rw, &
+                                  metric=metric, dist=blk % yn(Im,Jm,Km), ks=hs )
       phiw = rw / rho_w
       phiG(:,1) = 2d0 * phiw - phi(:,1)
       phiG(:,2) = 2d0 * phiw - phi(:,2)
@@ -688,34 +709,6 @@ contains
   end subroutine Ghost_Wall
 
 
-  !> The pressure and the temperature of a ghost state brought within the fluid tables, where h(p, T) (pT2h) and rho(p, h)
-  !> (ph2vars) read them without leaving their arrays: p within the pressures of the tables, T within the temperatures of
-  !> both rows of the tables that bracket p, from h_min to h_max. inside: they were already within. ok: the two rows have
-  !> temperatures in common (false only on tables whose T range jumps from one pressure to the next, where the caller
-  !> takes the state of the cell).
-  subroutine Table_Bounds ( p, T, inside, ok )
-    use FLINT_Lib_Thermodynamic, only: pmin, deltap, Tmin2, deltaT, h_tab2D
-    implicit none
-    real(R8), intent(inout) :: p, T
-    logical,  intent(out)   :: inside, ok
-    ! Local
-    integer  :: i, ip, ih                ! ip, ih: the last pressure and enthalpy indices of the tables
-    real(R8) :: q, lo, hi
-
-    ip = ubound ( h_tab2D, 1 )
-    ih = ubound ( h_tab2D, 2 )
-    q  = min ( max ( p, pmin ), pmin + ( ip - 1d-6 ) * deltap )
-    i  = int ( ( q - pmin ) / deltap )
-    lo = max ( Tmin2(i), Tmin2(i+1) )
-    hi = min ( Tmin2(i) + ( ih - 1d-6 ) * deltaT(i), Tmin2(i+1) + ( ih - 1d-6 ) * deltaT(i+1) )
-    ok = lo <= hi
-    inside = ok .and. q == p .and. T >= lo .and. T <= hi
-    p = q
-    T = min ( max ( T, lo ), hi )
-
-  end subroutine Table_Bounds
-
-
   !> q_1 + psi (q_1 - q_2) on the first ghost layer and q_1 + 2 psi_2 (q_1 - q_2) on the second, with psi <= sx and
   !> psi_2 <= psi the largest values that keep the ghost value within [q_1/2, 2 q_1] (with the sign of q_1; a zero q_1 is
   !> copied). cut: the bound acted on the first layer.
@@ -744,23 +737,31 @@ contains
 
 
   !> One line at the end of a run in which the cut of an extrapolated quantity acted in a ghost fill of a wall or 400 face,
-  !> the temperature of a 302 wall took the floor T_w/2, or the pressure or the temperature of a ghost cell was brought
-  !> back within the fluid tables: the fills of each kind, over the whole run, its grid levels and ranks. Each says that the
-  !> mesh does not resolve the profile next to the face (the last one, also that the tables do not reach the ghost state);
-  !> a run in which none acted prints no line. Collective: every rank calls it, and the three reductions, in every run, so
-  !> that no rank takes another MPI path; rank 0 writes the line when one of the totals is not zero.
+  !> the temperature of a 302 wall took the floor T_w/2, or the pressure or the temperature of a ghost cell (of a wall,
+  !> of a 400 face, or the extrapolated viscous state of a chimera face) was brought back within the fluid tables: the
+  !> fills of each kind, over the whole run, its grid levels and ranks; and a second line when the wall temperature of a
+  !> heat-flux wall (301), or of a wall coupled to the solid (103, 104), was brought within the tables (Wall_State_Heat and
+  !> the coupled wall of hydra). Each says that the mesh does not resolve the
+  !> profile next to the face (those of the tables, also that the tables do not reach the state); a run in which none
+  !> acted prints no line. Collective: every rank calls it, and the four reductions, in every run, so that no rank takes
+  !> another MPI path; rank 0 writes the lines when their totals are not zero.
   subroutine Report_Wall_Ghosts ()
     use ARES_Mod_MPI, only: mpi_is_root, mpi_allreduce_sum_r8
+    use ARES_Lib_BC_Fluxes, only: n_wall_heat_table
     implicit none
-    real(R8) :: ncut, nfloor, ntable
+    real(R8) :: ncut, nfloor, ntable, nheat
 
     call mpi_allreduce_sum_r8 ( real(n_ghost_cut, R8), ncut )
     call mpi_allreduce_sum_r8 ( real(n_ghost_floor, R8), nfloor )
     call mpi_allreduce_sum_r8 ( real(n_ghost_table, R8), ntable )
+    call mpi_allreduce_sum_r8 ( real(n_wall_heat_table, R8), nheat )
     if ( mpi_is_root .and. ( ncut > 0d0 .or. nfloor > 0d0 .or. ntable > 0d0 ) ) &
       write(*,'(A,I0,A,I0,A,I0)') ' Ghost cells of walls and 400 faces, fills with the extrapolation cut: ', &
                                   nint(ncut, I8), ', with the 302 temperature at T_w/2: ', nint(nfloor, I8), &
                                   ', brought within the fluid tables: ', nint(ntable, I8)
+    if ( mpi_is_root .and. nheat > 0d0 ) &
+      write(*,'(A,I0)') ' Heat-flux (301) and coupled (103, 104) walls, evaluations with the wall temperature brought '// &
+                        'within the fluid tables: ', nint(nheat, I8)
 
   end subroutine Report_Wall_Ghosts
 

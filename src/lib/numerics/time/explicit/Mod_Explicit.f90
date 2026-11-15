@@ -26,7 +26,7 @@ contains
                               timer_sync_begin, timer_sync_end
     implicit none
     type(ARES_domain_type), intent(inout) :: domain(obj_multigrid%MGL)
-    external :: External_Function
+    procedure(ARES_external_function)     :: External_Function
     ! Local
     logical  :: endsim, iosim, endmg, accurate
     integer  :: i_rk, i_strang, b, level
@@ -66,7 +66,7 @@ contains
       call Fluxes ( domain(level) )                        ! Convective and Diffusive fluxes
       call BC_Fluxes ( domain(level) )                     ! Boundary fluxes
 
-      call External_Function ( domain(level) )             ! External function (e.g. source terms)
+      call External_Function ()                            ! The procedure of the caller (ARES_external_function)
 
       if (model==2) &
         call RANS_Source_Terms ( domain(level) )           ! RHS of turbulence equations (the ghost cells of the fluxes)
@@ -107,7 +107,7 @@ contains
         do b = 1, domain(level) % nb
           obj_sim_param%residuotot = obj_sim_param%residuotot + res_block(:,b)
         enddo
-        obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm time derivative
+        obj_sim_param%residuotot = sqrt ( obj_sim_param%residuotot ) ! L2 norm of the change in one iteration
       endif
       deallocate ( res_block )
       ! The unit of res-threshold: the pressure residual of the first iteration of the run (of the grid level), or that of

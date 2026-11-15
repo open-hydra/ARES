@@ -8,13 +8,13 @@ module ARES_Wrap_Solve
 contains
 
   subroutine ARES_solve ( simulation, External_Function )
-    use ARES_Advanced_Types_m, only: ARES_simulation_type
+    use ARES_Advanced_Types_m, only: ARES_simulation_type, ARES_external_function
     use ARES_Config_Types_m,   only: obj_time_scheme, obj_multigrid
     use ARES_Mod_Multigrid,    only: Prolongation
     use ARES_Mod_Explicit,     only: Explicit_Step
     implicit none
     type(ARES_simulation_type), intent(inout) :: simulation
-    external :: External_Function
+    procedure(ARES_external_function)         :: External_Function
 
     select case (trim(obj_time_scheme%solver_type))
 

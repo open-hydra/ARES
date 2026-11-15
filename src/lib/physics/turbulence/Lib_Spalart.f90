@@ -100,8 +100,10 @@ contains
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: M    ! velocity
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mc   ! density
     type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Mt   ! turbulence variable
-    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: gradv
-    real(R8), dimension(n(1), n(2), n(3)), intent(in) :: rc1, rc2
+    ! Allocated with -RC only (SpalartShur), and read only then: optional, so that the unallocated arrays of the other
+    ! runs are not present (an unallocated actual argument of an optional dummy)
+    type(ARES_tensor_3D_type), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in), optional :: gradv
+    real(R8), dimension(n(1), n(2), n(3)), intent(in), optional :: rc1, rc2
     real(R8), dimension(n(1), n(2), n(3)), intent(in) :: dt
     ! Local
     integer :: i, j, k
@@ -317,16 +319,24 @@ contains
     use ARES_Config_Types_m, only: obj_rans
 
     implicit none
-    real(R8), intent(in), dimension(nRANS)   :: mitilde_cell     ! : rho*nitilde at cell center
+    real(R8), intent(in), dimension(nRANS)   :: mitilde_cell     ! : rho_wall*nitilde at the boundary cell
     real(R8), intent(in)                     :: mil_wall         ! : laminar viscosity at wall
-    real(R8), intent(out), dimension(nRANS)  :: mitilde_wall     ! : rho*nitilde at wall
-    real(R8), intent(in)                     :: metric           ! : MetricTensor(Dir) dot_product FaceNormal
+    real(R8), intent(out), dimension(nRANS)  :: mitilde_wall     ! : rho_wall*nitilde at wall
+    real(R8), intent(in)                     :: metric           ! : MetricTensor(Dir) dot_product FaceNormal (not used)
     real(R8), intent(in)                     :: dist             ! : cell center distance wall
     real(R8), intent(in)                     :: ks               ! : roughness of nearest wall
+    ! Local
+    real(R8) :: d0
 
     mitilde_wall = 0d0 ! Smooth solid surface condition
-    if ( obj_rans%rough ) then
-      mitilde_wall(1) = ( 2.0d0 * mitilde_cell(1) * metric * 0.03d0 * ks ) / ( 1.0d0 + 2.0d0 * metric * 0.03d0 * ks )
+
+    ! Rough wall: d(nitilde)/dn = nitilde/d0 at the wall (d0 = 0.03 ks). nitilde grows linearly with the displaced
+    ! distance (d + d0) across the first cell, so the wall value is the cell value scaled by d0/(dist + d0); the caller
+    ! gives the cell value times the wall density, so that the result is rho_wall*nitilde_wall. ks = 0 (a smooth wall
+    ! of a rough case) gives the smooth value
+    if ( obj_rans%rough .and. ks > 0d0 ) then
+      d0 = 0.03d0 * ks
+      mitilde_wall(1) = mitilde_cell(1) * d0 / ( dist + d0 )
     end if
 
   end subroutine Spalart_Set_Wall_Values
@@ -382,7 +392,8 @@ contains
     real(R8) :: chi
 
     chi = mitilde(1)/milam
-    if (obj_rans%rough) chi = chi + C_Rough1*ks/(dist+0.03d0*ks)
+    ! A smooth wall (ks = 0) of a rough case adds nothing; at the wall face itself (dist = 0) the term would be 0/0
+    if (obj_rans%rough .and. ks > 0d0) chi = chi + C_Rough1*ks/(dist+0.03d0*ks)
     mut = fv1( chi )*mitilde(1)
 
   end subroutine Spalart_Eddy_Viscosity

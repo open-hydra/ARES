@@ -3,7 +3,7 @@
 """
 Set a CONSTANT Cp in thermo.dat (FLINT real-fluid table) so that, together with
 the constant mu and k imposed by set_constant_transport.py, the laminar Prandtl
-number is exactly the MOSE/NASA value:
+number is exactly the NASA-TMR value:
 
     Pr_lam = mu * Cp / k = 1.18587e-5 * 1004.5 / 1.65445e-2 = 0.72
 

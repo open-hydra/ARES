@@ -37,8 +37,8 @@ riemann-solver           = HLLC Prec ; pair with a preconditioned flux
 | `preconditioning-Uref` | `-1.0` | Global reference velocity $U_\text{ref}$. If negative, the **local sound speed** is used (fully local preconditioning) |
 | `preconditioning-eps-min` | `-1.0` | Lower cut-off $\varepsilon_\text{min}$ on the preconditioning parameter. If negative, the built-in default **0.10** is used |
 
-!!! warning "Use a matching Riemann solver"
-    Preconditioning rescales the wave speeds, so the interface dissipation must be rescaled consistently. Pair `integration-variables = prec` with **`HLLC Prec`** or **`PLLF`**; using a non-preconditioned solver re-introduces the $\sim a$ dissipation and defeats the purpose.
+!!! warning "Use the matching Riemann solver"
+    Preconditioning rescales the wave speeds, so the interface dissipation must be rescaled consistently. `integration-variables = prec` takes **`HLLC Prec`**, and the set-up stops with any other solver. `PLLF` builds its own reference velocity from the normal velocity of the face and is used without `prec` only.
 
 ---
 
@@ -92,14 +92,16 @@ The three branches encode the standard cut-offs:
 With $U_r$ in hand, the preconditioned system has modified acoustic eigenvalues. The convective eigenvalue $u_n$ is unchanged, while the acoustic pair becomes
 
 $$
-\lambda^\pm = \tfrac12\,u_n\,(1+\alpha)\ \pm\ \sqrt{\tfrac14\,u_n^2(1-\alpha)^2 + U_r^2},
-\qquad \alpha = 1 - \frac{U_r^2}{a^2},
+\lambda^\pm = u_n\,(1-\alpha)\ \pm\ \sqrt{\alpha^2 u_n^2 + U_r^2},
+\qquad \alpha = \tfrac12\Bigl(1 - \frac{U_r^2}{a^2}\Bigr),
 $$
 
-so a **preconditioned signal speed** $a' = \sqrt{\alpha^2 u_n^2 + U_r^2}$ replaces the physical sound speed $a$ in:
+with $a$ the speed of sound of the state, also when `preconditioning-Uref` is given (that key sets $U_\text{ref}$, and through it $U_r$, only). A **preconditioned signal speed** $a' = \sqrt{\alpha^2 u_n^2 + U_r^2}$ replaces the physical sound speed $a$ in:
 
 - the **CFL time step** — the much smaller $a'$ (instead of $a$) raises the stable $\Delta t$ at low Mach, removing the $\mathcal O(1/M)$ slowdown;
-- the **Riemann dissipation** — `PLLF` and `HLLC Prec` use $a'$ / the preconditioned wave speeds, so the interface dissipation scales with the convective field rather than the acoustic field, restoring accuracy.
+- the **Riemann dissipation** — `HLLC Prec` uses the preconditioned wave speeds, so the interface dissipation scales with the convective field rather than the acoustic field, restoring accuracy.
+
+The time step and the flux take the same $\alpha$ and $U_r$, so the step bounds the wave speeds of the flux.
 
 As $U_r\to a$ (high Mach) one has $\alpha\to0$, $a'\to a$, and the standard compressible scheme is recovered exactly.
 

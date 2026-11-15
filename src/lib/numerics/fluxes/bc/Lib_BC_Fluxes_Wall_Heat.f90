@@ -3,7 +3,7 @@ module ARES_Lib_BC_Fluxes_Wall_Heat
   use ARES_Advanced_Types_m
   use ARES_Global_m
   use ARES_Parameters_m
-  use ARES_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm, Compute_Wall_Properties
+  use ARES_Lib_BC_Fluxes, only: Face_Index, Compute_Modfm, Compute_Wall_Properties, Wall_State_Heat
 
   implicit none
   public
@@ -15,7 +15,6 @@ contains
     use ARES_Lib_RANS
     use FLINT_Lib_Thermodynamic
     use ARES_Config_Types_m, only: obj_rans
-    use ARES_Lib_Prt_Correction, only: delta_Prt
 
     implicit none
     integer, intent(in) :: Im, Jm, Km, Fm
@@ -30,8 +29,7 @@ contains
     real(R8), pointer, contiguous :: M(:,:), Mc(:,:)   ! metrics of the face and of the cell, read in place
     logical  :: wst
     real(R8) :: mil, kl, Stress(3), Flux(nprim), Prim_Wall(nprim), rho_wall, Twall, dl, entalpy, pressure
-    real(R8) :: hs, mit, cp, kt ! roughness variables
-    real(R8) :: dPrt ! Turbulent Prandtl correction for rough wall
+    real(R8) :: hs, mit ! roughness variables
 
     call Compute_Modfm ( fm, modfm, modfm1, modfm2, modfm3 )
     call Face_Index ( Fm, dir, Im, Jm, Km, Face_i, Face_j, Face_k )
@@ -46,7 +44,8 @@ contains
     ! ARES_Lib_Stencil_Metrics), with no difference of their wall values along the wall: the velocity of a no-slip wall
     ! is uniform along it, while the turbulence values that vary along it (omega of the k-omega models, from the wall
     ! distance of the cell; nu~ on a rough wall) leave out their derivative along the wall (docs/theory/numerics.md); the
-    ! wall temperature and the wall values of the turbulence variables below are estimated with the metric of the cell
+    ! wall temperature is estimated with the metric of the cell, the wall values of the turbulence variables with the
+    ! wall distance of the cell
     wst = .false.
     if ( present(rec) ) wst = rec % wstencil
     if ( wst ) M => rec % wM
@@ -62,50 +61,34 @@ contains
     Prim = Blk % P(:,Im,Jm,Km)
     pressure = Prim(np)
     rho  = ph2vars( pressure, Prim(nh), rho_tab ) 
-    temp = ph2vars( pressure, Prim(nh), T_tab   ) 
 
-    ! Approximation: Twall==Tcell. Therefore, mil(wall) = mil(cell) and mit = 0 -> Strictly valid for null HeatFlux
-    mil = ph2vars( pressure, Prim(nh), mi_tab2D )
-    kl  = ph2vars( pressure, Prim(nh), k_tab2D  )
-    cp  = ph2vars( pressure, Prim(nh), hT_tab   )
-    
+    ! Approximation: Twall==Tcell for the transport properties, mil(wall) = mil(cell). The wall temperature is estimated
+    ! with the laminar conductivity alone, also on a rough wall: exact when adiabatic, and the energy flux is Heat_Flux
+    ! regardless. The same wall state as the ghost cells of the wall (Ghost_Wall in ARES_Lib_Ghost)
+    call Wall_State_Heat ( pressure, Prim(nh), Heat_Flux, Mc, normal, Dir, temp, mil, kl, Twall, entalpy, rho_wall )
+
     ! Initialization
     Gradient = 0d0 ! concentration gradient is zero for one specie fluid
     Prim_Wall = Prim        ! -------------------------------- ! 
+    Prim_Wall(nh) = entalpy ! -------------------------------- ! 
 
     ! Velocity gradient
     Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3
 
-    ! RANS stuff
+    ! RANS stuff: wall values from the cell values per unit mass at the wall density (rho_wall nu~_w of SA-rough: its
+    ! Robin condition across the wall distance of the cell)
     if (model==2) then 
       dl = Blk%yn(Im,Jm,Km)
-      call RANS_Set_Wall_Values( mil_wall=mil, rans_wall=Prim_Wall(nt:nprim), rans_cell=Prim(nt:nprim), &
+      call RANS_Set_Wall_Values( mil_wall=mil, rans_wall=Prim_Wall(nt:nprim), rans_cell=Prim(nt:nprim) * rho_wall / rho, &
                                  metric=dot_product( Mc(Dir,:), normal), dist=dl, ks=hs)
-      Gradient(nt:nprim,Dir) = ( Prim(nt:nprim)/rho - Prim_Wall(nt:nprim)/rho ) * modfm3
-      call Eddy_Viscosity ( mut=mit, rans_variables=Prim_Wall(nt:nprim), mul=mil, rho=rho, vel_gradient=Gradient(nu:nw,:), &
+      Gradient(nt:nprim,Dir) = ( Prim(nt:nprim)/rho - Prim_Wall(nt:nprim)/rho_wall ) * modfm3
+      ! The velocity gradient in physical space (the differences above are in index space, turned at the end)
+      call Eddy_Viscosity ( mut=mit, rans_variables=Prim_Wall(nt:nprim), mul=mil, rho=rho_wall, &
+                            vel_gradient=matmul ( Gradient(nu:nw,:), M ), &
                             walldist=0d0, ks=hs)   ! wall face: y = 0 (dl stays the cell distance for Set_Wall_Values)
     else
       mit = 0d0
     end if
-
-    ! Temperature gradient
-    if ( obj_rans%Prt_correction ) then
-      ! Evaluated at the wall face (y=0). The rough-wall value mitilde_w = vk*u_tau*rho*0.03*hs
-      ! yields the same u_tau as the cell value taken at y=dl, but leaves the near-wall damping
-      ! exp(-y/hs) equal to 1, as required for a flux computed on the wall face itself.
-      dPrt = delta_Prt ( mil, cp, kl, Prim_Wall(nt), hs, 0d0 )
-    else
-      dPrt = 0.00d0
-    end if
-    kt = mit*cp/(obj_rans%Prt+dPrt)
-    ! Heat_Flux is positive into the fluid on every face: the wall is hotter than the cell when it heats the fluid
-    Gradient(nh,Dir) = -Heat_Flux / ( 2d0*(kl+kt)*dot_product( Mc(Dir,:), normal ) )
-
-    ! Wall variables
-    Twall = temp - Gradient(nh,Dir)
-    entalpy   = pT2h( pressure, Twall ) 
-    rho_wall  = ph2vars( pressure, entalpy, rho_tab )  
-    Prim_Wall(nh) = entalpy ! -------------------------------- ! 
 
     Gradient = matmul ( Gradient, M )
 

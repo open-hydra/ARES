@@ -93,8 +93,14 @@ contains
       ! The state at the interface from the interior side is reconstructed: (p,u,h)
       Diff32 = Prim3 - Prim
       Diff21 = Prim - Prim1
+      ! The difference next to the face first, as in the interior reconstruction: 2-1 on odd faces (cell 1 is the
+      ! ghost cell), 3-2 on even ones (cell 3 is the ghost cell)
       do s = 1, nprim
-        Slope(s) = rlimiter ( Diff32(s), Diff21(s) )
+        if ( modfm == 1 ) then
+          Slope(s) = rlimiter ( Diff21(s), Diff32(s) )
+        else
+          Slope(s) = rlimiter ( Diff32(s), Diff21(s) )
+        end if
       end do
       
       ! Extrapolation at the interface from the boundary cell

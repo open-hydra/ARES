@@ -208,22 +208,22 @@ contains
         real(kind=8), intent(inout) :: prim(nprim), residual(nprim)
         ! Local
         real(kind=8) :: Tdiff, inv_volume, inv_rho, rho, velocity(3)
-        real(kind=8) :: p, h, drh, Denom, Res(nprim), cp, rho_T, sound, Ur, Theta
+        real(kind=8) :: p, h, drh, Denom, Res(nprim), sound, Ur, Theta
 
         p = prim(np)
         h = prim(nh)
         rho   = ph2vars( p, h, rho_tab    ) ! density
         sound = ph2vars( p, h, sound_tab  ) ! speed of sound
         drh   = ph2vars( p, h, rh_tab     ) ! drho/dh
-        rho_T = ph2vars( p, h, dT_tab     ) ! drho/dT  
-        cp    = ph2vars( p, h, hT_tab     ) ! dh/dT
         
         inv_volume  = 1d0 / volume
         inv_rho     = 1d0 / rho
         velocity = prim (nu:nw)
         
         Ur = Comp_Ur( Norm2(prim(nu:nw)), sound ) ! reference velocity
-        Theta = 1.0_R8 / Ur**2 - rho_T / ( rho * cp ) ! Preconditioned drho/dp
+        ! Preconditioned drho/dp: 1/Ur^2 - rho_T/(rho cp), with rho_T/cp = drho/dh at constant p, the drh of Denom (one
+        ! lookup instead of two, and the same derivative in Theta and in Denom)
+        Theta = 1.0_R8 / Ur**2 - drh / rho
         Denom = 1.0_R8 / ( rho*Theta + drh )
         
         Res(np)  = Denom * ( ( (h - 0.5_R8*Norm2(velocity)**2)*drh + rho )*residual(np) + sum(velocity*drh*residual(nu:nw)) - drh*residual(nh) )
@@ -246,6 +246,7 @@ contains
     use ARES_Global_m
     use ARES_Lib_RANS
     use ARES_Finite_m, only: Not_Finite
+    use ARES_Load_ThermoTransport, only: Outside_Tables
 
     implicit none
     real(kind=8), dimension(:), intent(inout) :: prim
@@ -263,6 +264,15 @@ contains
       stop 1
     endif
 
+    ! A state whose pressure or enthalpy lies outside the fluid tables: their reads would leave the arrays (garbage or a
+    ! segmentation fault). Not strict: within one cell below their first node ph2vars extrapolates, and the run goes on
+    if ( Outside_Tables ( prim(np), prim(nh) ) ) then
+      write(*,'(A,4I4)') "Integration failed at b, i, j, k:", b, i, j, k
+      write(*,*) prim(1:nprim)
+      write(*,'(A)') "State outside the fluid tables (pressure or enthalpy beyond their range)"
+      stop 1
+    endif
+
     ! Realizability for turbulence, after counting a stage that made nu~, k or omega negative
     if (model==2) then
       call Count_Negative_Turbulence ( prim )
@@ -272,17 +282,24 @@ contains
   end subroutine check_and_fix_state
 
 
-  !> Counts one cell update whose stage made nu~, k or omega negative, before the realizability floor (one- and
-  !> two-equation models, whose variables are all positive; thread-safe: atomic only when it happens). check_and_fix_state
-  !> calls it; an integrator with its own update of the cells calls it in the same way, on the updated primitive
-  !> vector and before RANS_Enforce_Realizability, so that Report_Negative_Turbulence counts its stages too.
+  !> Counts one cell update whose stage made nu~, k, omega, a normal Reynolds stress or omega of SSG/LRR negative,
+  !> before the realizability floor (the shear stresses of SSG/LRR have a sign and are not counted; thread-safe: atomic
+  !> only when it happens). check_and_fix_state calls it; an integrator with its own update of the cells calls it in the
+  !> same way, on the updated primitive vector and before RANS_Enforce_Realizability, so that Report_Negative_Turbulence
+  !> counts its stages too.
   subroutine Count_Negative_Turbulence ( prim )
     use ARES_Global_m, only: model, nt, nprim, nrans
     implicit none
     real(R8), intent(in) :: prim(:)
+    logical :: negative
 
-    if ( model /= 2 .or. nrans > 2 ) return
-    if ( any( prim(nt:nprim) < 0d0 ) ) then
+    if ( model /= 2 ) return
+    if ( nrans > 2 ) then
+      negative = any( prim(nt:nt+2) < 0d0 ) .or. prim(nprim) < 0d0   ! normal stresses and omega: the shear stresses have a sign
+    else
+      negative = any( prim(nt:nprim) < 0d0 )
+    end if
+    if ( negative ) then
       !$omp atomic
       n_negative_turbulence = n_negative_turbulence + 1
     end if
@@ -290,17 +307,18 @@ contains
   end subroutine Count_Negative_Turbulence
 
 
-  !> One line at the end of a RANS run in which a stage made nu~, k or omega negative, so that the realizability floor
-  !> changed the solution: how many cell updates had such a stage, over the ranks. A run in which none did prints no
-  !> line. Collective: every rank of a run with a one- or two-equation model calls it and the reduction (model and nrans
-  !> are the same on every rank), so that no rank takes another MPI path; rank 0 writes the line when the total is not zero.
+  !> One line at the end of a RANS run in which a stage made a turbulence variable negative (as counted by
+  !> Count_Negative_Turbulence), so that the realizability floor changed the solution: how many cell updates had such a
+  !> stage, over the ranks. A run in which none did prints no line. Collective: every rank of a RANS run calls it and the
+  !> reduction (model is the same on every rank), so that no rank takes another MPI path; rank 0 writes the line when
+  !> the total is not zero.
   subroutine Report_Negative_Turbulence ()
-    use ARES_Global_m, only: model, nrans
+    use ARES_Global_m, only: model
     use ARES_Mod_MPI,  only: mpi_is_root, mpi_allreduce_sum_r8
     implicit none
     real(R8) :: total
 
-    if ( model /= 2 .or. nrans > 2 ) return
+    if ( model /= 2 ) return
     call mpi_allreduce_sum_r8 ( real(n_negative_turbulence, R8), total )
     if ( mpi_is_root .and. total > 0d0 ) &
       write(*,'(A,I0)') ' Turbulence variables below zero after a stage (set to the floor): ', nint(total, I8)

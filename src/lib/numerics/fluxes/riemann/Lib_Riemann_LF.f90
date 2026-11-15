@@ -55,20 +55,14 @@ subroutine Riemann_PLLF (pl,ul,vl,wl,hl,pr,ur,vr,wr,hr,nx,ny,nz,F_r,F_u,F_v,F_w,
   ! common
   real(kind=8) :: dr,dl, ar, al
   ! specific
-  real(kind=8) :: uln, urn, rho_Tl, rho_Tr, cpl, cpr, U_rl, U_rr
-  real(kind=8) :: thetal, thetar, alphal, alphar, betal, betar, ul_mod, ur_mod
+  real(kind=8) :: uln, urn, U_rl, U_rr
+  real(kind=8) :: alphal, alphar, betal, betar, ul_mod, ur_mod
   real(kind=8) :: al_mod, ar_mod, A, Frr, Fur, Fvr, Fwr, Fer, Frl, Ful, Fvl, Fwl, Fel
 
   uln = ul*nx + vl*ny + wl*nz
   urn = ur*nx + vr*ny + wr*nz
 
   ! Thermodynamic stuff
-  rho_Tl = ph2vars ( pl, hl, dT_tab )
-  rho_Tr = ph2vars ( pr, hr, dT_tab )
-  
-  cpl = ph2vars ( pl, hl, hT_tab )
-  cpr = ph2vars ( pr, hr, hT_tab )
-
   al = ph2vars ( pl, hl, sound_tab )
   ar = ph2vars ( pr, hr, sound_tab )
 
@@ -78,8 +72,6 @@ subroutine Riemann_PLLF (pl,ul,vl,wl,hl,pr,ur,vr,wr,hr,nx,ny,nz,F_r,F_u,F_v,F_w,
   ! Preconditioning stuff
   U_rl = Max ( 1d-5 * al, Min ( Abs( uln ) , al ) )
   U_rr = Max ( 1d-5 * ar, Min ( Abs( urn ) , ar ) )
-  thetal = 1d0 / U_rl**2 - rho_Tl / ( dl * cpl )
-  thetar = 1d0 / U_rr**2 - rho_Tr / ( dr * cpr )
   betal = 1d0 / al**2
   betar = 1d0 / ar**2
   alphal = 0.5d0 * ( 1d0 - betal * U_rl**2 )

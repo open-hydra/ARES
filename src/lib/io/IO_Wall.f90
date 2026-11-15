@@ -140,6 +140,7 @@ contains
       call parse(obj_io%sol_format,' ', format)
 
       ! Write the IOwall accordingly to the solution format
+      E_IO = 0
       select case(trim(format(1)))
       case('vtk')
         IOwall(lv)%vtk%format = trim(format(2))
@@ -161,6 +162,9 @@ contains
         E_IO = tec_write_structured_multiblock(orion=IOwall(lv),varnames=obj_io%Owallnames, &
                                                filename=trim(path)//trim(file)//trim(IOwall(lv)%tec%extension))
       end select
+      ! A failed write (disk full, quota, permission) leaves a cut file: say so, and go on (the next output may succeed)
+      if ( E_IO /= 0 ) write(*,'(A,I0,A)') ' [WARNING] '//trim(path)//trim(file)//' was not written (status ', E_IO, &
+                                           '): disk full, quota or permission?'
     end if
 
     ! Synchronize all ranks after I/O

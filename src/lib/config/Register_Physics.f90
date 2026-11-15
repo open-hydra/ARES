@@ -23,7 +23,7 @@ contains
     !! ------------------------------------------------------
     !! Physical models ------------------------
     !! ------------------------------------------------------
-    ! Same keys as [MOSE-Physics]: the equations and the turbulence model
+    ! The equations and the turbulence model
     section = trim(codename)//'-Physics'
     call reg%add(section, 'equations', obj_sim_param%simulation_type, '', 'Gas dynamics equations', 'euler , navier-stokes', .true.)
     call reg%add(section, 'turbulence', obj_rans%model, 'none', 'RANS turbulence model', 'SA, SA-R, SA-RC, SA-QCR2000, SA-rough, SA-rough-QCR2000, SAcomp, SST, SST-RC, Wilcox2006, SSGLRR, SSGLRR-SD, SSGLRR-w2019, SSGLRR-w2019-SD, none', .false.)
@@ -34,15 +34,15 @@ contains
     !! ------------------------------------------------------
     !! Turbulence -------------------------------------------
     !! ------------------------------------------------------
-    ! The keys of [MOSE-Turbulence], then the options of ARES only
+    ! The constants of the turbulence closure, then the options of the models
     section = trim(codename)//'-Turbulence'
     call reg%add(section, 'Prt', obj_rans%Prt, '0.90', 'Turbulent Prandtl number', '> 0', .false.)
     call reg%add(section, 'Sct', obj_rans%Sct, '0.90', 'Turbulent Schmidt number', '> 0', .false.)
     call reg%add(section, 'point-implicit', obj_rans%point_implicit, '.false.', 'Point-implicit factor 1/(1 + dt d) on the increment of the turbulence equations, steady runs only (time-accurate runs: explicit sources, stiffness in the time step)', 'logical', .false.)
-    call reg%add(section, 'omega-wall-bc', obj_rans%omega_wall_bc, 'practical', 'Omega wall condition for k-omega models and SSGLRR: Menter practical (60*nu/(beta1*y^2), beta1 of SST, for every model) or asymptotic (6*nu/(beta*y^2), exact y->0 limit with the beta of the model, beta1 for SST and SSGLRR and beta0 for Wilcox2006, for wall-resolved meshes)', 'practical, asymptotic', .false.)
+    call reg%add(section, 'omega-wall-bc', obj_rans%omega_wall_bc, 'practical', 'Omega wall condition for k-omega models and SSGLRR: Menter practical (60*nu/(beta1*y^2), beta1 of SST, for every model) or asymptotic (6*nu/(beta*y^2), the value of the y->0 limit set at the wall face, with the beta of the model, beta1 for SST and SSGLRR and beta0 for Wilcox2006; kept for comparison: practical is the wall condition of the references)', 'practical, asymptotic', .false.)
     call reg%add(section, 'sst-production', obj_rans%sst_production, 'incompressible', 'SST production (NASA TMR naming): incompressible (P = mu_t*S^2, SST-2003m) or compressible (P = tau_ij*du_i/dx_j, SST-2003e, as OpenFOAM kOmegaSST: adds -2/3*mu_t*divU^2 - 2/3*rho*k*divU, and -2/3*gamma*rho*omega*divU to the omega equation)', 'incompressible, compressible', .false.)
     call reg%add(section, 'k-energy-coupling', obj_rans%k_energy_coupling, '.false.', 'Two-equation models (SST, Wilcox2006): k in the total energy, the full compressible RANS form of NASA TMR: -2/3*rho*k*delta_ij in the stress tensor of the momentum and energy equations, and the k-equation source (production - dissipation) taken from the mean-flow energy. .false. = TMR m/e variants', 'logical', .false.)
-    call reg%add(section, 'Prt-correction', obj_rans%Prt_correction, '.false.', 'Turbulent Prandtl correction for wall roughness', 'logical', .false.)
+    call reg%add(section, 'Prt-correction', obj_rans%Prt_correction, '.false.', 'Turbulent-Prandtl correction for wall roughness (SA with -rough only)', 'logical', .false.)
     call reg%add(section, 'sst-asymptotic', obj_rans%sst_asymptotic, '.false.', 'Impose the asymptotic solution omega = 6*nu/(beta_1*d^2) on the near-wall cells (SST only)', 'logical', .false.)
     call reg%add(section, 'sst-asymptotic-cells', obj_rans%sst_asymptotic_cells, '1', 'Number of cells off viscous walls where the asymptotic omega is imposed', '>= 1', .false.)
 

@@ -25,6 +25,7 @@ module ARES_IO_Probes
     integer                          :: ntime = 1   ! next multiple of dtime with a time-based row
     integer                          :: diter
     integer                          :: unit
+    character(len=llen)              :: path        ! file of the probe: OUTPUT/<name of input.ini>.txt
   contains
     private
     procedure, pass(self) :: Place
@@ -39,12 +40,13 @@ contains
   subroutine Setup_Probes( domain, newrun )
     use IR_precision
     use strings, only: parse
-    use ARES_Mod_MPI, only: is_local_block, mpi_abort_all
+    use ARES_Mod_MPI, only: is_local_block, mpi_abort_all, mpi_stop_all
     implicit none
-    type(ARES_domain_type), intent(in)  :: domain
-    logical, intent(in)                 :: newrun
+    type(ARES_domain_type), intent(in), target :: domain
+    logical, intent(in)                        :: newrun
     ! Local
     integer             :: i, ii, error
+    logical             :: ok
     character(len=clen) :: string(8)
 
     nprobes = size(obj_io_probes)
@@ -52,7 +54,9 @@ contains
 
     do i = 1, nprobes
 
-      obj_io_probes(i)%file = 'OUTPUT/'//trim(obj_io_probes(i)%file)//'.txt'
+      ! The path in a variable of its own: the name of input.ini (obj_io_probes%file, clen characters) is kept as it is,
+      ! and a re-read of input.ini gives it again
+      probe(i)%path = 'OUTPUT/'//trim(obj_io_probes(i)%file)//'.txt'
 
       ! Vars name
       string = ''
@@ -78,6 +82,14 @@ contains
 
       if (sum(obj_io_probes(i)%iloc)==0) call probe(i)%Place(domain)
 
+      ! index-position is block i j k, inside the mesh (every rank holds the indices and the dimensions of every block)
+      associate ( loc => probe(i)%ilocation )
+        ok = loc(1) >= 1 .and. loc(1) <= domain%nb
+        if ( ok ) ok = all ( loc(2:4) >= 1 ) .and. all ( loc(2:4) <= domain%blk(loc(1))%dim(1:3) )
+        if ( .not. ok ) call mpi_stop_all ( 'probe '//trim(obj_io_probes(i)%file)// &
+                                            ': index-position (block i j k) outside the mesh' )
+      end associate
+
       ! Only the rank owning this probe's block sets up pointers and opens the file
       if (.not. is_local_block(probe(i)%ilocation(1))) cycle
 
@@ -88,13 +100,21 @@ contains
       ! gets here, so a failure aborts all ranks: an unopened unit would write to an
       ! arbitrary file.
       if (.not.newrun) then
-        open(newunit=probe(i)%unit,file=trim(obj_io_probes(i)%file),status='UNKNOWN', &
+        open(newunit=probe(i)%unit,file=trim(probe(i)%path),status='UNKNOWN', &
              position='APPEND',action='WRITE',iostat=error)
       else
-        open(newunit=probe(i)%unit,file=trim(obj_io_probes(i)%file),status='REPLACE',iostat=error)
+        open(newunit=probe(i)%unit,file=trim(probe(i)%path),status='REPLACE',iostat=error)
       endif
-      if (error/=0) call mpi_abort_all('cannot open probe file '//trim(obj_io_probes(i)%file))
+      if (error/=0) call mpi_abort_all('cannot open probe file '//trim(probe(i)%path))
 
+    enddo
+
+    ! Two probes with the same name would write one file (every rank holds every name)
+    do i = 2, nprobes
+      do ii = 1, i - 1
+        if ( trim(probe(i)%path) == trim(probe(ii)%path) ) &
+          call mpi_stop_all ( 'two probes write the same file '//trim(probe(i)%path)//': give them different names' )
+      enddo
     enddo
 
   end subroutine Setup_Probes
@@ -245,10 +265,10 @@ contains
     do i = 1, nprobes
       if (.not. is_local_block(probe(i)%ilocation(1))) cycle
       close(probe(i)%unit)
-      call Drop_Rows_After ( trim(obj_io_probes(i)%file), 1 + probe(i)%nvar, iteration, time )
-      open(newunit=probe(i)%unit,file=trim(obj_io_probes(i)%file),status='UNKNOWN', &
+      call Drop_Rows_After ( trim(probe(i)%path), 1 + probe(i)%nvar, iteration, time )
+      open(newunit=probe(i)%unit,file=trim(probe(i)%path),status='UNKNOWN', &
            position='APPEND',action='WRITE',iostat=error)
-      if (error/=0) call mpi_abort_all('cannot open probe file '//trim(obj_io_probes(i)%file))
+      if (error/=0) call mpi_abort_all('cannot open probe file '//trim(probe(i)%path))
     enddo
 
   end subroutine Drop_Probe_Rows
