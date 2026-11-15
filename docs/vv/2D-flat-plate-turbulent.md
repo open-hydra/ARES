@@ -118,7 +118,7 @@ python3 validate_sst.py
 
 The script reads `OUTPUT/field.tec` and `OUTPUT/wall.tec`, computes $c_f(x)$ and the wall-scaled $k^+,\omega^+$ profiles, overlays them on the NASA TMR reference, and prints the RMS / max relative $c_f$ error with a **PASS/FAIL** verdict (PASS for RMS < 5 %). The shared comparison logic lives in `test/common/_fp_turb_common.py`.
 
-The **SA** case is the exception — it does **not** need the constant-property scripts, because `validate_sa.py` compares $c_f$ in $\mathrm{Re}_x$ space (so the curve collapses at any Reynolds number; the Mach number, 0.49 against the 0.2 of TMR, still lowers $c_f$ by about 2.3 %). It validates $c_f$ from `OUTPUT/1d.dat`, which must first be generated with the shared extractor (the tracked `test/common/extract1d` binary predates the current solution format: build it first from its source, `gfortran -O2 -J /tmp -o ../common/extract1d ../common/Extract1D.f90`):
+The **SA** case is the exception — it does **not** need the constant-property scripts, because `validate_sa.py` compares $c_f$ in $\mathrm{Re}_x$ space (so the curve collapses at any Reynolds number; the Mach number, 0.49 against the 0.2 of TMR, still lowers $c_f$ by about 2.3 %). It validates $c_f$ from `OUTPUT/1d.dat`, which must first be generated with the shared extractor (not shipped built: build it first from its source, `gfortran -O2 -J /tmp -o ../common/extract1d ../common/Extract1D.f90`):
 
 ```bash
 cd test/Flat_Plate_SA
