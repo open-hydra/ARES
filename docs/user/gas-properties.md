@@ -53,7 +53,7 @@ model = coolprop       ; property backend (optional)
 ATLAS samples the fluid over $[p_\text{min},p_\text{max}]$ and the enthalpy band corresponding to $[T_\text{min},T_\text{max}]$, on an $N_P \times N_H$ grid, and writes the tables. The enthalpy bounds are computed from the corners $(T_\text{min},p_\text{min})$ and $(T_\text{max},p_\text{max})$, so the table is stored directly in $(p,h)$.
 
 !!! warning "Stay inside the table"
-    Properties are only valid inside the tabulated $(p,h)$ box. A run whose pressure or enthalpy leaves $[p_\text{min},p_\text{max}]$ or the $[T_\text{min},T_\text{max}]$ band will **extrapolate** — inaccurate and potentially unstable. Choose the range to comfortably bracket the expected flow states, transients included.
+    Properties are only valid inside the tabulated $(p,h)$ box, whose range ARES prints at loading (pressure, enthalpy, temperature). An initial condition with a cell outside it, or a temperature or a pressure of `bc.txt` outside it (302, 404, 405, 406), stops the set-up with the cell or the line. During the run a state within one table cell below $p_\text{min}$ or $h_\text{min}$ is extrapolated from the first cell; a state farther out, or at or beyond $p_\text{max}$ or $h_\text{max}$, stops the run with the cell and its state. The wall temperature of a heat-flux wall (301) or of a wall coupled to the solid by hydra (103, 104), and the ghost states of the walls, are brought within the tables instead (for the state of the gas only: the coupled wall keeps its temperature in the heat flux), and counted at the end of the run. Choose the range to comfortably bracket the expected flow states, transients included.
 
 ### Resolution
 
@@ -67,7 +67,7 @@ From the `[GPB-*]` block ATLAS builds two ASCII tables on the **pressure–entha
 
 | File | Contents |
 |------|----------|
-| `thermo.dat` | Equation of state — temperature $T$, density $\rho$, specific heat $c_p$, speed of sound, and the density derivatives $\partial\rho/\partial p$, $\partial\rho/\partial T$, $\partial\rho/\partial h$ |
+| `thermo.dat` | Equation of state — the eight variables density $\rho$, temperature $T$, $\partial\rho/\partial T$, $\partial\rho/\partial h$, specific heat $c_p$, entropy, $\partial\rho/\partial p$ and speed of sound |
 | `transport.dat` | Transport — dynamic viscosity $\mu$ and thermal conductivity $k$ |
 
 Both are indexed by $(p,h)$, so the solver recovers every state by a direct table lookup with no equation-of-state inversion at run time. This is why the [initial-condition](initial-conditions.md) and solution files store $p$ and $h$ as the primitive thermodynamic pair. ARES reads the tables through the **FLINT** library at start-up.
@@ -75,4 +75,4 @@ Both are indexed by $(p,h)$, so the solver recovers every state by a direct tabl
 !!! note "Both tables must share the same $(p,h)$ orientation"
     `thermo.dat` and `transport.dat` are built together on the same grid and must stay consistent — if you change the range or resolution, regenerate both with ATLAS.
 
-See [Real-Fluid Thermodynamics](../theory/thermo.md) for the full table layout and the thermo-inversion step performed when the solution is loaded.
+See [Real-Fluid Thermodynamics](../theory/thermo.md) for the full table layout and the inverse table $h(p,T)$ ("Thermo inversion") built at loading.

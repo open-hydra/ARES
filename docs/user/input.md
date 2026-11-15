@@ -9,7 +9,7 @@ ARES is configured through a single **INI-format** file, `input.ini`, in the cas
 parameter = value
 ```
 
-Parameters not listed take their **default** value. Example:
+Parameters not listed take their **default** value; the required ones (column Required of the [Parameter Registry](registry.md): `equations`, `cfl`, `time-accurate`, `time-scheme`, ...) must be given. Example:
 
 ```ini
 [ARES-Parameters]
@@ -21,6 +21,7 @@ turbulence = SST
 
 [ARES-Numerics]
 cfl                   = 0.6
+time-accurate         = false
 time-scheme           = RK3
 integration-variables = prim
 space-reconstruction  = MUSCL
@@ -38,7 +39,7 @@ riemann-solver        = HLLC
     If a parameter is omitted, the default is used without warning. Check the [Parameter Registry](registry.md) for exact names, defaults, and allowed values — names are case-sensitive.
 
 !!! warning "Keys that are not read"
-    ARES warns at the start for every line `key = value` of `input.ini` whose key the reader does not give in its section, with its line: such a key is an error in the input, and the run goes on with the default of its parameter in place of the value written. A parameter of the registry written with no value is named here, and stops the run (below). Comment lines are skipped, also when they hold `=`.
+    ARES warns at the start for every line `key = value` of `input.ini` whose key the reader does not give in its section, with its line: such a key is an error in the input, and the run goes on with the default of its parameter in place of the value written. It also warns, with its line, for every key of a section of ARES (`[ARES-...]` and the sections of the probes) that is not a key of ARES — a misspelled key, `turbulance = SA`, or one that ARES does not have —, which is ignored; the `[HYDRA-...]` sections of a coupled input, read by the other solvers too, and the sections of the other solvers are not checked. A parameter of the registry written with no value is named here, and stops the run (below). Comment lines are skipped, also when they hold `=`.
 
 !!! warning "An input.ini that cannot be read stops the run at the start"
     If `input.ini` cannot be opened (missing, or without read permission), holds no line that is not blank, or the INI reader returns an error while it loads the file (a file with no section, a line it cannot parse, which the reader names on its error output), the run stops at the start with the reason and exit code 1; with MPI every rank stops. For a reading during the run, see the note «Errors of a reading during the run» below.
@@ -53,7 +54,7 @@ riemann-solver        = HLLC
     When ARES reads `input.ini` again during the run, an error of the reading (a file that cannot be read, a value that does not read as the type of its parameter, is out of its rule or is not finite) does what `ini-error` of `[ARES-IO]` says. With `warn`, the default, the reading is not taken: ARES writes a warning with the iteration and the error, which names the key and its value as written, and the run goes on with every value it had before the reading, those of the keys of the same reading that were right too. With `stop` the run stops with the message and exit code 1, as at the start; with MPI every rank stops. The value of `ini-error` in force when the reading starts decides. At the start every error stops the run, whatever `ini-error` says.
 
 !!! warning "What a reading during the run changes"
-    When ARES reads `input.ini` again during the run, only the parameters that the solver reads at every step take the new values, such as `cfl`, `vnn`, the intervals of the outputs, `iter-threshold` and `level<n>-iter`. The choices that the set-up makes once from the input are not made again, nor are its checks between keys: a new value of `equations`, `turbulence`, `space-reconstruction`, `flux-limiter`, `riemann-solver` or `time-scheme` is checked against its rule and leaves the run as it was. Residual smoothing cannot be turned on during a run started without it (`irs = true` or `irs-beta > 0`): its work arrays exist only when it was on at the start, so the reading ignores it, with a warning.
+    When ARES reads `input.ini` again during the run, only the parameters that the solver reads at every step take the new values: `cfl`, `vnn`, `Prt`, `Sct`, `irs-beta`, `irs-variables`, the thresholds of `[ARES-Parameters]`, the intervals of the outputs (the `...-diter` and `...-dtime` keys), `level<n>-iter` and `prolongated-diter`; and, because they are read at run time too, `sol-format`, `time-accurate` (the checks of IRS and of the steady run are not done again), `Prt-correction`, `point-implicit` and `sst-asymptotic`, which are not meant to change during a run. The choices that the set-up makes once from the input are not made again, nor are its checks between keys: a new value of `equations`, `turbulence`, `space-reconstruction`, `flux-limiter`, `riemann-solver` or `time-scheme` is checked against its rule and leaves the run as it was, and `preconditioning-Uref` and `preconditioning-eps-min` are copied once at the start and do not change. Residual smoothing cannot be turned on during a run started without it (`irs = true` or `irs-beta > 0`): its work arrays exist only when it was on at the start, so the reading ignores it, with a warning. A key removed or commented out during the run keeps the value it had: to switch something off during the run, give the key its off value.
 
 ---
 
@@ -69,7 +70,7 @@ These are read by ARES and validated against the registry.
 | `[ARES-Numerics]` | Time/space discretization, Riemann solver, CFL, IRS, preconditioning | [→](registry.md#ares-numerics) |
 | `[ARES-IO]` | Output formats, frequencies, and variables | [→](registry.md#ares-io) |
 | `[ARES-Probes]` | Point probes for time-history recording | [→](registry.md#ares-probes) |
-| `[ARES-Multigrid]` | Per-level multigrid iteration counts | [→](registry.md#ares-multigrid) |
+| `[ARES-Multigrid]` | Per-level multigrid iteration counts (the finest level runs `level1-iter`, or `iter-threshold` when `level1-iter` is not given) | [→](registry.md#ares-multigrid) |
 
 !!! note "Turbulence sources in time-accurate runs"
     In time-accurate RANS runs (`time-accurate = .true.`, or a time-accurate HYDRA coupling) the turbulence sources
@@ -82,8 +83,8 @@ These are read by ARES and validated against the registry.
     can make $\omega$ negative. At the end of a RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative,
     one line gives how many cell updates had such a stage.
 
-!!! note "Same layout as MOSE"
-    The flow regime is set in `[ARES-Physics]` with the keys of `[MOSE-Physics]`: `equations` = `euler` · `navier-stokes`, and `turbulence` = the RANS model (default `none`). `navier-stokes` with `turbulence = none` is a laminar run; `euler` takes no turbulence model. The options of the model are in `[ARES-Turbulence]`, as in `[MOSE-Turbulence]`.
+!!! note "Flow regime"
+    The flow regime is set in `[ARES-Physics]`: `equations` = `euler` · `navier-stokes`, and `turbulence` = the RANS model (default `none`). `navier-stokes` with `turbulence = none` is a laminar run; `euler` takes no turbulence model. The options of the model are in `[ARES-Turbulence]`.
 
 !!! warning "Input files of earlier ARES versions"
     `simulation-type` in `[ARES-Parameters]`, the `[ARES-RANS]` section and `ini-format` in `[ARES-IO]` are no longer read. ARES stops at set-up if it finds them, and says where each key went:
@@ -135,8 +136,8 @@ a little beyond them blows up. Suggested values:
 - `RK2` (Heun): `cfl = 0.5` with moving shocks, up to `cfl = 0.7` where the flow is smooth, and
   `vnn = 0.4`; never `cfl` ≥ 0.95 or `vnn` ≥ 0.5.
 
-The defaults are `cfl = 0.5` and `vnn = 0.3`; in a viscous time-accurate run raise `vnn` within the limits of the
-table before `cfl`.
+`cfl` is required (an input without it stops at set-up); `vnn` defaults to 0.3. In a viscous time-accurate run raise
+`vnn` within the limits of the table before `cfl`.
 
 ---
 
@@ -171,4 +172,4 @@ This requests a real-fluid air table on a $200\times200$ pressure–enthalpy gri
 
 ## Parameter Registry
 
-The complete list of all `[ARES-*]` parameters, defaults, and allowed values is in the **[Parameter Registry](registry.md)**. It is generated automatically from the source code by the `DocGen` tool (`src/app/docgen.f90`) — do not edit it by hand.
+The complete list of all `[ARES-*]` parameters, defaults, and allowed values is in the **[Parameter Registry](registry.md)**. Its tables are generated from the registry of the source code by the `DocGen` tool (`src/app/docgen.f90`); the notes between them are written by hand, so regenerate the tables and keep the notes when a key changes.

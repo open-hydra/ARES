@@ -1,10 +1,10 @@
 # Turbulence Modelling
 
-ARES provides Reynolds-Averaged Navier–Stokes (RANS) closures for turbulent flows, selected at run time by `turbulence` in `[ARES-Physics]` (with `equations = navier-stokes`; `none`, the default, is a laminar run), with the options of the model in `[ARES-Turbulence]`: the same keys and sections as MOSE. The families range from a one-equation eddy-viscosity model to a full seven-equation Reynolds-stress model. All models are bound to procedure pointers at setup, so switching model requires no recompilation.
+ARES provides Reynolds-Averaged Navier–Stokes (RANS) closures for turbulent flows, selected at run time by `turbulence` in `[ARES-Physics]` (with `equations = navier-stokes`; `none`, the default, is a laminar run), with the options of the model in `[ARES-Turbulence]`. The families range from a one-equation eddy-viscosity model to a full seven-equation Reynolds-stress model. All models are bound to procedure pointers at setup, so switching model requires no recompilation.
 
 | `turbulence` | Type | Notes |
 |--------------|------|-------|
-| `SA` | 1-equation eddy viscosity | Baseline Spalart–Allmaras |
+| `SA` | 1-equation eddy viscosity | Spalart–Allmaras without the $f_{t2}$ term: SA-noft2 in the TMR naming |
 | `SA-R` | 1-equation | + rotation correction |
 | `SA-RC` | 1-equation | + Spalart–Shur rotation/curvature correction |
 | `SAcomp` | 1-equation | + compressibility correction (stops at set-up: its result depends on the units) |
@@ -17,7 +17,7 @@ ARES provides Reynolds-Averaged Navier–Stokes (RANS) closures for turbulent fl
 | `SSGLRR` | 7-equation RSM | Speziale–Sarkar–Gatski / Launder–Reece–Rodi (w2012; `-SD`, `-w2019` variants) |
 | `none` | — | Laminar (no model) |
 
-Any of the `-blowcorr` suffix (wall-transpiration correction) and the `Prt-correction` key can be combined with the eligible base models (see [General RANS Architecture](#general-rans-architecture)).
+The SA models of ARES have no $f_{t2}$ term (laminar suppression): in the naming of the NASA Turbulence Modeling Resource ([TMR, SA page](https://tmbwg.github.io/turbmodels/spalart.html)) `SA`, `SA-R`, `SA-RC`, `SA-rough` and `SA-QCR2000` are SA-noft2, SA-noft2-R, SA-noft2-RC, SA-noft2-rough and SA-noft2-QCR2000. The `Prt-correction` key can be combined with the rough SA models (see [General RANS Architecture](#general-rans-architecture)).
 
 ---
 
@@ -31,7 +31,7 @@ $$
 S_{ij} = \tfrac12\Bigl(\frac{\partial u_i}{\partial x_j} + \frac{\partial u_j}{\partial x_i}\Bigr),
 $$
 
-where $\mu_t$ is the eddy (turbulent) viscosity and $k$ the turbulence kinetic energy. The isotropic term $-\tfrac23\rho k\,\delta_{ij}$ is retained for the two-equation models and dropped for SA. The SSG-LRR model abandons this hypothesis and transports the Reynolds stresses $\tau_{ij}^R$ directly.
+where $\mu_t$ is the eddy (turbulent) viscosity and $k$ the turbulence kinetic energy. The isotropic term $-\tfrac23\rho k\,\delta_{ij}$ enters the mean-flow equations of the two-equation models only with `k-energy-coupling = .true.`; it is dropped for SA. The SSG-LRR model abandons this hypothesis and transports the Reynolds stresses $\tau_{ij}^R$ directly.
 
 ---
 
@@ -154,11 +154,13 @@ d = y + d_0,\qquad d_0 = 0.03\,k_s,\qquad
 \chi = \frac{\tilde\nu}{\nu} + c_{R1}\frac{k_s}{d},\qquad c_{R1} = 0.5
 $$
 
-with $d$ replacing $y$ in $\bar S$, in the destruction function $r$, in the destruction term itself and in the point-implicit factor. The wall condition on $\tilde\nu$ becomes $(\partial\tilde\nu/\partial n)_w = \tilde\nu_w/(0.03\,k_s)$, discretised in `Spalart_Set_Wall_Values` as
+with $d$ replacing $y$ in $\bar S$, in the destruction function $r$, in the destruction term itself and in the point-implicit factor. The wall condition on $\tilde\nu$ becomes $(\partial\tilde\nu/\partial n)_w = \tilde\nu_w/(0.03\,k_s)$: $\tilde\nu$ grows linearly with the displaced distance $y + d_0$ across the first cell, so `Spalart_Set_Wall_Values` takes the wall value as the cell value scaled by $d_0/(y_1 + d_0)$,
 
 $$
-\tilde\mu_w = \frac{2\,\tilde\mu_c\,m\,(0.03\,k_s)}{1 + 2\,m\,(0.03\,k_s)},\qquad m = \mathbf{M}_{(\text{dir})}\!\cdot\!\mathbf{n}
+\tilde\nu_w = \tilde\nu_c\,\frac{d_0}{y_1 + d_0},\qquad \tilde\mu_w = \rho_w\,\tilde\nu_w ,
 $$
+
+with $y_1$ the wall distance of the cell centre and $\rho_w$ the density of the wall state of each wall (`302`: at $T_w$; `301`: at the wall temperature from the heat flux and the laminar conductivity; the coupled walls `103` and `104`: the state of the cell). The wall flux, the wall eddy viscosity and the ghost cells take the same $\tilde\nu_w$. A wall face with $k_s = 0$ takes the smooth value $\tilde\nu_w = 0$.
 
 Note also that $f_{v2}$ is evaluated from the **molecular** ratio rather than the augmented $\chi$:
 
@@ -184,12 +186,12 @@ $$
 c_{R1}\frac{k_s}{0 + 0.03\,k_s} = \frac{0.5}{0.03} \simeq 16.67
 $$
 
-The expression is regular at $y=0$ (the denominator tends to $0.03\,k_s>0$), so this is a genuine field value, not a limit that has to be guarded.
+The expression is regular at $y=0$ when $k_s>0$ (the denominator tends to $0.03\,k_s$), so this is a genuine field value. With $k_s=0$ (a smooth wall in a rough case, or a wall record without $k_s$) the term is left out, which is its value for every $y>0$ and avoids $0/0$ on the wall face.
 
 !!! note "Eddy viscosity does not vanish at a rough wall"
     On a **smooth** wall $\tilde\nu_w = 0$, hence $\chi=0$, $f_{v1}(0)=0$ and $\mu_t = 0$ — exact, since all Reynolds stresses vanish under no-slip and $\tau_w$ is purely molecular. On a **rough** wall the Boeing extension deliberately leaves $\tilde\nu_w \neq 0$, so $\mu_t$ at the wall is finite: that non-zero wall eddy viscosity *is* the mechanism producing the $\Delta U^+$ log-layer shift. Evaluating $\chi$ with the first-cell distance instead of $y=0$ therefore under-predicts the wall eddy viscosity, by an amount that grows as the near-wall cell coarsens.
 
-Roughness is implemented for the Spalart–Allmaras family only; with a $k$–$\omega$ model the `-rough` suffix raises a warning and the smooth-wall $\omega$ condition is used.
+Roughness is implemented for the Spalart–Allmaras family only (`SA-rough`, `SA-rough-QCR2000`): the $k$–$\omega$ models have no rough variant among the values of `turbulence`.
 
 ---
 
@@ -328,13 +330,13 @@ k_\text{wall} = 0,\qquad
 \omega_\text{wall} = \frac{60\,\nu}{\beta_1\,y^2} = \frac{800\,\nu}{y^2}\quad(\beta_1=0.075)
 $$
 
-the Menter approximate smooth-wall condition for the first cell at distance $y$. This is the default, `omega-wall-bc = practical` in `[ARES-Turbulence]`. On a wall-resolved mesh ($y^+ < 1$), `omega-wall-bc = asymptotic` uses instead the exact $y\to0$ limit of the $\omega$ equation,
+the Menter approximate smooth-wall condition for the first cell at distance $y$. This is the default, `omega-wall-bc = practical` in `[ARES-Turbulence]`. `omega-wall-bc = asymptotic` sets instead, at the wall face, the value of the $y\to0$ limit of the $\omega$ equation,
 
 $$
 \omega_\text{wall} = \frac{6\,\nu}{\beta_1\,y^2} = \frac{80\,\nu}{y^2},
 $$
 
-as in MOSE. The key sets the wall condition of the Wilcox 2006 and SSG-LRR models as well, the asymptotic one with the $\beta$ of the $\omega$ equation of each model at the wall: $6\nu/(\beta_0 y^2) = 84.7\,\nu/y^2$ for Wilcox 2006 (see its section below), $80\,\nu/y^2$ for SSG-LRR, whose $\omega$ equation takes $\beta = 0.075$ there, as SST. Separately, `sst-asymptotic = .true.` (SST only, ARES only) imposes the same asymptotic value on the first `sst-asymptotic-cells` cells off each viscous wall, removing them from the time integration of the $\omega$ equation.
+TMR ([Wilcox 2006 page](https://tmbwg.github.io/turbmodels/wilcox.html), after Menter 1994) gives this as the asymptotic behaviour of $\omega$ and states that it is not appropriate as the boundary value at a wall; Menter's form above (`practical`, the default) is the wall condition of the references, and `asymptotic` is kept for comparison. The consistent use of the limit is `sst-asymptotic` (below), which imposes it in the first cells off the wall. The key sets the wall condition of the Wilcox 2006 and SSG-LRR models as well, the asymptotic one with the $\beta$ of the $\omega$ equation of each model at the wall: $6\nu/(\beta_0 y^2) = 84.7\,\nu/y^2$ for Wilcox 2006 (see its section below), $80\,\nu/y^2$ for SSG-LRR, whose $\omega$ equation takes $\beta = 0.075$ there, as SST. Separately, `sst-asymptotic = .true.` (SST only, ARES only) imposes the same asymptotic value on the first `sst-asymptotic-cells` cells off each viscous wall, removing them from the time integration of the $\omega$ equation.
 
 ### Energy coupling (`k-energy-coupling`)
 
@@ -460,6 +462,8 @@ with $A=31$, $\chi_T=1$, $\kappa=0.41$. It vanishes in the log layer ($\mathcal 
 
 At walls $R_{ij}=0$ and $\omega$ follows `omega-wall-bc` (the default `practical` value is the TMR one). On symmetry planes, which must be $x$-, $y$- or $z$-planes, the shear stresses with one index normal to the plane vanish (e.g. $R_{12}=R_{13}=0$ on an $x$-plane) and the other components have zero gradient; the momentum flux through the wall and symmetry faces uses these face values.
 
+The faces of type `200` turn the velocity by the angle of the wedge or of the sector but copy the Reynolds stresses unturned. On a 3-D sector this is wrong at the order of $\sin\delta\theta$, and SSG/LRR on a 3-D mesh closed by type `200` faces stops at set-up with that reason. On a thin 2-D axisymmetric wedge only the metric terms of the diffusion, of order $D\,(R_{rr} - R_{\theta\theta})/r^2$, are lost.
+
 ---
 
 ## Quadratic Constitutive Relation (QCR2000)
@@ -469,7 +473,7 @@ QCR2000 is an **algebraic correction**, not a separate transport model: it repla
 $$
 \tau_{ij}^\text{QCR} = \tau_{ij}^\text{Boussinesq} - c_{nl1}\bigl(O_{ik}\tau_{jk} + O_{jk}\tau_{ik}\bigr),
 \qquad
-O_{ik} = \frac{2W_{ik}}{\sqrt{W_{mn}W_{mn}}},\quad c_{nl1}=0.3,
+O_{ik} = \frac{2W_{ik}}{\sqrt{\dfrac{\partial u_m}{\partial x_n}\dfrac{\partial u_m}{\partial x_n}}},\quad c_{nl1}=0.3,
 $$
 
 which reintroduces stress anisotropy. In ARES it is layered on top of SA (`SA-QCR2000`, `SA-rough-QCR2000`) and is the model of choice for 3-D corner and secondary-flow cases.
@@ -618,7 +622,7 @@ meshes orthogonal to the wall, with the cell centres above the face centres.
 
 ### Blowing / wall-transpiration correction
 
-The `-blowcorr` suffix activates a correction (`RANS_Set_Blowing_Wall`) that modifies the wall treatment under wall injection or suction. SA uses its own blowing wall values; the $k$–$\omega$ models (SST, Wilcox 2006) switch between the corrected and uncorrected $\omega$ wall BC accordingly.
+The source holds wall routines for injection or suction (`RANS_Set_Blowing_Wall`: SA blowing wall values, a corrected $\omega$ wall condition for SST), but no value of `turbulence` selects them: they are not part of the models above.
 
 ### Turbulent transport numbers and corrections
 
@@ -748,9 +752,9 @@ that: during the first step the wall condition raises $\omega$ in the wall cells
 magnitude, and with the full step the explicit destruction overshoots ($\omega < 0$, then the floor
 and a very large $\mu_t$). Start such runs with the CFL ramp (`cfl-rise-threshold`).
 
-At the end of a RANS run (one- and two-equation models) in which a stage made $\tilde\nu$, $k$ or $\omega$ negative
-before the realizability floor, ARES prints how many cell updates had such a stage; a run in which none did prints no
-such line:
+At the end of a RANS run in which a stage made $\tilde\nu$, $k$ or $\omega$ negative (with SSG/LRR: a normal stress or
+$\omega$; the shear stresses have a sign) before the realizability floor, ARES prints how many cell updates had such a
+stage; a run in which none did prints no such line:
 
 ```text
  Turbulence variables below zero after a stage (set to the floor): <n>

@@ -145,7 +145,7 @@ python3 make-ares-table.py          # build the constant-property table
 python3 validate_Prt_correction.py
 ```
 
-`validate_Prt_correction.py` reads the section-averaged profiles in `OUTPUT/1d.dat` (produced with the shared `extract1d` tool) and compares the run with the rough-pipe correlations of the reference paper (Latini, Fiore & Nasuti, *Aerosp. Sci. Technol.* **126** (2022) 107672), in the style of its Figs. 5 and 9. Two non-dimensional quantities are formed.
+`validate_Prt_correction.py` reads the section-averaged profiles in `OUTPUT/1d.dat` (produced with the shared `extract1d` tool (the tracked `test/common/extract1d` binary predates the current solution format: build it first from its source, `gfortran -O2 -J /tmp -o ../common/extract1d ../common/Extract1D.f90`)) and compares the run with the rough-pipe correlations of the reference paper (Latini, Fiore & Nasuti, *Aerosp. Sci. Technol.* **126** (2022) 107672), in the style of its Figs. 5 and 9. Two non-dimensional quantities are formed.
 
 **Friction.** The numerical (validated, per-section) Darcy friction factor comes straight from the wall shear stress; the reference is the **Colebrook–White** correlation for rough pipes, evaluated at a single reference Reynolds number $Re_{ref}$ at the start of the developed region:
 
@@ -183,7 +183,7 @@ Both figures are plotted against $x/D$ and saved into `test/Prt-correction/refer
 
 ![Non-dimensional friction factor f_D/f_D,theo vs x/D](img/prt_cf.png){ width="640" }
 
-*`test/Prt-correction/reference/cf.png`.* Non-dimensional Darcy friction factor $f_D/f_{D,theo}$ (equivalently $c_f/c_{f,theo}$). After the entrance region the ARES result (blue) settles onto the Colebrook–White reference (dashed, $\approx0.95$): the `SA-rough` model reproduces the rough-wall **friction** correctly — the easy half of the problem, where the equivalent sand-grain approach already works.
+*`test/Prt-correction/reference/cf.png`.* Non-dimensional Darcy friction factor $f_D/f_{D,theo}$ (equivalently $c_f/c_{f,theo}$). The ratio is taken to the Colebrook–White value, so that correlation is the line at 1; the dashed line at $\approx0.95$ is the extrapolated CFD value of the reference paper. After the entrance region the ARES result (blue) settles onto that dashed line: the `SA-rough` model reproduces the rough-wall **friction** correctly — the easy half of the problem, where the equivalent sand-grain approach already works.
 
 ### Heat transfer — the effect of the correction
 

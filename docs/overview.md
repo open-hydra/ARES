@@ -36,7 +36,7 @@ $$
 + \mathbf{S}
 $$
 
-where $\mathbf{U}$ is the conservative-variable vector, $\mathbf{F}^c$ the convective fluxes, $\mathbf{F}^v$ the viscous fluxes, and $\mathbf{S}$ the source terms (turbulence). Both the inviscid limit (Euler equations) and the full viscous form (Navier–Stokes) are supported. The simulation regime is selected in `[ARES-Physics]`, with the keys of MOSE: `equations` = `euler` or `navier-stokes`, and `turbulence` = the RANS model (`none` for a laminar run).
+where $\mathbf{U}$ is the conservative-variable vector, $\mathbf{F}^c$ the convective fluxes, $\mathbf{F}^v$ the viscous fluxes, and $\mathbf{S}$ the source terms (turbulence). Both the inviscid limit (Euler equations) and the full viscous form (Navier–Stokes) are supported. The simulation regime is selected in `[ARES-Physics]`: `equations` = `euler` or `navier-stokes`, and `turbulence` = the RANS model (`none` for a laminar run).
 
 ---
 
