@@ -82,7 +82,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   semver_dependency(OSLO GIT_REPOSITORY https://github.com/MarcoGrossi92/OSLO.git VERSION 1.1 GIT_SUBMODULES ""
                     SOURCE_DIR lib/OSLO)
   semver_dependency(ORION GIT_REPOSITORY https://github.com/MarcoGrossi92/ORION.git VERSION 2.1 SOURCE_DIR lib/ORION)
-  semver_dependency(FLINT GIT_REPOSITORY https://github.com/MarcoGrossi92/FLINT.git VERSION 2.0 GIT_SUBMODULES ""
+  semver_dependency(FLINT GIT_REPOSITORY https://github.com/MarcoGrossi92/FLINT.git VERSION 2.1 GIT_SUBMODULES ""
                     SOURCE_DIR lib/FLINT)
   FetchContent_MakeAvailable(OSLO ORION FLINT)
 
@@ -98,7 +98,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     endif()
   endforeach()
 
-  # FiNeR
+  # FiNeR: the submodule of ARES unless FINER_PATH names another checkout (install.sh passes the same folder). Without
+  # this default, a configure without install.sh found no VERSION file at "/VERSION" and stopped with an empty path
+  if (NOT DEFINED FINER_PATH OR "${FINER_PATH}" STREQUAL "")
+    set(FINER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/third_party/FiNeR")
+  endif()
   if (NOT TARGET FiNeR)
     # ARES needs FiNeR v2.1.0 or later: before it, a comment line that holds "=" or a bracket was taken for an option or
     # a section header, and the reading of its section of input.ini ended there. A clone that pulls without
@@ -119,7 +123,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
                           "as before v2.1.0 a comment line of input.ini that holds \"=\" ends the reading of its section. "
                           "Run: git submodule update --init --recursive")
     endif()
-    set ( finerD "${FINER_PATH}" "${CMAKE_CURRENT_SOURCE_DIR}/build/lib/third_party/FiNeR/")
+    # Built in the build folder of this configure, next to its dependencies (a fixed folder of the sources would be
+    # shared by every build folder)
+    set ( finerD "${FINER_PATH}" "${CMAKE_BINARY_DIR}/lib/third_party/FiNeR")
     add_subdirectory(${finerD})
   endif()
 

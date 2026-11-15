@@ -121,7 +121,7 @@ The script reads:
 
 `OUTPUT/1d.dat` is produced by the shared **`extract1d`** tool (`test/common/Extract1D.f90`), which extracts wall and bulk 1-D profiles from `field.tec` / `wall.tec` using the real-fluid tables.
 
-The tracked `test/common/extract1d` binary predates the current solution format; build the tool from its source before the first use (any Fortran compiler, no library):
+The tool is not shipped built: build it from its source before the first use (any Fortran compiler, no library):
 
 ```bash
 gfortran -O2 -J /tmp -o ../common/extract1d ../common/Extract1D.f90

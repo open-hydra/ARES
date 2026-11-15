@@ -55,7 +55,7 @@ ARES/
 
 | Library | Purpose |
 |---------|---------|
-| `FLINT` | Real-fluid thermodynamic & transport tables (release 2.0 or a later 2.x) |
+| `FLINT` | Real-fluid thermodynamic & transport tables (release 2.1 or a later 2.x) |
 | `ORION` | Structured multi-block grid I/O (release 2.1 or a later 2.x) |
 | `OSLO` | ODE solver library, required by FLINT (release 1.1 or a later 1.x) |
 | `FiNeR` | INI file parser (submodule) |

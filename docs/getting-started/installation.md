@@ -24,7 +24,7 @@ ARES requires these three libraries by a range of releases, as FLINT and ATLAS d
 |------|------------|----------|---------|
 | `lib/ORION` | `github.com/MarcoGrossi92/ORION` | 2.1 or a later 2.x | I/O routines (Tecplot, VTK, Plot3D, …) |
 | `lib/OSLO` | `github.com/MarcoGrossi92/OSLO` | 1.1 or a later 1.x | ODE solvers, required by FLINT |
-| `lib/FLINT` | `github.com/MarcoGrossi92/FLINT` | 2.0 or a later 2.x | Real-fluid thermodynamic & transport tables |
+| `lib/FLINT` | `github.com/MarcoGrossi92/FLINT` | 2.1 or a later 2.x | Real-fluid thermodynamic & transport tables |
 
 The first configure needs the network: it lists the tags of each library (`git ls-remote`, https) and clones the newest release that satisfies the range. `deps.lock`, in the source root and not tracked, keeps the releases selected: the next configures use them without the network (`-DFETCHCONTENT_FULLY_DISCONNECTED=ON` works then). `-DSEMVER_UPDATE=ALL` (`./install.sh build --update-deps`) selects the newest releases again; `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>` (`--include-orion|flint|oslo=<path>`) builds a local checkout instead. When a project embeds ARES (Hydra), that project chooses the releases.
 

@@ -74,7 +74,7 @@ ARES is built on top of several companion libraries: ORION, OSLO and FLINT by re
 
 | Library | Role |
 |---|---|
-| [FLINT](https://github.com/MarcoGrossi92/FLINT) | Real-fluid thermodynamic & transport tables (2.0 or a later 2.x) |
+| [FLINT](https://github.com/MarcoGrossi92/FLINT) | Real-fluid thermodynamic & transport tables (2.1 or a later 2.x) |
 | [ORION](https://github.com/MarcoGrossi92/ORION) | Multi-format I/O (Tecplot, VTK, Plot3D) (2.1 or a later 2.x) |
 | [OSLO](https://github.com/MarcoGrossi92/OSLO) | ODE solvers, required by FLINT (1.1 or a later 1.x) |
 | [FiNeR](https://github.com/szaghi/FiNeR) | INI configuration file parser |

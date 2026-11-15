@@ -145,7 +145,7 @@ python3 make-ares-table.py          # build the constant-property table
 python3 validate_Prt_correction.py
 ```
 
-`validate_Prt_correction.py` reads the section-averaged profiles in `OUTPUT/1d.dat` (produced with the shared `extract1d` tool (the tracked `test/common/extract1d` binary predates the current solution format: build it first from its source, `gfortran -O2 -J /tmp -o ../common/extract1d ../common/Extract1D.f90`)) and compares the run with the rough-pipe correlations of the reference paper (Latini, Fiore & Nasuti, *Aerosp. Sci. Technol.* **126** (2022) 107672), in the style of its Figs. 5 and 9. Two non-dimensional quantities are formed.
+`validate_Prt_correction.py` reads the section-averaged profiles in `OUTPUT/1d.dat` (produced with the shared `extract1d` tool (not shipped built: build it first from its source, `gfortran -O2 -J /tmp -o ../common/extract1d ../common/Extract1D.f90`)) and compares the run with the rough-pipe correlations of the reference paper (Latini, Fiore & Nasuti, *Aerosp. Sci. Technol.* **126** (2022) 107672), in the style of its Figs. 5 and 9. Two non-dimensional quantities are formed.
 
 **Friction.** The numerical (validated, per-section) Darcy friction factor comes straight from the wall shear stress; the reference is the **Colebrook–White** correlation for rough pipes, evaluated at a single reference Reynolds number $Re_{ref}$ at the start of the developed region:
 
