@@ -4,12 +4,13 @@
 Validation of the ARES turbulent flat-plate test case Flat_Plate_Wilcox2006
 (Wilcox k-omega 2006) against the NASA Turbulence Modeling Resource (TMR).
 
-Quantities reproduced from PLOT.lay:
+Quantities compared:
   1) cf(x)                 vs reference/cf.dat
   2) mut/mu(y) at x~0.97   vs reference/mut.dat   (mut/mu = rhoK/rhoOmega*rho/mu)
 
-See _fp_turb_common.py for the Reynolds-consistency handling: cf is compared
-in Re_x space; the x~0.97 profile only collapses if the run is at Re = 5e6.
+See _fp_turb_common.py for the Reynolds handling: cf is compared against x,
+which holds at Re/m = 5e6 (constant mu of set_constant_transport.py); the
+x~0.97 profile only collapses if the run is at Re = 5e6.
 
 Usage:  python3 validate_wilcox2006.py
 """

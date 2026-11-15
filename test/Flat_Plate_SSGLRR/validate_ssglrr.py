@@ -5,7 +5,7 @@ Validation of the ARES turbulent flat-plate test case Flat_Plate_SSGLRR
 (SSG-LRR Reynolds-Stress Model) against the NASA Turbulence Modeling
 Resource (TMR).
 
-Quantity reproduced from PLOT.lay:
+Quantity compared:
   1) cf(x)                 vs reference/cf.dat
 
 The mut/mu(y) profile plot was removed: its peak scales with Re, so it is
@@ -53,7 +53,7 @@ def main():
         sys.exit(f"ERROR: {F_FIELD} not found - run the case first.")
     # ARES drawn in red: the SSG-LRR cf overlaps the (C0/blue) NASA reference
     # curve and was indistinguishable in the default colour.
-    C.validate_cf(F_FIELD, F_WALL, F_CF, CELL_VARS, "SSG-LRR", ares_color="red")
+    C.validate_cf(F_FIELD, F_WALL, F_CF, CELL_VARS, "SSG-LRR")
     save_figures()
     print("\nDone. Showing plots (close the windows to exit)...")
     plt.show()

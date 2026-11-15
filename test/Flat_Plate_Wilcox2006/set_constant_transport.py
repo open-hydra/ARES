@@ -3,7 +3,7 @@
 """
 Overwrite the transport.dat (FLINT real-fluid table) of this case with
 CONSTANT molecular transport properties, so the flat plate runs like the
-MOSE / NASA-TMR ideal-gas setup:
+NASA-TMR ideal-gas setup:
 
     Re/m = g / mu = 59.29 / 1.18587e-5 = 5.0e6   (at M = 0.2)
 
@@ -33,7 +33,7 @@ F    = os.path.join(HERE, "INPUT", "transport.dat")
 # --------------------------------------------------------------------------- #
 # constants to impose  (edit here)
 # --------------------------------------------------------------------------- #
-VISCOSITY = 1.1858685985e-5        # [Pa s] molecular viscosity (MOSE/NASA value)
+VISCOSITY = 1.1858685985e-5        # [Pa s] molecular viscosity (NASA-TMR value)
 PRANDTL   = 0.72                   # [-]    laminar Prandtl number
 CP        = 1004.5                 # [J/kg/K] cp = gamma*R/(gamma-1) = 1.4*287/0.4
 CONDUCTIVITY = VISCOSITY * CP / PRANDTL   # [W/m/K]  k = mu*cp/Pr  (or set directly)

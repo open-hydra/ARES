@@ -4,7 +4,7 @@
 Validation of the ARES turbulent flat-plate test case Flat_Plate_SST
 (SST k-omega) against the NASA Turbulence Modeling Resource (TMR).
 
-Quantities reproduced from PLOT.lay:
+Quantities compared:
   1) cf(x)                          vs reference/cf.dat
   2) k+(y), omega+(y) at x~0.97     vs reference/kw.dat
      k+     = k / a_inf^2

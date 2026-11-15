@@ -6,7 +6,7 @@ Spalart-Allmaras) against the NASA Turbulence Modeling Resource (TMR)
 2D zero-pressure-gradient flat plate.
 
 This is the turbulent counterpart of the laminar 'validate_blasius.py'. The
-quantities reproduced here are exactly those of PLOT.lay:
+quantities compared:
 
     Tau_x = mu * |dU/dy|_wall ,   c_f = Tau_x / (0.5 * rho_inf * U_inf^2)
 
@@ -14,16 +14,15 @@ quantities reproduced here are exactly those of PLOT.lay:
     cf is built from the wall shear tau_w and the free-stream state and is
     compared with the NASA-TMR reference (reference/cf.dat, CFL3D grid level 1).
 
-    IMPORTANT - Reynolds consistency:
-    The NASA case is defined at Re = 5e6 (per unit length). This ARES run uses
-    the real-fluid air table, whose viscosity at the operating point
-    (T~555 K) is mu ~ 2.9e-5 Pa s, i.e. about 2.5x the ideal value the NASA
-    case assumes; the run therefore sits at Re/m ~ 2.0e6, NOT 5e6. Comparing
-    cf directly versus x would carry a ~18% offset that is pure Reynolds
-    effect, not a model error. So - exactly as the laminar script evaluates
-    the Blasius law at the run's own Re_x - here the tabulated NASA cf is
-    re-expressed at the run's actual Re_x:  cf_ref(x) = cf_NASA( Re_x(x) ),
-    with Re_x_NASA = RE_REF * x_ref. In Re_x space the curves collapse.
+    IMPORTANT - Reynolds and Mach numbers:
+    The NASA case is defined at Re = 5e6 (per unit length) and M = 0.2. This
+    ARES run uses the real-fluid air table at U = 232 m/s: M = 0.49 and
+    Re/m = 5.1e6. Exactly as the laminar script evaluates the Blasius law at
+    the run's own Re_x, the tabulated NASA cf is re-expressed at the run's
+    actual Re_x:  cf_ref(x) = cf_NASA( Re_x(x) ), with Re_x_NASA = RE_REF *
+    x_ref. The Mach number is not matched: at M = 0.49 compressibility lowers
+    cf by about 2.3 % with respect to the M = 0.2 reference, an offset that is
+    not a model error.
 
 The files are produced by the run; this script only reads them.
 

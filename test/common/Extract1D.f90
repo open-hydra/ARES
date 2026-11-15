@@ -10,6 +10,9 @@
 ! Legge field.tec e wall.tec di ARES sia nel formato meno recente
 ! (VARIABLES ="x" "y" ...) sia in quello attuale (VARIABLES = x y ...,
 ! SOLUTIONTIME < 0 per le soluzioni stazionarie, DATASETAUXDATA dopo le zone).
+! Limiti: la coordinata curvilinea (slung, colonna 2) riparte da zero a ogni
+! blocco; il fattore di settore p_fac assume l'asse sulla linea j = 1. Gli
+! script di validazione non leggono queste due colonne.
 !===============================================================================
 module Mod_Extract1D
   implicit none
@@ -467,8 +470,9 @@ contains
   end function
 
   ! ============================  GEOMETRIA  ================================
-  ! I-face: diagonali incrociate con fattore 0.5 — coerente con Lib_Metrics.f90
-  ! Hex volume: 5 tetraedri — stessa decomposizione di Lib_Metrics.f90
+  ! I-face: diagonali incrociate con fattore 0.5
+  ! Hex volume: 5 tetraedri, decomposizione propria di questo strumento (non e'
+  ! quella con cui ARES calcola il volume delle celle in Lib_Metrics.f90)
 
   pure subroutine quad_area_normal(p1,p2,p3,p4, area, normal)
     real(dp), intent(in) :: p1(3),p2(3),p3(3),p4(3)
@@ -494,7 +498,7 @@ contains
   pure function hex_vol(a,b,c,d,e,f,g,h) result(vol)
     real(dp), intent(in) :: a(3),b(3),c(3),d(3),e(3),f(3),g(3),h(3)
     real(dp) :: vol
-    ! Decomposizione ARES (Lib_Metrics.f90): 5 tetraedri
+    ! 5 tetraedri (decomposizione di questo strumento, non quella del volume di ARES)
     !   tvol(1,2,3,5) + tvol(2,4,3,8) + tvol(5,8,6,2) + tvol(5,7,8,3) + tvol(5,8,2,3)
     ! Mapping Tecplot -> ARES:
     !   a=n0=N1, b=n1=N5, c=n2=N7, d=n3=N3, e=n4=N2, f=n5=N6, g=n6=N8, h=n7=N4
@@ -734,7 +738,7 @@ contains
       eos%hlo,' .. ',eos%hlo+eos%nh*eos%dht,' dh=',eos%dht
 
     ! --- transport.dat  Tecplot BLOCK, I=p, J=h — vars: Pressure, Enthalpy, Viscosity, Conductivity
-    !     Per [[ares-realfluid-thermo-layout]] must share orientation with thermo.dat.
+    !     Must share the orientation of thermo.dat (I = p, J = h).
     call find_file(folder,'transport.dat',fn,ex)
     if (.not.ex) then; write(*,'(A)') ' ERRORE: transport.dat non trovato'; ierr=2; return; endif
     open(newunit=iu,file=trim(fn),status='old',action='read',iostat=ios)
