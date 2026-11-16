@@ -1,63 +1,74 @@
-name: Deploy Documentation
+name: Documentation
 
+# The documentation site, built with Zensical from mkdocs.yml (requirements-docs.txt): built, in strict mode, on every
+# pull request that changes it, and published to GitHub Pages on every push to main
 on:
   push:
-    branches: [main]
+    branches: [ main ]
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'requirements-docs.txt'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Allow only one concurrent deployment
+# One deployment at a time; a newer push to the same pull request cancels the build of the previous one
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'pull_request' && format('docs-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
-          python-version: "3.x"
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-mkdocs
-          restore-keys: |
-            ${{ runner.os }}-pip-
+      - name: Install Zensical
+        run: pip install -r requirements-docs.txt
 
-      - name: Install MkDocs and dependencies
-        run: pip install mkdocs-material
+      # Strict: a warning, such as a broken link, fails the build
+      - name: Build the site
+        run: zensical build --strict
 
-      - name: Build site
-        run: mkdocs build --strict
+      # Zensical (0.0.74) does not report a link that starts with '/', which would leave
+      # https://open-hydra.github.io/ARES/ on the published site (mkdocs.yml asks MkDocs to)
+      - name: No absolute links
+        run: |
+          if grep -rnE '\]\(/[^/]' docs --include='*.md'; then
+            echo "Absolute links leave https://open-hydra.github.io/ARES/: write them relative to the page"
+            exit 1
+          fi
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
+  # Pages is not available on the private copy of the repository: the deploy is skipped there
   deploy:
+    if: github.event_name != 'pull_request' && github.event.repository.private == false
     needs: build
-    # Deploy su GitHub Pages solo se il repo è pubblico.
-    # Sul repo privato (backup/archivio) questo job viene "skippato":
-    # Pages non è disponibile sui repo privati senza piano a pagamento,
-    # quindi il workflow non fallisce piu' e non arriva la mail di errore.
-    if: ${{ github.event.repository.private == false }}
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

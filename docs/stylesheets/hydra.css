@@ -1,0 +1,337 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   The Hydra scheme: the case → ATLAS → the coupled solvers, on the shared
+   libraries. Every code of Hydra shows it on its home page: copy this file
+   and the <div class="hydra"> block of ATLAS's docs/index.md, and mark the
+   code of the site with the class is-here (on .hydra__atlas, a
+   .hydra__solver or a .hydra__lib): it is ringed and labelled "You are
+   here".
+
+   The panel is the same on every site: silver in the light scheme,
+   graphite in the dark one (Material's "slate"), with the solvers coloured
+   by what they solve. The one colour of a site is --hydra-accent, set by
+   its own stylesheet (.hydra { --hydra-accent: <the code's colour>; }, and
+   --hydra-on-accent for the text of the label if the default does not
+   read on it): the ring and the label of is-here, the arrows, the hovers.
+   Without it the panel takes a neutral grey. Keep a site's colour apart
+   from the five solver colours below, unless the code is that solver.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* silver: the light scheme */
+.hydra {
+  --hydra-from: #f4f5f7;
+  --hydra-to: #e1e4e8;
+  --hydra-glow: rgba(255, 255, 255, 0.75);
+  --hydra-shadow: 0 14px 36px rgba(17, 24, 39, 0.1);
+  --hydra-text: #1b1f24;
+  --hydra-mist: #3a4049;
+  --hydra-soft: #4f5660;
+  --hydra-dim: #6b727c;
+  --hydra-line: rgba(17, 24, 39, 0.12);
+  --hydra-fill: rgba(255, 255, 255, 0.62);
+  --hydra-fill-hover: rgba(255, 255, 255, 0.95);
+  --hydra-chip: rgba(17, 24, 39, 0.07);
+  --hydra-neutral: #4b5563;
+  --hydra-on-neutral: #ffffff;
+  --hydra-gas: #2f6fd6;
+  --hydra-fluid: #7c4ddb;
+  --hydra-solid: #d2621b;
+  --hydra-particle: #11906a;
+  --hydra-radiation: #a87a06;
+}
+/* graphite: the dark scheme */
+[data-md-color-scheme="slate"] .hydra {
+  --hydra-from: #101215;
+  --hydra-to: #1b1e23;
+  --hydra-glow: rgba(255, 255, 255, 0.06);
+  --hydra-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  --hydra-text: #e8eaee;
+  --hydra-mist: #c3c8cf;
+  --hydra-soft: #a4aab3;
+  --hydra-dim: #8b919a;
+  --hydra-line: rgba(255, 255, 255, 0.12);
+  --hydra-fill: rgba(255, 255, 255, 0.045);
+  --hydra-fill-hover: rgba(255, 255, 255, 0.09);
+  --hydra-chip: rgba(255, 255, 255, 0.08);
+  --hydra-neutral: #d5dae1;
+  --hydra-on-neutral: #101215;
+  --hydra-gas: #5fb4f0;
+  --hydra-fluid: #a78bfa;
+  --hydra-solid: #f59e5b;
+  --hydra-particle: #4fd1a5;
+  --hydra-radiation: #f6c945;
+}
+
+.hydra {
+  /* the site's colour, else the neutral grey of the scheme */
+  --hydra-here: var(--hydra-accent, var(--hydra-neutral));
+  --hydra-on-here: var(--hydra-on-accent, var(--hydra-on-neutral));
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1fr) minmax(4.8rem, 0.42fr) minmax(0, 2.1fr);
+  grid-template-areas:
+    "case atlas link suite"
+    "libs libs  libs libs";
+  gap: 1.4rem 0.9rem;
+  align-items: center;
+  padding: 2rem 1.8rem 1.6rem;
+  border: 1px solid var(--hydra-line);
+  border-radius: 1rem;
+  color: var(--hydra-mist);
+  background:
+    radial-gradient(circle at 30% 15%, var(--hydra-glow), transparent 45%),
+    linear-gradient(160deg, var(--hydra-from) 0%, var(--hydra-to) 100%);
+  box-shadow: var(--hydra-shadow);
+}
+/* :where() keeps these below the classes underneath */
+.md-typeset :where(.hydra) p { margin: 0; }
+.md-typeset :where(.hydra) a { color: inherit; text-decoration: none; }
+/* md_in_html wraps the links in a <p>: the grids place the links, not the paragraph */
+.hydra__solvers > p, .hydra__libs > p:not(.hydra__label) { display: contents; }
+.md-typeset .hydra code {
+  padding: 0.15rem 0.45rem;
+  background: var(--hydra-chip);
+  color: var(--hydra-text);
+  font-size: 0.6rem;
+}
+.md-typeset .hydra__label {
+  margin-bottom: 0.7rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--hydra-dim);
+}
+
+/* "You are here": the code of the site */
+.md-typeset .hydra .is-here {
+  position: relative;
+  border-color: var(--hydra-here);
+  background: color-mix(in srgb, var(--hydra-here) 9%, var(--hydra-fill));
+  box-shadow:
+    0 0 0 5px color-mix(in srgb, var(--hydra-here) 9%, transparent),
+    0 0 40px color-mix(in srgb, var(--hydra-here) 26%, transparent);
+}
+.md-typeset .hydra .is-here::before {
+  content: "You are here";
+  position: absolute;
+  top: -0.7rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.12rem 0.6rem;
+  border-radius: 1rem;
+  background: var(--hydra-here);
+  color: var(--hydra-on-here);
+  font-family: var(--md-text-font-family);
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* the case */
+.hydra__case { grid-area: case; position: relative; }
+.md-typeset .hydra__file {
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--hydra-line);
+  border-radius: 0.45rem;
+  background: var(--hydra-fill);
+  font-size: 0.66rem;
+  color: var(--hydra-text);
+}
+.hydra__file .twemoji { margin-right: 0.3rem; color: var(--hydra-here); }
+.md-typeset .hydra__file a:hover { color: var(--hydra-here); }
+.hydra__case::after {
+  content: "→";
+  position: absolute;
+  top: 58%;
+  right: -0.85rem;
+  transform: translateY(-50%);
+  font-size: 0.9rem;
+  color: var(--hydra-here);
+}
+
+/* ATLAS, the pre-processor */
+.hydra__atlas {
+  grid-area: atlas;
+  padding: 1.3rem 0.8rem 1.1rem;
+  border: 1.5px solid var(--hydra-line);
+  border-radius: 0.8rem;
+  background: var(--hydra-fill);
+  text-align: center;
+}
+.md-typeset .hydra__name {
+  margin-bottom: 0.7rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--hydra-text);
+}
+.md-typeset .hydra__tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.3rem;
+}
+.md-typeset .hydra__tools a {
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.35rem;
+  background: var(--hydra-chip);
+  color: var(--hydra-text);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.md-typeset .hydra__tools a:hover { background: var(--hydra-here); color: var(--hydra-on-here); }
+
+/* the files of fromATLAStoSolver/ flow into the runs */
+.hydra__link {
+  grid-area: link;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.58rem;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--hydra-dim);
+}
+.hydra__link code { white-space: nowrap; }
+.hydra__link-top {
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--hydra-text);
+}
+.hydra__link-line {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--hydra-here) 0 8px, transparent 8px 14px);
+  animation: hydra-flow 0.9s linear infinite;
+}
+.hydra__link-line::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -3px;
+  transform: translateY(-50%);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid var(--hydra-here);
+}
+@keyframes hydra-flow { from { background-position: 0 0; } to { background-position: 14px 0; } }
+@keyframes hydra-flow-down { from { background-position: 0 0; } to { background-position: 0 14px; } }
+
+/* Hydra and its solvers, coloured by what they solve */
+.hydra__suite {
+  grid-area: suite;
+  padding: 0.9rem;
+  border: 1px solid var(--hydra-line);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--hydra-fill) 45%, transparent);
+}
+.md-typeset .hydra__suite .hydra__label a {
+  color: var(--hydra-text);
+  text-decoration: underline dotted;
+  text-decoration-color: var(--hydra-dim);
+}
+.hydra__solvers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.6rem, 1fr));
+  gap: 0.6rem;
+}
+.md-typeset a.hydra__solver {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  padding: 0.5rem 0.6rem 0.55rem;
+  border: 1px solid var(--hydra-line);
+  border-left: 3px solid var(--fam);
+  border-radius: 0.45rem;
+  background: var(--hydra-fill);
+  font-size: 0.58rem;
+  line-height: 1.35;
+  color: var(--hydra-soft);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.md-typeset a.hydra__solver:hover { transform: translateY(-2px); background: var(--hydra-fill-hover); color: var(--hydra-mist); }
+.hydra__solver b { font-size: 0.74rem; letter-spacing: 0.03em; color: var(--hydra-text); }
+.hydra__solver i {
+  margin-top: 0.15rem;
+  font-family: var(--md-code-font-family);
+  font-size: 0.54rem;
+  font-style: normal;
+  color: var(--fam);
+}
+.hydra__solver--gas       { --fam: var(--hydra-gas); }
+.hydra__solver--fluid     { --fam: var(--hydra-fluid); }
+.hydra__solver--solid     { --fam: var(--hydra-solid); }
+.hydra__solver--particle  { --fam: var(--hydra-particle); }
+.hydra__solver--radiation { --fam: var(--hydra-radiation); }
+
+/* the libraries underneath */
+.hydra__libs {
+  grid-area: libs;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+  padding-top: 1.1rem;
+  border-top: 1px dashed var(--hydra-line);
+}
+.md-typeset .hydra__libs .hydra__label { margin: 0 0.4rem 0 0; }
+.md-typeset a.hydra__lib {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--hydra-line);
+  border-radius: 2rem;
+  background: var(--hydra-fill);
+  font-size: 0.6rem;
+  color: var(--hydra-soft);
+}
+.hydra__lib b { margin-right: 0.35rem; color: var(--hydra-text); letter-spacing: 0.03em; }
+.md-typeset a.hydra__lib:hover { border-color: var(--hydra-here); color: var(--hydra-mist); }
+
+/* ── Narrower screens ───────────────────────────────────────────────── */
+@media (max-width: 60em) {
+  .hydra {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    grid-template-areas:
+      "case  atlas"
+      "link  link"
+      "suite suite"
+      "libs  libs";
+  }
+  .hydra__link { flex-direction: row; justify-content: center; gap: 0.8rem; }
+  .hydra__link-line {
+    width: 2px;
+    height: 2.2rem;
+    background: repeating-linear-gradient(180deg, var(--hydra-here) 0 8px, transparent 8px 14px);
+    animation-name: hydra-flow-down;
+  }
+  .hydra__link-line::after {
+    top: auto;
+    right: auto;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 8px solid var(--hydra-here);
+    border-bottom: 0;
+  }
+}
+@media (max-width: 40em) {
+  .hydra {
+    grid-template-columns: 1fr;
+    grid-template-areas: "case" "atlas" "link" "suite" "libs";
+    row-gap: 2rem;
+    padding: 1.4rem 1rem;
+  }
+  .hydra__case::after { content: "↓"; top: auto; bottom: -1.65rem; right: 50%; transform: translateX(50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hydra__link-line { animation: none; }
+}

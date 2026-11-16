@@ -22,3 +22,7 @@ lib/FLINT
 
 # The extractor of the validation scripts, built from test/common/Extract1D.f90 (docs/vv)
 test/common/extract1d
+
+# Documentation site (zensical build) and Zensical's cache
+site
+.cache

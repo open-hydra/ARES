@@ -1,26 +1,42 @@
+# Built with Zensical (zensical build), which reads this file: see requirements-docs.txt. MkDocs with Material for
+# MkDocs builds it too
 site_name: ARES Documentation
 site_url: https://open-hydra.github.io/ARES/
 repo_name: open-hydra/ARES
 repo_url: https://github.com/open-hydra/ARES
 
+docs_dir: docs
+exclude_docs: |
+  *.py
+
+# Strict mode turns these warnings into errors: a link to a missing page or anchor, an absolute link (it would
+# leave https://open-hydra.github.io/ARES/ on the published site) and a link to a directory
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+    anchors: warn
+
 theme:
   name: material
-  custom_dir: docs/overrides
-  highlightjs: true
-  code_style: monokai
   font:
     text: Roboto
     code: Fira Code
   palette:
     - scheme: default
-      primary: green
-      accent: light green
+      primary: white
+      accent: deep purple
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
     - scheme: slate
-      primary: green
-      accent: light green
+      primary: blue grey
+      accent: deep purple
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
@@ -34,7 +50,7 @@ theme:
     - search.suggest
     - search.highlight
     - content.tabs.link
-    - content.code.annotation
+    - content.code.annotate
   icon:
     repo: fontawesome/brands/github
 
@@ -45,7 +61,8 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      check_paths: true        # a missing file (a figure) fails the build
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -77,6 +94,7 @@ extra_javascript:
 
 extra_css:
   - stylesheets/extra.css
+  - stylesheets/hydra.css      # the Hydra scheme of the home page, shared with the other codes
 
 nav:
   - Home: index.md

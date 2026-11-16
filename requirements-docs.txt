@@ -1,0 +1,5 @@
+# The documentation site, built with Zensical from mkdocs.yml (.github/workflows/docs.yml):
+#   pip install -r requirements-docs.txt
+#   zensical serve            # preview at http://localhost:8000
+# Zensical is before 1.0: raise its version here, after a build of the site with it
+zensical==0.0.74
