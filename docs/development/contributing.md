@@ -29,9 +29,8 @@ gitGraph
 
 ```bash
 # 1. Clone with submodules
-git clone https://github.com/open-hydra/ARES.git
+git clone --recurse-submodules https://github.com/open-hydra/ARES.git
 cd ARES
-./install.sh update
 
 # 2. First build (writes CMakePresets.json)
 ./install.sh build --compilers=gnu --use-openmp

@@ -7,6 +7,33 @@ set(solver ARES)
 
 project (${solver} LANGUAGES Fortran CXX C)
 
+# -------- Libraries and the releases ARES is tested with --------
+# - ORION, OSLO and FLINT. Required by a range of releases with semver_dependency of cmake/SemVerDeps.cmake.
+# Standalone, each release is checked out in lib/<NAME>, out of the build folder, and kept in deps.lock (both git
+# ignored); -DSEMVER_UPDATE=ALL selects the newest ones again. FLINT requires ORION and OSLO too: the ranges here
+# must overlap those of FLINT.
+set(ARES_ORION_VERSION 2.1)
+set(ARES_OSLO_VERSION 1.1)
+set(ARES_FLINT_VERSION 2.1)
+set(ARES_ORION_URL https://github.com/MarcoGrossi92/ORION.git)
+set(ARES_OSLO_URL  https://github.com/MarcoGrossi92/OSLO.git)
+set(ARES_FLINT_URL https://github.com/MarcoGrossi92/FLINT.git)
+# - FiNeR. Directly pinned at one release, the submodule lib/FiNeR (bump the gitlink and the tag together).
+set(ARES_FINER_TAG v2.3.0)
+# FiNeR's own dependencies (cmake/FiNeRDependencies.cmake). FREE fetches them as FiNeR's author does
+# (`fobis fetch`: the default branch of each); BACKUP checks out the releases below, which ARES builds and passes its
+# tests with. When an upstream change breaks ARES, set BACKUP here and commit it, or configure one build with
+# -DARES_FINER_DEPS=BACKUP (kept in its cache until -UARES_FINER_DEPS).
+if (NOT DEFINED ARES_FINER_DEPS)
+  set(ARES_FINER_DEPS "FREE")
+endif()
+set(ARES_FINER_BACKUP_PINS   # the releases of the submodules ARES held in lib/third_party, as MOSE, ATLAS and ICE do
+  "PENF=v2.0.1"
+  "StringiFor=v1.8.0"
+  "FACE=v1.1.17"
+  "FLAP=v2.5.3"
+  "BeFoR64=v1.2.4")
+
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
   set(CMAKE_VERBOSE_MAKEFILE FALSE)
@@ -75,59 +102,36 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   include(GNUInstallDirs)
   set (CMAKE_Fortran_MODULE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/modules")
 
-  # ORION, OSLO and FLINT by release range (cmake/SemVerDeps.cmake), checked out in lib/, releases kept in deps.lock: all
-  # three required before any is made available, as FLINT requires ORION and OSLO too. FLINT sets FLINT_SRC, the
-  # sources src/lib compiles, in this directory
-  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SemVerDeps.cmake)
-  semver_dependency(OSLO GIT_REPOSITORY https://github.com/MarcoGrossi92/OSLO.git VERSION 1.1 GIT_SUBMODULES ""
-                    SOURCE_DIR lib/OSLO)
-  semver_dependency(ORION GIT_REPOSITORY https://github.com/MarcoGrossi92/ORION.git VERSION 2.1 SOURCE_DIR lib/ORION)
-  semver_dependency(FLINT GIT_REPOSITORY https://github.com/MarcoGrossi92/FLINT.git VERSION 2.1 GIT_SUBMODULES ""
-                    SOURCE_DIR lib/FLINT)
-  FetchContent_MakeAvailable(OSLO ORION FLINT)
-
-  # The libraries of FiNeR (PENF, FACE, FLAP, BeFoR64, StringiFor), submodules of ARES under FINER_DEPS_PATH, at their
-  # release tags, added before FiNeR in the order of their dependencies: FiNeR adds each of them from its own
-  # src/third_party/ only when its target is not defined yet, so a build needs neither FoBiS nor the network
-  if (NOT DEFINED FINER_DEPS_PATH)
-    set(FINER_DEPS_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/third_party/")
-  endif()
-  foreach (finer_dep PENF FACE FLAP BeFoR64 StringiFor)
-    if (NOT TARGET ${finer_dep})
-      add_subdirectory("${FINER_DEPS_PATH}/${finer_dep}" "${CMAKE_BINARY_DIR}/lib/third_party/${finer_dep}")
+  # Libraries building
+  # An external clone given by a relative path is taken from the source folder
+  foreach(_name ORION OSLO FLINT FINER)
+    if (FETCHCONTENT_SOURCE_DIR_${_name})
+      get_filename_component(FETCHCONTENT_SOURCE_DIR_${_name} "${FETCHCONTENT_SOURCE_DIR_${_name}}" ABSOLUTE
+                             BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
     endif()
   endforeach()
+  # All three required before any is made available, as FLINT requires ORION and OSLO too
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SemVerDeps.cmake)
+  semver_dependency(OSLO GIT_REPOSITORY ${ARES_OSLO_URL} VERSION ${ARES_OSLO_VERSION} GIT_SUBMODULES ""
+                    SOURCE_DIR lib/OSLO)
+  semver_dependency(ORION GIT_REPOSITORY ${ARES_ORION_URL} VERSION ${ARES_ORION_VERSION} SOURCE_DIR lib/ORION)
+  semver_dependency(FLINT GIT_REPOSITORY ${ARES_FLINT_URL} VERSION ${ARES_FLINT_VERSION} GIT_SUBMODULES ""
+                    SOURCE_DIR lib/FLINT)
+  # The three libraries and FiNeR with its dependencies, the checks of all, and FetchContent_MakeAvailable
+  include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/AddLibraries.cmake)
 
-  # FiNeR: the submodule of ARES unless FINER_PATH names another checkout (install.sh passes the same folder). Without
-  # this default, a configure without install.sh found no VERSION file at "/VERSION" and stopped with an empty path
-  if (NOT DEFINED FINER_PATH OR "${FINER_PATH}" STREQUAL "")
-    set(FINER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/lib/third_party/FiNeR")
-  endif()
-  if (NOT TARGET FiNeR)
-    # ARES needs FiNeR v2.1.0 or later: before it, a comment line that holds "=" or a bracket was taken for an option or
-    # a section header, and the reading of its section of input.ini ended there. A clone that pulls without
-    # "git submodule update" keeps the FiNeR it had checked out, and it would build in silence. FiNeR names its version
-    # in a VERSION file ("vX.Y.Z") since v2.0.7; a FiNeR without it is older
-    set(finer_version "")
-    if (EXISTS "${FINER_PATH}/VERSION")
-      file(STRINGS "${FINER_PATH}/VERSION" finer_version LIMIT_COUNT 1)
-      string(REGEX REPLACE "^[ \t]*v?([0-9][0-9.]*).*$" "\\1" finer_version "${finer_version}")
+else()
+
+  # Part of a larger project, which gives ARES its libraries. When that project selected one of ORION, OSLO and FLINT
+  # with SemVerDeps, its release is checked against ARES's requirement; nothing is added here.
+  foreach(_lib ORION OSLO FLINT)
+    string(TOUPPER "${_lib}" _LIB)
+    get_property(_ares_selected GLOBAL PROPERTY SEMVER_${_LIB}_SOURCE SET)
+    if (_ares_selected)
+      include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/SemVerDeps.cmake)
+      semver_dependency(${_lib} GIT_REPOSITORY ${ARES_${_LIB}_URL} VERSION ${ARES_${_LIB}_VERSION})
     endif()
-    if (NOT "${finer_version}" VERSION_GREATER_EQUAL "2.1.0")
-      if ("${finer_version}" STREQUAL "")
-        set(finer_found "a FiNeR without a VERSION file, older than v2.0.7")
-      else()
-        set(finer_found "FiNeR v${finer_version}")
-      endif()
-      message(FATAL_ERROR "FiNeR at ${FINER_PATH} is ${finer_found}: ARES needs FiNeR v2.1.0 or later (it pins v2.3.0), "
-                          "as before v2.1.0 a comment line of input.ini that holds \"=\" ends the reading of its section. "
-                          "Run: git submodule update --init --recursive")
-    endif()
-    # Built in the build folder of this configure, next to its dependencies (a fixed folder of the sources would be
-    # shared by every build folder)
-    set ( finerD "${FINER_PATH}" "${CMAKE_BINARY_DIR}/lib/third_party/FiNeR")
-    add_subdirectory(${finerD})
-  endif()
+  endforeach()
 
 endif()
 

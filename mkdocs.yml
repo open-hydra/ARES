@@ -135,6 +135,7 @@ nav:
     - development/index.md
     - Code Structure: development/structure.md
     - Testing: development/testing.md
+    - Versioning: development/versioning.md
     - Contributing: development/contributing.md
 
   - About:

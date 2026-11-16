@@ -38,8 +38,7 @@ ARES/
 │   ├── FLINT/               #   Real-fluid thermodynamic tables (release checked out by the configure)
 │   ├── ORION/               #   Structured-grid I/O library (release checked out by the configure)
 │   ├── OSLO/                #   ODE solver library, required by FLINT (release checked out by the configure)
-│   └── third_party/         #   Git submodules
-│       └── FiNeR/           #   INI file parser
+│   └── FiNeR/               #   INI file parser (Git submodule)
 │
 ├── test/                    # Validation test suite (flat plates, HTD, Prt-correction, common/ tooling)
 ├── cmake/                   # CMake modules (compiler flags, OpenMP/MPI)
@@ -58,9 +57,9 @@ ARES/
 | `FLINT` | Real-fluid thermodynamic & transport tables (release 2.1 or a later 2.x) |
 | `ORION` | Structured multi-block grid I/O (release 2.1 or a later 2.x) |
 | `OSLO` | ODE solver library, required by FLINT (release 1.1 or a later 1.x) |
-| `FiNeR` | INI file parser (submodule) |
+| `FiNeR` | INI file parser (submodule, v2.3.0) |
 
-ORION, OSLO and FLINT are required by release range with `semver_dependency` (`cmake/SemVerDeps.cmake`): the configure checks the newest release that satisfies the range out in `lib/` and records it in `deps.lock` (see [Installation](../getting-started/installation.md#orion-oslo-and-flint)).
+ORION, OSLO and FLINT are required by release range with `semver_dependency` (`cmake/SemVerDeps.cmake`): the configure checks the newest release that satisfies the range out in `lib/` and records it in `deps.lock` (see [Installation](../getting-started/installation.md#orion-oslo-and-flint) and [Versioning](versioning.md)).
 
 Optional compile-time dependencies (TecIO, SUNDIALS, Cantera) are enabled via the `install.sh build` flags (`--use-tecio`, `--use-sundials`, `--use-cantera`), which record the corresponding cache variables in `CMakePresets.json` for the library builds.
 
@@ -456,7 +455,9 @@ External library paths are set via CMake cache variables (or written automatical
 | `FETCHCONTENT_SOURCE_DIR_FLINT` | empty: the release, in `lib/FLINT/` | FLINT real-fluid tables |
 | `FETCHCONTENT_SOURCE_DIR_OSLO` | empty: the release, in `lib/OSLO/` | OSLO (FLINT dependency) |
 | `SEMVER_UPDATE` | `OFF` | `ALL`: select the newest releases of the three again, once |
-| `FINER_PATH` | `lib/third_party/FiNeR/` | FiNeR INI parser |
+| `FETCHCONTENT_SOURCE_DIR_FINER` | empty: the submodule `lib/FiNeR/` | FiNeR INI parser |
+| `ARES_FINER_DEPS` | `FREE` | `BACKUP`: FiNeR's libraries at the releases ARES is tested with |
+| `ARES_PIN_CHECK` | `FATAL_ERROR` | `WARNING`: build a library ARES does not require, on purpose |
 
 ---
 
