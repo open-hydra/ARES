@@ -26,7 +26,7 @@ Commands:
     --include-orion=<path>  Build a local ORION checkout instead of a release
     --include-flint=<path>  Build a local FLINT checkout instead of a release
     --include-oslo=<path>   Build a local OSLO checkout instead of a release
-    --include-finer=<path>  Set external FiNeR path
+    --include-finer=<path>  Build an external FiNeR clone instead of the submodule lib/FiNeR
     --update-deps           Select again the newest releases of ORION, OSLO and FLINT (deps.lock)
     --compilers=<name>      Set compilers (intel, gnu)
     --use-openmp            Use OpenMP
@@ -38,8 +38,8 @@ Commands:
 
   compile                   Compile the program using the CMakePresets file
 
-  update                    Download git submodules
-    --remote                Use the latest remote commit
+  update                    Update the git submodule lib/FiNeR
+    --remote                Use the latest remote commit (the configure then refuses it: FiNeR is pinned)
 
 EOF
     exit 1
@@ -70,7 +70,7 @@ function write_presets() {
   CXX=$(grep '^CMAKE_CXX_COMPILER:FILEPATH=' "$BUILD_DIR/CMakeCache.txt" | cut -d= -f2-)
   AR=$(grep '^CMAKE_AR:FILEPATH=' "$BUILD_DIR/CMakeCache.txt" | cut -d= -f2-)
   RANLIB=$(grep '^CMAKE_RANLIB:FILEPATH=' "$BUILD_DIR/CMakeCache.txt" | cut -d= -f2-)
-  # the local checkouts of ORION, FLINT and OSLO, when given
+  # the local checkouts of ORION, FLINT, OSLO and FiNeR, when given
   local sources=""
   if [[ -n $ORION_PATH ]]; then
     sources+="        \"FETCHCONTENT_SOURCE_DIR_ORION\": \"${ORION_PATH}\","$'\n'
@@ -80,6 +80,9 @@ function write_presets() {
   fi
   if [[ -n $OSLO_PATH ]]; then
     sources+="        \"FETCHCONTENT_SOURCE_DIR_OSLO\": \"${OSLO_PATH}\","$'\n'
+  fi
+  if [[ -n $FINER_PATH ]]; then
+    sources+="        \"FETCHCONTENT_SOURCE_DIR_FINER\": \"${FINER_PATH}\","$'\n'
   fi
 
   cat <<EOF > CMakePresets.json
@@ -95,8 +98,7 @@ function write_presets() {
       "description": "Default preset",
       "binaryDir": "\${sourceDir}/build",
       "cacheVariables": {
-${sources}        "FINER_PATH": "${FINER_PATH}",
-        "CMAKE_BUILD_TYPE": "${BUILD_TYPE}",
+${sources}        "CMAKE_BUILD_TYPE": "${BUILD_TYPE}",
         "CMAKE_Fortran_COMPILER": "${FC}",
         "CMAKE_C_COMPILER": "${CC}",
         "CMAKE_CXX_COMPILER": "${CXX}",
@@ -119,12 +121,13 @@ EOF
 # Default global values
 COMMAND=""
 COMPILERS=""
-# ORION, FLINT and OSLO: the releases of deps.lock, or the newest ones that ARES accepts (see CMakeLists.txt)
+# ORION, FLINT and OSLO: the releases of deps.lock, or the newest ones that ARES accepts (see CMakeLists.txt);
+# FiNeR: the submodule lib/FiNeR, or an external clone
 ORION_PATH=""
 FLINT_PATH=""
 OSLO_PATH=""
 UPDATE_DEPS="false"
-FINER_PATH=$(pwd)'/lib/third_party/FiNeR/'
+FINER_PATH=""
 USE_OPENMP="false"
 USE_MPI="false"
 USE_TECIO="false"
@@ -189,7 +192,8 @@ while [[ $# -gt 0 ]]; do
             ;;
         --include-finer=*)
             [[ "$COMMAND" == "build" ]] || { error " --include-finer is only valid for 'build' command"; exit 1; }
-            FINER_PATH="${1#*=}"
+            # absolute: CMake takes the folder from the build directory
+            FINER_PATH=$(cd "${1#*=}" && pwd) || { error "No folder ${1#*=}"; exit 1; }
             ;;
         --update-deps)
             [[ "$COMMAND" == "build" ]] || { error " --update-deps is only valid for 'build' command"; exit 1; }
@@ -248,8 +252,10 @@ case "$COMMAND" in
         task "Building $project"
 
         task "Cloning submodules"
-        [[ $FINER_PATH == $(pwd)'/lib/third_party/FiNeR/' ]] && git submodule update --init --recursive lib/third_party/FiNeR
-        [[ $FINER_PATH == $(pwd)'/lib/third_party/FiNeR/' ]] && git submodule update --init lib/third_party/PENF lib/third_party/FACE lib/third_party/FLAP lib/third_party/BeFoR64 lib/third_party/StringiFor
+        # sync first: a clone made before FiNeR moved (lib/third_party/FiNeR to lib/FiNeR) lacks its new entry
+        git submodule sync --quiet
+        [[ -z $FINER_PATH ]] && git submodule update --init lib/FiNeR
+        # ORION, OSLO and FLINT (releases, in lib/) and FiNeR's own dependencies are cloned by CMake at configure time.
 
         task "Configuring and building $project"
         if [[ $COMPILERS == "intel" ]]; then
@@ -267,7 +273,7 @@ case "$COMMAND" in
         log "FLINT: ${FLINT_PATH:-release}"
         log "OSLO: ${OSLO_PATH:-release}"
         log "Update ORION, OSLO and FLINT: $UPDATE_DEPS"
-        log "FINER path: $FINER_PATH"
+        log "FiNeR: ${FINER_PATH:-lib/FiNeR}"
         log "Use OpenMP: $USE_OPENMP"
         log "Use MPI: $USE_MPI"
         log "Use TecIO: $USE_TECIO"
@@ -279,10 +285,11 @@ case "$COMMAND" in
         else
           log "Compilers: FC=$FC, CXX=$CXX, CC=$CC"
         fi
-        CMAKE_ARGS=(-DFINER_PATH=$FINER_PATH -DUSE_TECIO=$USE_TECIO -DUSE_OPENMP=$USE_OPENMP -DUSE_MPI=$USE_MPI -DUSE_SUNDIALS=$USE_SUNDIALS -DUSE_CANTERA=$USE_CANTERA -DUSE_IPO=$USE_IPO -DCMAKE_BUILD_TYPE=$BUILD_TYPE)
+        CMAKE_ARGS=(-DUSE_TECIO=$USE_TECIO -DUSE_OPENMP=$USE_OPENMP -DUSE_MPI=$USE_MPI -DUSE_SUNDIALS=$USE_SUNDIALS -DUSE_CANTERA=$USE_CANTERA -DUSE_IPO=$USE_IPO -DCMAKE_BUILD_TYPE=$BUILD_TYPE)
         [[ -n $ORION_PATH ]] && CMAKE_ARGS+=(-DFETCHCONTENT_SOURCE_DIR_ORION="$ORION_PATH")
         [[ -n $FLINT_PATH ]] && CMAKE_ARGS+=(-DFETCHCONTENT_SOURCE_DIR_FLINT="$FLINT_PATH")
         [[ -n $OSLO_PATH ]] && CMAKE_ARGS+=(-DFETCHCONTENT_SOURCE_DIR_OSLO="$OSLO_PATH")
+        [[ -n $FINER_PATH ]] && CMAKE_ARGS+=(-DFETCHCONTENT_SOURCE_DIR_FINER="$FINER_PATH")
         [[ $UPDATE_DEPS == "true" ]] && CMAKE_ARGS+=(-DSEMVER_UPDATE=ALL)
         rm -rf $BUILD_DIR
         cmake -B $BUILD_DIR "${CMAKE_ARGS[@]}" || exit 1
@@ -301,6 +308,7 @@ case "$COMMAND" in
         ;;
     update)
         task "Updating git submodules"
+        git submodule sync --quiet
         if [[ "$REMOTE" == "true" ]]; then
           log "Updating submodules to latest remote commit"
           git submodule update --init --remote

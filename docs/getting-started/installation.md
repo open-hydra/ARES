@@ -26,32 +26,29 @@ ARES requires these three libraries by a range of releases, as FLINT and ATLAS d
 | `lib/OSLO` | `github.com/MarcoGrossi92/OSLO` | 1.1 or a later 1.x | ODE solvers, required by FLINT |
 | `lib/FLINT` | `github.com/MarcoGrossi92/FLINT` | 2.1 or a later 2.x | Real-fluid thermodynamic & transport tables |
 
-The first configure needs the network: it lists the tags of each library (`git ls-remote`, https) and clones the newest release that satisfies the range. `deps.lock`, in the source root and not tracked, keeps the releases selected: the next configures use them without the network (`-DFETCHCONTENT_FULLY_DISCONNECTED=ON` works then). `-DSEMVER_UPDATE=ALL` (`./install.sh build --update-deps`) selects the newest releases again; `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>` (`--include-orion|flint|oslo=<path>`) builds a local checkout instead. When a project embeds ARES (Hydra), that project chooses the releases.
+The first configure needs the network: it lists the tags of each library (`git ls-remote`, https) and clones the newest release that satisfies the range. `deps.lock`, in the source root and not tracked, keeps the releases selected: the next configures use them without the network (`-DFETCHCONTENT_FULLY_DISCONNECTED=ON` works then). `-DSEMVER_UPDATE=ALL` (`./install.sh build --update-deps`) selects the newest releases again; `-DFETCHCONTENT_SOURCE_DIR_<NAME>=<path>` (`--include-orion|flint|oslo=<path>`) builds a local checkout instead; a local checkout outside the range stops the configure (`-DARES_PIN_CHECK=WARNING` builds it on purpose). When a project embeds ARES (Hydra), that project chooses the releases, and ARES checks them against its ranges. See [Versioning](../development/versioning.md).
 
-### Git submodules
+### FiNeR
 
-The other dependencies are Git submodules.
+FiNeR is a Git submodule, pinned at one release.
 
-| Path | Repository | Purpose |
-|------|------------|---------|
-| `lib/third_party/FiNeR` | `github.com/szaghi/FiNeR` | INI file parser (v2.3.0) |
-| `lib/third_party/PENF`, `FACE`, `FLAP`, `BeFoR64`, `StringiFor` | `github.com/szaghi/<name>` | Libraries of FiNeR, at their release tags (PENF v2.0.1, FACE v1.1.17, FLAP v2.5.3, BeFoR64 v1.2.4, StringiFor v1.8.0) |
+| Path | Repository | Release | Purpose |
+|------|------------|---------|---------|
+| `lib/FiNeR` | `github.com/szaghi/FiNeR` | v2.3.0 | INI file parser |
 
-FiNeR v2.0.7 and later no longer carry their libraries as git submodules: ARES carries them under `lib/third_party/` and adds them before FiNeR (`FINER_DEPS_PATH`, `lib/third_party/` by default), so a build needs neither FoBiS nor the network.
+The configure stops when `lib/FiNeR` is at another commit than the one ARES records. FiNeR's own libraries (PENF, FACE, FLAP, BeFoR64 and StringiFor) are not tracked by ARES: the configure clones them into `lib/FiNeR/src/third_party/`, as FiNeR's author does (`-DARES_FINER_DEPS=FREE`, the default: the default branch of each). If an upstream change breaks ARES, `-DARES_FINER_DEPS=BACKUP` checks out the releases ARES is tested with. `-DFETCHCONTENT_SOURCE_DIR_FINER=<path>` (`--include-finer=<path>`) builds an external FiNeR clone instead; it must be v2.3.0 and have its libraries in place.
 
 ## Build methods
 
 First clone the repository with submodules:
 
 ```bash
-git clone https://github.com/open-hydra/ARES.git
+git clone --recurse-submodules https://github.com/open-hydra/ARES.git
 cd ARES
-# initialise submodules
-./install.sh update            # or: git submodule update --init --recursive
 ```
 
 !!! note "An existing clone"
-    After pulling new commits into an existing clone, run `git submodule update --init --recursive`: a submodule checked out at an older commit is not updated by the build. If FiNeR is older than v2.1.0, the first version that reads a comment line holding `=` as a comment (CMake reads the version from its `VERSION` file, which FiNeR has since v2.0.7), CMake stops and gives this command.
+    After pulling new commits into an existing clone, run `git submodule sync && git submodule update --init`: CMake initializes a submodule that is missing, but does not update one that is checked out at an older commit. If `lib/FiNeR` is not at the commit ARES records, CMake stops and gives this command. FiNeR moved from `lib/third_party/FiNeR` to `lib/FiNeR`: the sync is what makes git know the new path, and the folder `lib/third_party` can be deleted.
 
     `lib/ORION` and `lib/FLINT` were submodules before they were taken by release: git leaves the two folders in place after that pull. The configure moves each one to its release when it is a detached checkout without changes, and otherwise stops and names the folder.
 
@@ -92,7 +89,7 @@ Options accepted by `build`:
 * `--include-orion=PATH` – build a local ORION checkout instead of a release (`-DFETCHCONTENT_SOURCE_DIR_ORION`).
 * `--include-flint=PATH` – same for FLINT.
 * `--include-oslo=PATH` – same for OSLO.
-* `--include-finer=PATH` – use an external FiNeR tree instead of the submodule.
+* `--include-finer=PATH` – build an external FiNeR clone instead of the submodule `lib/FiNeR` (`-DFETCHCONTENT_SOURCE_DIR_FINER`).
 * `--update-deps` – select again the newest releases of ORION, OSLO and FLINT (`-DSEMVER_UPDATE=ALL`, this build only).
 
 After a successful build, a `CMakePresets.json` file is written in the source root so that subsequent compilations can reuse the configuration.
@@ -106,7 +103,7 @@ After a successful build, a `CMakePresets.json` file is written in the source ro
 ./install.sh compile
 ```
 
-**`update` command** — synchronises the Git submodules (FiNeR and its libraries). By default it checks out the commit recorded in `.gitmodules`; `--remote` fetches the latest commit from each remote branch.
+**`update` command** — synchronises the Git submodule `lib/FiNeR`. By default it checks out the commit ARES records; `--remote` fetches the latest commit of its remote branch, which the configure then refuses, as FiNeR is pinned.
 
 ```bash
 ./install.sh update            # sync to recorded commit
@@ -126,7 +123,8 @@ cmake .. \
     -DUSE_MPI=OFF \
     -DFETCHCONTENT_SOURCE_DIR_ORION=/path/to/ORION \  # optional
     -DFETCHCONTENT_SOURCE_DIR_FLINT=/path/to/FLINT \  # optional
-    -DFINER_PATH=/path/to/FiNeR                       # optional
+    -DFETCHCONTENT_SOURCE_DIR_OSLO=/path/to/OSLO \    # optional
+    -DFETCHCONTENT_SOURCE_DIR_FINER=/path/to/FiNeR    # optional
 cmake --build . --parallel
 ```
 

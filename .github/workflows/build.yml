@@ -1,0 +1,68 @@
+name: Build
+
+# The build of ARES with gfortran, with OpenMP and with OpenMP + MPI, in RELEASE and DEBUG. A build only: the tests are
+# run locally for now (test/, docs/development/testing.md).
+on:
+  pull_request:
+    branches: [main]
+  # A merge queue for main waits for the required checks on each merge group, and GitHub Actions starts a workflow
+  # for a merge group only on this event.
+  merge_group:
+    types: [checks_requested]
+    branches: [main]
+  workflow_dispatch:
+
+# The jobs read the repository and write nothing to GitHub: a read-only token.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: gfortran, ${{ matrix.parallel }}, ${{ matrix.build-type }}
+    # A named Ubuntu release, not ubuntu-latest, which GitHub moves to newer releases: the release of the jobs
+    # changes only with this line.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        parallel: [OpenMP, OpenMP + MPI]
+        build-type: [RELEASE, DEBUG]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # The submodule of ARES (FiNeR), without recursion. The configure fetches FiNeR's libraries and the releases
+          # of ORION, OSLO and FLINT over https (cmake/SemVerDeps.cmake), without their submodules: Cantera (whose
+          # submodule Eigen is hosted on gitlab.com) and SUNDIALS are built only with USE_CANTERA=ON or
+          # USE_SUNDIALS=ON.
+          submodules: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran
+          if [ "${{ matrix.parallel }}" = "OpenMP + MPI" ]; then
+            sudo apt-get install -y libopenmpi-dev openmpi-bin
+          fi
+
+      - name: Configure
+        run: |
+          if [ "${{ matrix.parallel }}" = "OpenMP + MPI" ]; then USE_MPI=ON; else USE_MPI=OFF; fi
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+            -DCMAKE_Fortran_COMPILER=gfortran \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DUSE_OPENMP=ON \
+            -DUSE_MPI=$USE_MPI \
+            -DUSE_TECIO=OFF \
+            -DUSE_SUNDIALS=OFF \
+            -DUSE_CANTERA=OFF
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Check the executables
+        # The build writes them to bin/ of the source tree, whatever the build directory
+        run: test -x bin/ARES && test -x bin/DocGen
