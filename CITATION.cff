@@ -15,13 +15,14 @@ date-released: 2026-11-17
 authors:
   - family-names: Giacomi
     given-names: Andrea
+    affiliation: Sapienza University of Rome
+  - family-names: Passarani
+    given-names: Giacomo
+    affiliation: Sapienza University of Rome
   - family-names: Grossi
     given-names: Marco
     affiliation: Sapienza University of Rome
     orcid: https://orcid.org/0000-0002-8487-1932
-  - family-names: Passarani
-    given-names: Giacomo
-    affiliation: Sapienza University of Rome
 contact:
   - family-names: Giacomi
     given-names: Andrea
