@@ -2,8 +2,8 @@
 
 ARES follows [Semantic Versioning 2.0.0](https://semver.org/), as ORION, OSLO, FLINT, MOSE, ATLAS and ICE do:
 a release is a tag `vX.Y.Z` on `main`, and its changes are listed in
-[CHANGELOG.md](https://github.com/open-hydra/ARES/blob/main/CHANGELOG.md). Before 1.0.0 a breaking
-change raises `Y`, anything else `Z`.
+[CHANGELOG.md](https://github.com/open-hydra/ARES/blob/main/CHANGELOG.md). A breaking change raises
+`X`, a new feature `Y`, a fix `Z`.
 
 ## How ARES requires its libraries
 
@@ -47,10 +47,9 @@ ignored. `-DSEMVER_UPDATE=ALL` (`install.sh build --update-deps`) selects the ne
 Hydra builds ARES with its own libraries. When hydra selects ORION, OSLO or FLINT with SemVerDeps,
 ARES's requirement is checked against that release, so:
 
-- a new **major** of one of those libraries in ARES's requirement is a major (before 1.0.0, minor)
-  release of ARES;
-- a later **minor** (from ORION `2.1` to `2.2`) is a minor (before 1.0.0, patch) release;
-- another FiNeR release is a major (before 1.0.0, minor) release of ARES.
+- a new **major** of one of those libraries in ARES's requirement is a major release of ARES;
+- a later **minor** (from ORION `2.1` to `2.2`) is a minor release;
+- another FiNeR release is a major release of ARES.
 
 ## Making a release
 

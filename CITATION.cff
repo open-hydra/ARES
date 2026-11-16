@@ -1,9 +1,39 @@
-cff-version: 0.1.0-alpha
-title: "ARES"
-authors:
-  - family-names: "Giacomi"
-    given-names: "Andrea"
-license: GPL-3.0
-url: "https://github.com/open-hydra/ARES"
-doi: "https://doi.org/10.5281/zenodo.20677441"
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "ARES: A Real-fluid Equations Solver"
+abstract: >-
+  An open-source compressible flow solver for the Euler and Navier-Stokes
+  equations on multi-block structured grids, written in modern Fortran, for
+  real-fluid flows: thermodynamic and transport properties are interpolated
+  from tabulated real-fluid data, and low-Mach preconditioning keeps the
+  density-based scheme accurate from nearly incompressible to hypersonic
+  regimes. It includes RANS turbulence closures, implicit residual smoothing,
+  multigrid, and OpenMP/MPI parallelism.
 type: software
+version: 1.0.0
+date-released: 2026-11-17
+authors:
+  - family-names: Giacomi
+    given-names: Andrea
+  - family-names: Grossi
+    given-names: Marco
+    affiliation: Sapienza University of Rome
+    orcid: https://orcid.org/0000-0002-8487-1932
+  - family-names: Passarani
+    given-names: Giacomo
+    affiliation: Sapienza University of Rome
+contact:
+  - family-names: Giacomi
+    given-names: Andrea
+license: GPL-3.0-only
+repository-code: https://github.com/open-hydra/ARES
+url: https://open-hydra.github.io/ARES/
+doi: 10.5281/zenodo.20677441
+keywords:
+  - computational fluid dynamics
+  - compressible flow
+  - Navier-Stokes
+  - real-fluid flows
+  - low-Mach preconditioning
+  - RANS turbulence modeling
+  - Fortran
