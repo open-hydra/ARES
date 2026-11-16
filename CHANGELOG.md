@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Wall-clock instrumentation, ported from MOSE.
 - IPO in RELEASE builds (`USE_IPO`); ifx 2024.1 refused at `-O2` and above without IPO.
 - A [Versioning](docs/development/versioning.md) page: the releases ARES requires of its libraries.
+- CI build (`.github/workflows/build.yml`): gfortran, OpenMP and OpenMP + MPI, RELEASE and DEBUG.
 - This changelog.
 
 ### Changed
