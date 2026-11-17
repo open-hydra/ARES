@@ -27,7 +27,7 @@ set(ARES_FINER_TAG v2.3.0)
 if (NOT DEFINED ARES_FINER_DEPS)
   set(ARES_FINER_DEPS "FREE")
 endif()
-set(ARES_FINER_BACKUP_PINS   # the releases of the submodules ARES held in lib/third_party, as MOSE, ATLAS and ICE do
+set(ARES_FINER_BACKUP_PINS
   "PENF=v2.0.1"
   "StringiFor=v1.8.0"
   "FACE=v1.1.17"
@@ -146,4 +146,7 @@ endif()
 # Build application (only if this file has not been called by another CMakeLists)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   add_subdirectory(src/app)
+  # The CI tests (test/CMakeLists.txt): ctest --test-dir build -L ci
+  enable_testing()
+  add_subdirectory(test)
 endif()

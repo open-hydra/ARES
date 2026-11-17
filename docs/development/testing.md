@@ -117,6 +117,35 @@ The `extract1d` step is needed by the cases whose script reads `OUTPUT/1d.dat` (
 
 ---
 
+## CI Tests
+
+Fast cases run on every pull request (`.github/workflows/build.yml`): one build with gfortran, OpenMP + MPI, RELEASE,
+then `ctest -L ci`, each run as one process without `mpirun`. Each case is a `test/<case>/run.sh` that builds its
+inputs, runs ARES, prints its checks and exits 0 when all pass; `test/CMakeLists.txt` registers them with CTest.
+
+```bash
+cmake --build build
+ctest --test-dir build -L ci --output-on-failure -j 4
+ARES_BIN=$PWD/bin/ARES test/low-mach-cylinder/run.sh      # one case by hand
+ARES_BIN=$PWD/bin/ARES test/turbulence-smoke/run.sh SST   # one turbulence model
+```
+
+They need `python3` (standard library only), not ATLAS nor CoolProp: the real-fluid tables are committed in
+`test/<case>/tables/`, with the `[GPB]` block and `make_tables.sh` that rebuild them. Mesh, `ic.tec` and `bc.txt` are
+written at run time by `make_case.py`, which reads the free-stream enthalpy from the table. The run folders,
+`test/<case>/runs/`, are not versioned.
+
+| Test | Case | Checks | Time (gfortran 13, RELEASE) |
+|------|------|--------|------|
+| `RealFluidShockTube` | [CO2 shock tube](../vv/real-fluid-shock-tube.md) | plateaus within 0.5% of the exact real-fluid solution, waves within one cell | 0.5 s |
+| `LowMachCylinder` | [low-Mach cylinder](../vv/low-mach-cylinder.md), three runs side by side | `prec` converges with a Mach-independent Cp; `prim` loses it | 15 s |
+| `TurbulenceSmoke.<model>` | `turbulence-smoke/`: coarse flat plate in air, 300 iterations from a turbulent boundary layer, one test per model | the field is finite, the turbulence variables and mut are not negative, mut/mu stays between 5 and 1e4, the residual falls | about 2 s each |
+
+The turbulence runs cover the 13 models that ARES accepts (`SAcomp` is refused at set-up). They check that a model runs,
+not its accuracy: that is the flat-plate validation. The run scripts list the measured values next to each tolerance.
+
+---
+
 ## Unit Tests
 
 Building with `-DBASIC_TEST=ON` (CMake) compiles every `*.f90` / `*.F90` placed under `src/test/`: each file becomes a standalone executable linked against `libARES` (plus FiNeR, OSLO, ORION), written to `test/basic/<name>/<name>.exe`. The directory currently contains only the CMake scaffold — no unit tests are present; the suite above is validation-level.

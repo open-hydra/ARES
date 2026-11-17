@@ -2,7 +2,8 @@
 
 ARES ships with a suite of test cases that exercise the solver on real-fluid, wall-bounded turbulent flows with known reference or experimental data. Each case is a self-contained directory under `test/` with its own `input.ini`, run script (`ARES.sh`), reference data, and (where applicable) a Python verification script.
 
-The current suite is entirely **2-D real-fluid turbulent** and is organised as follows.
+The validation cases are 2-D real-fluid turbulent flows; two fast verification cases run in CI on every pull request
+([CI tests](../development/testing.md#ci-tests)).
 
 <div class="grid cards" markdown>
 
@@ -38,6 +39,22 @@ The current suite is entirely **2-D real-fluid turbulent** and is organised as f
 
     [:octicons-arrow-right-24: NICFD nozzle](nicfd-nozzle.md)
 
+-   :material-wave:{ .lg .middle } __Real-Fluid Shock Tube__
+
+    ---
+
+    A Riemann problem in supercritical **CO2**, against the exact solution of the reference equation of state. Run in CI.
+
+    [:octicons-arrow-right-24: Shock tube](real-fluid-shock-tube.md)
+
+-   :material-circle-outline:{ .lg .middle } __Low-Mach Cylinder__
+
+    ---
+
+    Preconditioning in dense **CO2** at Mach 0.01 and 0.001: a Mach-independent pressure field. Run in CI.
+
+    [:octicons-arrow-right-24: Low-Mach cylinder](low-mach-cylinder.md)
+
 </div>
 
 ---
@@ -53,9 +70,11 @@ The current suite is entirely **2-D real-fluid turbulent** and is organised as f
 | `test/HTD` | [HTD](htd.md) | para-hydrogen | supercritical, preconditioned, 2-block axisymmetric |
 | `test/Prt-correction` | [Prt correction](prt-correction.md) | water (constant-property table) | SA-rough + `Prt-correction` |
 | `test/compressible-nozzle` | [NICFD nozzle](nicfd-nozzle.md) | MDM (siloxane) | non-ideal transonic expansion, SST, planar 2-D |
+| `test/real-fluid-shock-tube` | [Shock tube](real-fluid-shock-tube.md) | CO2 | exact real-fluid Riemann solution, 1-D, CI |
+| `test/low-mach-cylinder` | [Low-Mach cylinder](low-mach-cylinder.md) | CO2 | preconditioning, Mach 0.01 and 0.001, CI |
 
-!!! note "These are the only cases"
-    This list reflects exactly what is documented from the `test/` folder. The flat plates and HTD live directly under `test/`.
+`test/turbulence-smoke` runs every turbulence model for 300 iterations in CI. It checks that the models run, not their
+accuracy, and has no page here: see [CI tests](../development/testing.md#ci-tests).
 
 ---
 
