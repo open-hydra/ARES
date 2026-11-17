@@ -131,6 +131,8 @@ nav:
     - Supercritical Heat Transfer (HTD): vv/htd.md
     - Turbulent Prandtl Correction: vv/prt-correction.md
     - Non-Ideal Supersonic Nozzle (MDM): vv/nicfd-nozzle.md
+    - Real-Fluid Shock Tube (CO2): vv/real-fluid-shock-tube.md
+    - Low-Mach Cylinder (CO2): vv/low-mach-cylinder.md
 
   - Developer Guide:
     - development/index.md

@@ -1,7 +1,7 @@
-name: Build
+name: Build and test
 
-# The build of ARES with gfortran, with OpenMP and with OpenMP + MPI, in RELEASE and DEBUG. A build only: the tests are
-# run locally for now (test/, docs/development/testing.md).
+# One build of ARES with gfortran, OpenMP + MPI, RELEASE, then its CI tests (ctest -L ci: test/CMakeLists.txt), each a
+# run of one process without mpirun. The validation cases of test/ are run locally (docs/development/testing.md).
 on:
   pull_request:
     branches: [main]
@@ -25,15 +25,10 @@ permissions:
 
 jobs:
   build:
-    name: gfortran, ${{ matrix.parallel }}, ${{ matrix.build-type }}
-    # A named Ubuntu release, not ubuntu-latest, which GitHub moves to newer releases: the release of the jobs
+    name: gfortran, OpenMP + MPI, RELEASE
+    # A named Ubuntu release, not ubuntu-latest, which GitHub moves to newer releases: the release of the job
     # changes only with this line.
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        parallel: [OpenMP, OpenMP + MPI]
-        build-type: [RELEASE, DEBUG]
 
     steps:
       - name: Checkout repository
@@ -48,21 +43,17 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gfortran
-          if [ "${{ matrix.parallel }}" = "OpenMP + MPI" ]; then
-            sudo apt-get install -y libopenmpi-dev openmpi-bin
-          fi
+          sudo apt-get install -y gfortran libopenmpi-dev openmpi-bin
 
       - name: Configure
         run: |
-          if [ "${{ matrix.parallel }}" = "OpenMP + MPI" ]; then USE_MPI=ON; else USE_MPI=OFF; fi
           cmake -B build \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build-type }} \
+            -DCMAKE_BUILD_TYPE=RELEASE \
             -DCMAKE_Fortran_COMPILER=gfortran \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
             -DUSE_OPENMP=ON \
-            -DUSE_MPI=$USE_MPI \
+            -DUSE_MPI=ON \
             -DUSE_TECIO=OFF \
             -DUSE_SUNDIALS=OFF \
             -DUSE_CANTERA=OFF
@@ -73,3 +64,7 @@ jobs:
       - name: Check the executables
         # The build writes them to bin/ of the source tree, whatever the build directory
         run: test -x bin/ARES && test -x bin/DocGen
+
+      - name: Test
+        # The cases of test/CMakeLists.txt, side by side; each prints its checks
+        run: ctest --test-dir build -L ci --output-on-failure -j $(nproc)

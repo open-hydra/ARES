@@ -27,3 +27,6 @@ test/common/extract1d
 # Documentation site (zensical build) and Zensical's cache
 site
 .cache
+
+# The run folders of the CI tests (test/CMakeLists.txt)
+test/*/runs/
