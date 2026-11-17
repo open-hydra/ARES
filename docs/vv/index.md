@@ -30,6 +30,14 @@ The current suite is entirely **2-D real-fluid turbulent** and is organised as f
 
     [:octicons-arrow-right-24: Prt correction](prt-correction.md)
 
+-   :material-rocket-launch:{ .lg .middle } __Non-Ideal Supersonic Nozzle__
+
+    ---
+
+    Siloxane **MDM** expanding to Mach 1.5 near its dew line, validated against TROVA measurements and SU2.
+
+    [:octicons-arrow-right-24: NICFD nozzle](nicfd-nozzle.md)
+
 </div>
 
 ---
@@ -44,6 +52,7 @@ The current suite is entirely **2-D real-fluid turbulent** and is organised as f
 | `test/Flat_Plate_SSGLRR` | [Turbulent flat plate](2D-flat-plate-turbulent.md) | air | SSG-LRR (RSM) vs. NASA TMR |
 | `test/HTD` | [HTD](htd.md) | para-hydrogen | supercritical, preconditioned, 2-block axisymmetric |
 | `test/Prt-correction` | [Prt correction](prt-correction.md) | water (constant-property table) | SA-rough + `Prt-correction` |
+| `test/compressible-nozzle` | [NICFD nozzle](nicfd-nozzle.md) | MDM (siloxane) | non-ideal transonic expansion, SST, planar 2-D |
 
 !!! note "These are the only cases"
     This list reflects exactly what is documented from the `test/` folder. The flat plates and HTD live directly under `test/`.

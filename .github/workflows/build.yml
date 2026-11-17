@@ -5,6 +5,13 @@ name: Build
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - CHANGELOG.md
+      - authors.md
+      - .mailmap
+      - CITATION.cff
+      - LICENSE
+      - scripts/**
   # A merge queue for main waits for the required checks on each merge group, and GitHub Actions starts a workflow
   # for a merge group only on this event.
   merge_group:

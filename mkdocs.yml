@@ -130,6 +130,7 @@ nav:
     - Turbulent Flat Plate: vv/2D-flat-plate-turbulent.md
     - Supercritical Heat Transfer (HTD): vv/htd.md
     - Turbulent Prandtl Correction: vv/prt-correction.md
+    - Non-Ideal Supersonic Nozzle (MDM): vv/nicfd-nozzle.md
 
   - Developer Guide:
     - development/index.md

@@ -13,6 +13,7 @@ bin
 # Test output files
 error*
 OUTPUT
+__pycache__/
 
 # Releases of ORION, OSLO and FLINT checked out by the configure (cmake/SemVerDeps.cmake), and those selected
 deps.lock
