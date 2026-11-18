@@ -375,14 +375,6 @@ contains
         write(*,'(A,T35,A)') '   Thermo inversion', 'OK'
       endif
 
-      ! The range of the tables: a state of the run outside it stops the run (Outside_Tables)
-      if ( .not. has_error .and. allocated(rho_tab) ) then
-        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table pressure [Pa]', pmin, ' to ', pmin + ubound(rho_tab,1) * deltap
-        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table enthalpy [J/kg]', hmin, ' to ', hmin + ubound(rho_tab,2) * deltah
-        call Table_Temperatures ( Tlo, Thi, plo, phi )
-        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table temperature [K]', Tlo, ' to ', Thi
-      end if
-
     end subroutine Check_Tables
 
 
@@ -810,6 +802,8 @@ contains
         if (nRANS == 2 .and. trim(obj_rans%omega_wall_bc) == 'asymptotic') &
           write(*,'(A,T35,A,F0.2,A)') '   Omega wall condition', 'asymptotic (omega = ', obj_rans%omega_wall_coef, &
                                       ' nu/y^2, 6/beta of the model)'
+        if (trim(obj_rans%wall_distance) == 'face-centre') &
+          write(*,'(A,T35,A)') '   Wall distance', 'face-centre (nearest wall-face centre, legacy)'
         if (obj_rans%Prt_correction) &
           write(*,'(A,T35,A)') '   Prt correction', 'ON (rough-wall turbulent Prandtl)'
         if (obj_rans%sst_asymptotic) &

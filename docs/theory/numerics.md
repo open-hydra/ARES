@@ -605,10 +605,16 @@ of SSG/LRR, $C\mu_l/(\rho\,d^2)$ with $d$ the distance of the cell centre from
 the wall, which follow the height of the first cell, nor that of $\tilde\nu$ on a
 rough wall, taken from the value of the cell. Their derivative along the wall is
 left out, with the error above on skewed cells. The wall temperature of a `301`
-wall is estimated with the metric of the cell and the laminar conductivity alone,
-also on a rough wall (exact when adiabatic; the energy flux is the prescribed
-heat flux regardless), the wall values of the turbulence variables with the wall
-distance of the cell.
+wall is estimated with the metric of the wall gradient (with `stencil` that of the
+wall face, with `mean` that of the cell) and the conductivity $k_l + k_t$
+across the half cell, $T_w = T_1 + q/(2(k_l + k_t)\,\nabla\xi\cdot\mathbf{n})$
+(exact when adiabatic; the energy flux is the prescribed heat flux regardless):
+$k_l$ of the cell, $k_t = \mu_t c_p/(Pr_t + \Delta Pr_t)$ at the wall face, with
+$\mu_t$ from the wall values of the turbulence variables at the state of the
+cell and the velocity gradient of the wall face (with the same metric), $c_p$ of the cell and the rough-wall $\Delta Pr_t$ at $y = 0$. $k_t$ is
+zero but with `SA-rough` on a wall with $k_s > 0$ ($k$, $R_{ij}$ and the smooth
+$\tilde\nu$ vanish at the wall). The wall values of the turbulence variables take
+the metric and the wall distance of the cell.
 
 ### Metrics of the ghost cells
 
@@ -703,7 +709,7 @@ sign of $q_1$); the velocity is not limited ($\psi = s$). The wall values of the
 turbulence variables are those of the wall fluxes, from the same wall state
 (`302`: the state at $T_w$ and the pressure of the cell; `301`: the pressure of
 the cell and the wall temperature that the heat flux gives across the half cell
-with the laminar conductivity of the cell, as the wall flux takes it; the
+with the laminar and turbulent conductivities, as the wall flux takes it; the
 coupled walls `103` and `104`, whose viscous flux the other solver gives: the
 state of the wall cell, as an adiabatic wall, smooth or rough as their `ks`),
 from the cell values per unit mass at the density of that state. Every wall takes the roughness

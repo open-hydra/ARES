@@ -596,7 +596,7 @@ contains
     integer  :: Im, Jm, Km, Fm, Ig, Jg, Kg, c(3,2), l, s, Dir, Face_i, Face_j, Face_k
     real(R8) :: p(2), T(2), rho(2), u(3,2), phi(nrans,2)
     real(R8) :: pG(2), TG(2), uG(3,2), phiG(nrans,2), phiw(nrans), rw(nrans)
-    real(R8) :: sx, h_w, rho_w, mil, kl, hs, metric, hG, temp, Twall
+    real(R8) :: sx, h_w, rho_w, mil, kl, hs, metric, hG, temp, Twall, Mw(3,3)
     logical  :: wall, cut, cutq, inside, ok, table
 
     Im = rec % i ; Jm = rec % j ; Km = rec % k ; Fm = rec % f
@@ -644,7 +644,7 @@ contains
     end if
 
     ! Turbulence variables: the wall values of the wall routines, from their wall state (302: BC_Wall_Temperature, the
-    ! state at T_w; 301: BC_Wall_Heat, the wall temperature from the heat flux with the laminar conductivity of the cell;
+    ! state at T_w; 301: BC_Wall_Heat, the wall temperature from the heat flux with the conductivity of the cell, laminar and turbulent;
     ! the coupled walls 103 and 104, whose viscous flux the other solver gives: the state of the cell, as an adiabatic
     ! wall), from the cell values per unit mass at the wall density. Every wall, the coupled ones too, takes the roughness
     ! of the nearest wall (blk%ks, with SA-rough only), as the wall flux and the source terms of the cell take it: ks = 0
@@ -658,8 +658,12 @@ contains
         case (302)
           call Wall_State_Temperature ( p(1), rec % Tw, h_w, rho_w, mil, kl )
         case (301)
-          call Wall_State_Heat ( p(1), blk % P(nh,Im,Jm,Km), rec % qw, blk % M(Im,Jm,Km) % c, &
-                                 blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n, Dir, temp, mil, kl, Twall, h_w, rho_w )
+          ! the metric of the wall gradient of BC_Wall_Heat: that of the wall face with diffusive-metric = stencil
+          Mw = blk % M(Im,Jm,Km) % c
+          if ( rec % wstencil ) Mw = rec % wM
+          call Wall_State_Heat ( p(1), blk % P(nh,Im,Jm,Km), u(:,1), rec % qw, blk % M(Im,Jm,Km) % c, Mw, &
+                                 blk % dir(Dir) % f(Face_i,Face_j,Face_k) % n, Fm, Dir, blk % P(nt:nprim,Im,Jm,Km), &
+                                 rho(1), blk % yn(Im,Jm,Km), hs, temp, mil, kl, Twall, h_w, rho_w )
         case default
           rho_w = rho(1)
           mil   = ph2vars ( p(1), blk % P(nh,Im,Jm,Km), mi_tab2D )

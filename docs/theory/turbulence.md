@@ -160,7 +160,7 @@ $$
 \tilde\nu_w = \tilde\nu_c\,\frac{d_0}{y_1 + d_0},\qquad \tilde\mu_w = \rho_w\,\tilde\nu_w ,
 $$
 
-with $y_1$ the wall distance of the cell centre and $\rho_w$ the density of the wall state of each wall (`302`: at $T_w$; `301`: at the wall temperature from the heat flux and the laminar conductivity; the coupled walls `103` and `104`: the state of the cell). The wall flux, the wall eddy viscosity and the ghost cells take the same $\tilde\nu_w$. A wall face with $k_s = 0$ takes the smooth value $\tilde\nu_w = 0$.
+with $y_1$ the wall distance of the cell centre and $\rho_w$ the density of the wall state of each wall (`302`: at $T_w$; `301`: at the wall temperature from the heat flux and the laminar and turbulent conductivities; the coupled walls `103` and `104`: the state of the cell). The wall flux, the wall eddy viscosity and the ghost cells take the same $\tilde\nu_w$. A wall face with $k_s = 0$ takes the smooth value $\tilde\nu_w = 0$.
 
 Note also that $f_{v2}$ is evaluated from the **molecular** ratio rather than the augmented $\chi$:
 
@@ -551,7 +551,14 @@ its eight nodes, to the wall surface, as the NASA Turbulence Modeling
 Resource requires [13]. It is not the distance to the nearest wall node
 or face centre, which differs from it wherever the grid lines are not normal
 to the wall; next to a convex corner or at the end of a wall it is the
-distance to the corner or the end.
+distance to the corner or the end. `wall-distance = face-centre` in
+`[ARES-Turbulence]` restores the distance of the earlier ARES, to the nearest
+wall-face centre (in 3-D, with no periodic image), and on a rough wall
+(`SA-rough`) the wall value of $\tilde\nu$ of that version, with the half height
+of the cell across the face, $1/(2\,\nabla\xi\cdot\mathbf{n})$, in place of $y_1$,
+only to compare with the runs of that version: on a mesh skewed by 45° next to the wall it is about 1.7 times
+the exact distance across the boundary layer and 3 times in the first cell, and
+a solution converged with it is not a steady state with the exact distance.
 
 The distance to the centre of the nearest wall face is wrong by a fixed
 fraction in the first cell of a skewed mesh. With the grid lines at an angle

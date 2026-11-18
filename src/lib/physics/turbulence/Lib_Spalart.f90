@@ -322,7 +322,7 @@ contains
     real(R8), intent(in), dimension(nRANS)   :: mitilde_cell     ! : rho_wall*nitilde at the boundary cell
     real(R8), intent(in)                     :: mil_wall         ! : laminar viscosity at wall
     real(R8), intent(out), dimension(nRANS)  :: mitilde_wall     ! : rho_wall*nitilde at wall
-    real(R8), intent(in)                     :: metric           ! : MetricTensor(Dir) dot_product FaceNormal (not used)
+    real(R8), intent(in)                     :: metric           ! : MetricTensor(Dir) dot_product FaceNormal (face-centre only)
     real(R8), intent(in)                     :: dist             ! : cell center distance wall
     real(R8), intent(in)                     :: ks               ! : roughness of nearest wall
     ! Local
@@ -333,10 +333,15 @@ contains
     ! Rough wall: d(nitilde)/dn = nitilde/d0 at the wall (d0 = 0.03 ks). nitilde grows linearly with the displaced
     ! distance (d + d0) across the first cell, so the wall value is the cell value scaled by d0/(dist + d0); the caller
     ! gives the cell value times the wall density, so that the result is rho_wall*nitilde_wall. ks = 0 (a smooth wall
-    ! of a rough case) gives the smooth value
+    ! of a rough case) gives the smooth value. With wall-distance = face-centre the formula of the earlier ARES, with
+    ! the half height of the cell across the face, 1/(2 metric), in place of dist (the legacy yn is not used here)
     if ( obj_rans%rough .and. ks > 0d0 ) then
       d0 = 0.03d0 * ks
-      mitilde_wall(1) = mitilde_cell(1) * d0 / ( dist + d0 )
+      if ( trim(obj_rans%wall_distance) == 'face-centre' ) then
+        mitilde_wall(1) = ( 2.0d0 * mitilde_cell(1) * metric * 0.03d0 * ks ) / ( 1.0d0 + 2.0d0 * metric * 0.03d0 * ks )
+      else
+        mitilde_wall(1) = mitilde_cell(1) * d0 / ( dist + d0 )
+      end if
     end if
 
   end subroutine Spalart_Set_Wall_Values
