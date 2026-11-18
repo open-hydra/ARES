@@ -1112,7 +1112,7 @@ contains
             if ( norm2 ( t - matmul ( basis(:,1:nv), anint ( coef(1:nv) ) ) ) <= lim ) cycle
             ! In the span of the basis, between its integer combinations: the periodic boundaries disagree
             if ( norm2 ( t - matmul ( basis(:,1:nv), coef(1:nv) ) ) <= lim ) then
-              write(msg,'(A,3ES12.4,A,ES8.2,A)') '[ERROR] Wall distance: the periodic translation (', t, &
+              write(msg,'(A,3ES12.4,A,ES9.2,A)') '[ERROR] Wall distance: the periodic translation (', t, &
                 ') is not an integer combination of the others, to 1e-2 of the thinnest cell across the periodic'// &
                 ' boundaries (', hmin, '): the two sides of each periodic boundary must match to that, with the node'// &
                 ' coordinates written with enough significant digits'
@@ -1120,7 +1120,7 @@ contains
             end if
           end if
           if ( nv == MAXV ) then
-            write(msg,'(A,ES8.2,A)') '[ERROR] Wall distance: more than three independent periodic translations, to'// &
+            write(msg,'(A,ES9.2,A)') '[ERROR] Wall distance: more than three independent periodic translations, to'// &
               ' 1e-2 of the thinnest cell across the periodic boundaries (', hmin, '): the two sides of each periodic'// &
               ' boundary must match to that, with the node coordinates written with enough significant digits'
             call mpi_stop_all ( trim(msg) )

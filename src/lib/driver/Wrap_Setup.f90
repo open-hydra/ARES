@@ -375,14 +375,6 @@ contains
         write(*,'(A,T35,A)') '   Thermo inversion', 'OK'
       endif
 
-      ! The range of the tables: a state of the run outside it stops the run (Outside_Tables)
-      if ( .not. has_error .and. allocated(rho_tab) ) then
-        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table pressure [Pa]', pmin, ' to ', pmin + ubound(rho_tab,1) * deltap
-        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table enthalpy [J/kg]', hmin, ' to ', hmin + ubound(rho_tab,2) * deltah
-        call Table_Temperatures ( Tlo, Thi, plo, phi )
-        write(*,'(A,T35,ES12.5,A,ES12.5)') '   Table temperature [K]', Tlo, ' to ', Thi
-      end if
-
     end subroutine Check_Tables
 
 
