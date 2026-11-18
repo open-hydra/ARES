@@ -68,29 +68,73 @@ contains
 
 
   !> Gas at the face of a wall of prescribed heat flux, as BC_Wall_Heat and Ghost_Wall take it: the laminar viscosity and
-  !> conductivity at the state (p, h) of the boundary cell; the wall temperature Twall = temp + Heat_Flux / (2 kl Mc(Dir,:).n),
-  !> from the heat flux across the half cell with the laminar conductivity alone, also on a rough wall (exact when
-  !> adiabatic, and the energy flux is Heat_Flux regardless), Mc the metric of the cell; the enthalpy and the density at
-  !> Twall and the pressure of the cell (boundary layer). Twall is an estimate (first order; coarse meshes, coarse
-  !> multigrid levels): when it lies outside the temperatures of the tables at that pressure it is brought within them
-  !> (Table_Bounds, as the ghost cells of Ghost_Wall), and counted; on tables with no temperature common to the two rows
-  !> that bracket p, the wall takes the state of the cell.
-  subroutine Wall_State_Heat ( p, h, Heat_Flux, Mc, normal, Dir, temp, mil, kl, Twall, h_wall, rho_wall )
-    use FLINT_Lib_Thermodynamic,   only: ph2vars, pT2h, rho_tab, T_tab, mi_tab2D, k_tab2D
+  !> conductivity at the state (p, h) of the boundary cell; the wall temperature Twall = temp + Heat_Flux / (2 (kl+kt)
+  !> Mw(Dir,:).n), from the heat flux across the half cell with the laminar and turbulent conductivities (exact when
+  !> adiabatic, and the energy flux is Heat_Flux regardless), Mw the metric of the wall gradient (with diffusive-metric =
+  !> stencil that of the wall face, rec%wM of Wall_Face_Stencils; otherwise Mc, that of the cell), the same as the wall
+  !> flux of BC_Wall_Heat; the enthalpy and the density at
+  !> Twall and the pressure of the cell (boundary layer). kt = mit cp / (Prt + dPrt) at the wall face, as archive-ARES
+  !> took it (explicit, at the state of the cell): mit the eddy viscosity at the wall face (y = 0) from the wall values of
+  !> the turbulence variables of the cell values rans_cell (rho nu~ ...) at the cell density rho, cp of the cell, dPrt
+  !> the rough-wall correction at y = 0. It is zero but with SA-rough on a wall with ks > 0: k = 0, R_ij = 0 and nu~ = 0
+  !> (smooth SA) at the wall give mit = 0, and then Twall is that of kl alone. The eddy viscosity at the
+  !> wall face takes the velocity gradient of the wall face, the velocity u of the cell over the half cell (no-slip,
+  !> u = 0 at the wall: the index-space difference u modfm3 along Dir of the face Fm, turned with Mw; the velocity is
+  !> zero along the wall, so no tangential difference), as BC_Wall_Heat takes it: it enters the limiters of SST and
+  !> Wilcox2006 (moot while k = 0 at the wall), not SA and SSG/LRR. The wall values of the turbulence variables take the
+  !> metric of the cell Mc and the wall distance of the cell, as in every caller of RANS_Set_Wall_Values. BC_Wall_Heat
+  !> and Ghost_Wall pass the same Mw (from the record), so that they give the same Twall.
+  !> Twall is an estimate (first order; coarse meshes, coarse multigrid levels): when it lies outside the temperatures of
+  !> the tables at that pressure it is brought within them (Table_Bounds, as the ghost cells of Ghost_Wall), and
+  !> counted; on tables with no temperature common to the two rows that bracket p, the wall takes the state of the cell.
+  subroutine Wall_State_Heat ( p, h, u, Heat_Flux, Mc, Mw, normal, Fm, Dir, rans_cell, rho, yn, ks, temp, mil, kl, &
+                               Twall, h_wall, rho_wall )
+    use FLINT_Lib_Thermodynamic,   only: ph2vars, pT2h, rho_tab, T_tab, mi_tab2D, k_tab2D, hT_tab
     use ARES_Load_ThermoTransport, only: Table_Bounds
+    use ARES_Global_m,             only: model, nrans
+    use ARES_Config_Types_m,       only: obj_rans
+    use ARES_Lib_RANS,             only: RANS_Set_Wall_Values, Eddy_Viscosity
+    use ARES_Lib_Prt_Correction,   only: delta_Prt
     implicit none
-    real(R8), intent(in)  :: p, h, Heat_Flux, Mc(3,3), normal(3)
-    integer,  intent(in)  :: Dir
+    real(R8), intent(in)  :: p, h, u(3), Heat_Flux, normal(3)   ! u: velocity of the cell
+    real(R8), intent(in)  :: Mc(3,3), Mw(3,3)                   ! metric of the cell, of the wall gradient
+    integer,  intent(in)  :: Fm, Dir
+    real(R8), intent(in)  :: rans_cell(:)   ! turbulence variables of the cell (rho nu~, ...), read with model == 2 only
+    real(R8), intent(in)  :: rho, yn, ks    ! cell density, wall distance of the cell, roughness (0 on a smooth wall)
     real(R8), intent(out) :: temp, mil, kl, Twall, h_wall, rho_wall
     ! Local
-    real(R8) :: pw
+    real(R8) :: pw, metric, metric_c, kt, mit, cp, dPrt, rans_wall(nrans), gradu(3,3)
+    integer  :: modfm, modfm1, modfm2, modfm3
     logical  :: inside, ok
 
     temp = ph2vars ( p, h, T_tab )
     mil  = ph2vars ( p, h, mi_tab2D )
     kl   = ph2vars ( p, h, k_tab2D )
+    metric   = dot_product ( Mw(Dir,:), normal )   ! wall gradient: Twall
+    metric_c = dot_product ( Mc(Dir,:), normal )   ! wall values of the turbulence variables
+
+    ! Turbulent conductivity at the wall face (only where a heat flux crosses it: adiabatic, Twall = temp anyway)
+    kt = 0d0
+    if ( model == 2 .and. Heat_Flux /= 0d0 ) then
+      call RANS_Set_Wall_Values ( rans_cell=rans_cell(1:nrans), mil_wall=mil, rans_wall=rans_wall, metric=metric_c, &
+                                  dist=yn, ks=ks )
+      ! Velocity gradient at the wall face (index space along Dir, then physical): as BC_Wall_Heat
+      call Compute_Modfm ( Fm, modfm, modfm1, modfm2, modfm3 )
+      gradu = 0d0
+      gradu(:,Dir) = u * modfm3
+      gradu = matmul ( gradu, Mw )
+      call Eddy_Viscosity ( mut=mit, rans_variables=rans_wall, mul=mil, rho=rho, vel_gradient=gradu, &
+                            walldist=0d0, ks=ks )   ! wall face: y = 0 (yn stays the cell distance for Set_Wall_Values)
+      if ( mit /= 0d0 ) then
+        cp = ph2vars ( p, h, hT_tab )
+        dPrt = 0d0
+        if ( obj_rans%Prt_correction ) dPrt = delta_Prt ( mil, cp, kl, rans_wall(1), ks, 0d0 )
+        kt = mit * cp / ( obj_rans%Prt + dPrt )
+      end if
+    end if
+
     ! Heat_Flux is positive into the fluid on every face: the wall is hotter than the cell when it heats the fluid
-    Twall = temp + Heat_Flux / ( 2d0 * kl * dot_product ( Mc(Dir,:), normal ) )
+    Twall = temp + Heat_Flux / ( 2d0 * ( kl + kt ) * metric )
     pw = p
     call Table_Bounds ( pw, Twall, inside, ok )
     if ( .not. inside ) then

@@ -44,8 +44,8 @@ contains
     ! ARES_Lib_Stencil_Metrics), with no difference of their wall values along the wall: the velocity of a no-slip wall
     ! is uniform along it, while the turbulence values that vary along it (omega of the k-omega models, from the wall
     ! distance of the cell; nu~ on a rough wall) leave out their derivative along the wall (docs/theory/numerics.md); the
-    ! wall temperature is estimated with the metric of the cell, the wall values of the turbulence variables with the
-    ! wall distance of the cell
+    ! wall temperature is estimated with the same metric, the wall values of the turbulence variables with the metric
+    ! and the wall distance of the cell
     wst = .false.
     if ( present(rec) ) wst = rec % wstencil
     if ( wst ) M => rec % wM
@@ -62,10 +62,12 @@ contains
     pressure = Prim(np)
     rho  = ph2vars( pressure, Prim(nh), rho_tab ) 
 
-    ! Approximation: Twall==Tcell for the transport properties, mil(wall) = mil(cell). The wall temperature is estimated
-    ! with the laminar conductivity alone, also on a rough wall: exact when adiabatic, and the energy flux is Heat_Flux
-    ! regardless. The same wall state as the ghost cells of the wall (Ghost_Wall in ARES_Lib_Ghost)
-    call Wall_State_Heat ( pressure, Prim(nh), Heat_Flux, Mc, normal, Dir, temp, mil, kl, Twall, entalpy, rho_wall )
+    ! Approximation: Twall==Tcell for the transport properties, mil(wall) = mil(cell). The wall temperature is estimated,
+    ! with the metric of the wall gradient M (that of the wall face with diffusive-metric = stencil), with the laminar and turbulent conductivities at the wall face (kt nonzero with SA-rough only): exact when
+    ! adiabatic, and the energy flux is Heat_Flux regardless. The same wall state as the ghost cells of the wall
+    ! (Ghost_Wall in ARES_Lib_Ghost)
+    call Wall_State_Heat ( pressure, Prim(nh), Prim(nu:nw), Heat_Flux, Mc, M, normal, Fm, Dir, Prim(nt:nprim), rho, &
+                           Blk%yn(Im,Jm,Km), hs, temp, mil, kl, Twall, entalpy, rho_wall )
 
     ! Initialization
     Gradient = 0d0 ! concentration gradient is zero for one specie fluid

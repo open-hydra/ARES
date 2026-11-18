@@ -160,7 +160,7 @@ $$
 \tilde\nu_w = \tilde\nu_c\,\frac{d_0}{y_1 + d_0},\qquad \tilde\mu_w = \rho_w\,\tilde\nu_w ,
 $$
 
-with $y_1$ the wall distance of the cell centre and $\rho_w$ the density of the wall state of each wall (`302`: at $T_w$; `301`: at the wall temperature from the heat flux and the laminar conductivity; the coupled walls `103` and `104`: the state of the cell). The wall flux, the wall eddy viscosity and the ghost cells take the same $\tilde\nu_w$. A wall face with $k_s = 0$ takes the smooth value $\tilde\nu_w = 0$.
+with $y_1$ the wall distance of the cell centre and $\rho_w$ the density of the wall state of each wall (`302`: at $T_w$; `301`: at the wall temperature from the heat flux and the laminar and turbulent conductivities; the coupled walls `103` and `104`: the state of the cell). The wall flux, the wall eddy viscosity and the ghost cells take the same $\tilde\nu_w$. A wall face with $k_s = 0$ takes the smooth value $\tilde\nu_w = 0$.
 
 Note also that $f_{v2}$ is evaluated from the **molecular** ratio rather than the augmented $\chi$:
 
