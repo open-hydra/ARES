@@ -551,7 +551,14 @@ its eight nodes, to the wall surface, as the NASA Turbulence Modeling
 Resource requires [13]. It is not the distance to the nearest wall node
 or face centre, which differs from it wherever the grid lines are not normal
 to the wall; next to a convex corner or at the end of a wall it is the
-distance to the corner or the end.
+distance to the corner or the end. `wall-distance = face-centre` in
+`[ARES-Turbulence]` restores the distance of the earlier ARES, to the nearest
+wall-face centre (in 3-D, with no periodic image), and on a rough wall
+(`SA-rough`) the wall value of $\tilde\nu$ of that version, with the half height
+of the cell across the face, $1/(2\,\nabla\xi\cdot\mathbf{n})$, in place of $y_1$,
+only to compare with the runs of that version: on a mesh skewed by 45° next to the wall it is about 1.7 times
+the exact distance across the boundary layer and 3 times in the first cell, and
+a solution converged with it is not a steady state with the exact distance.
 
 The distance to the centre of the nearest wall face is wrong by a fixed
 fraction in the first cell of a skewed mesh. With the grid lines at an angle

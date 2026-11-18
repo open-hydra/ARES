@@ -780,6 +780,17 @@ contains
       return
     end if
 
+    ! wall-distance = face-centre: the distance of the earlier ARES, to the nearest wall-face centre (Legacy_Wall_Distance)
+    select case ( trim(obj_rans%wall_distance) )
+      case ('exact')
+      case ('face-centre')
+        call Legacy_Wall_Distance ( )
+        deallocate ( wall_corner )
+        return
+      case default
+        call mpi_stop_all ( 'Error: wall-distance must be "exact" or "face-centre".' )
+    end select
+
     ! Periodic images of the wall. Across a periodic connection (201), and across type
     ! 200 on faces 5-6 of a 3-D mesh without sectors, the mesh goes on translated; across
     ! the rotational periodicity of a 3-D sector (200 on faces 5-6) it goes on turned by
@@ -831,6 +842,56 @@ contains
     deallocate ( wall_corner, img_shift, img_angle, wall_fast, wall_fan_ok, wall_ghat, wall_radius )
 
     contains
+
+      !> wall-distance = face-centre: the wall distance of ARES before the exact distance (archive-ARES, Compute_Yn), kept to
+      !> compare with the runs of that version. yn is the distance from the cell centre, the mean of its eight nodes, to the
+      !> nearest centre of a wall face, the mean of its four corners, in 3-D (also on an axisymmetric wedge) and with no
+      !> periodic image of the wall; ks (SA-rough) is that of the same face. Among equidistant faces the first record wins,
+      !> as in the scan of that version (kdtree_nearest). It is larger than the exact distance where the cell centre does not
+      !> lie above the centre of a wall face: next to a wall of cells skewed by theta, by about 1/cos(theta) and more in the
+      !> first cells, whose centre lies beyond the edge of the face below it.
+      subroutine Legacy_Wall_Distance ( )
+        use ARES_Lib_KDTree, only: kdtree_nearest
+        implicit none
+        real(R8), allocatable :: cx(:), cy(:), cz(:)
+        real(R8)       :: c4(3,4), center(3), dist
+        integer        :: ll, nf, bb, i, j, k, iface
+        type(kdtree_t) :: ctree
+
+        allocate ( cx(nwall), cy(nwall), cz(nwall) )
+        nf = 0
+        do ll = 1, nbound
+          if ( .not. Is_Wall(bc(ll) % type) ) cycle
+          nf = nf + 1
+          c4 = Face_Corners ( blk(bc(ll)%b), bc(ll)%i, bc(ll)%j, bc(ll)%k, bc(ll)%f )
+          cx(nf) = 0.25d0 * ( c4(1,1) + c4(1,2) + c4(1,3) + c4(1,4) )
+          cy(nf) = 0.25d0 * ( c4(2,1) + c4(2,2) + c4(2,3) + c4(2,4) )
+          cz(nf) = 0.25d0 * ( c4(3,1) + c4(3,2) + c4(3,3) + c4(3,4) )
+        enddo
+        call kdtree_build ( ctree, cx, cy, cz, nwall )
+
+        do bb = 1, nb
+          if (.not. needs_yn(bb)) cycle
+          !$omp parallel do collapse(3) private ( i, j, k, center, dist, iface )
+          do k = 1, blk(bb) % dim(3)
+          do j = 1, blk(bb) % dim(2)
+          do i = 1, blk(bb) % dim(1)
+            center = 0.125d0 * ( blk(bb) % node(i  ,j  ,k  ) % c + blk(bb) % node(i  ,j-1,k  ) % c + &
+                                 blk(bb) % node(i  ,j-1,k-1) % c + blk(bb) % node(i  ,j  ,k-1) % c + &
+                                 blk(bb) % node(i-1,j  ,k  ) % c + blk(bb) % node(i-1,j-1,k  ) % c + &
+                                 blk(bb) % node(i-1,j-1,k-1) % c + blk(bb) % node(i-1,j  ,k-1) % c )
+            call kdtree_nearest ( ctree, center(1), center(2), center(3), dist, iface )
+            blk(bb) % yn(i,j,k) = dist
+            if ( obj_rans % rough ) blk(bb) % ks(i,j,k) = facekr(iface)
+          enddo; enddo; enddo
+          !$omp end parallel do
+        enddo
+
+        call kdtree_free ( ctree )
+        deallocate ( cx, cy, cz )
+
+      end subroutine Legacy_Wall_Distance
+
 
       !> Corners of face Fm of cell (Im, Jm, Km) of a block, in cyclic order around the face.
       function Face_Corners ( blk, Im, Jm, Km, Fm ) result ( corner )

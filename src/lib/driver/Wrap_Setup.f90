@@ -810,6 +810,8 @@ contains
         if (nRANS == 2 .and. trim(obj_rans%omega_wall_bc) == 'asymptotic') &
           write(*,'(A,T35,A,F0.2,A)') '   Omega wall condition', 'asymptotic (omega = ', obj_rans%omega_wall_coef, &
                                       ' nu/y^2, 6/beta of the model)'
+        if (trim(obj_rans%wall_distance) == 'face-centre') &
+          write(*,'(A,T35,A)') '   Wall distance', 'face-centre (nearest wall-face centre, legacy)'
         if (obj_rans%Prt_correction) &
           write(*,'(A,T35,A)') '   Prt correction', 'ON (rough-wall turbulent Prandtl)'
         if (obj_rans%sst_asymptotic) &
