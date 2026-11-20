@@ -39,7 +39,10 @@ contains
     else
       Ur = vel
     end if
-    
+    ! Ur <= c: with Uref > 0 above the local speed of sound, Ur > c would give alpha < 0 and acoustic eigenvalues
+    ! larger than the un-preconditioned ones; with Uref < 0 (Uref_ = sound) the bound is already met
+    Ur = min ( Ur, sound )
+
     end function comp_Ur
 
 
