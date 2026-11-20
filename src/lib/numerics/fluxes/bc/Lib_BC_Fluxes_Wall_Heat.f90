@@ -71,8 +71,9 @@ contains
 
     ! Initialization
     Gradient = 0d0 ! concentration gradient is zero for one specie fluid
-    Prim_Wall = Prim        ! -------------------------------- ! 
-    Prim_Wall(nh) = entalpy ! -------------------------------- ! 
+    Prim_Wall = Prim          ! -------------------------------- ! 
+    Prim_Wall(nu:nw) = 0.0d0  ! No slip condition
+    Prim_Wall(nh) = entalpy   ! -------------------------------- ! 
 
     ! Velocity gradient
     Gradient(nu:nw,Dir) = Prim(nu:nw) * modfm3

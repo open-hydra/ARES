@@ -41,13 +41,14 @@ contains
     type(ARES_domain_type), intent(inout), target :: domain
     ! Local
     integer :: b
-    logical :: SpalartShur, SAR, SAcomp, rough, point_implicit
+    logical :: SpalartShur, SAR, SAcomp, rough, point_implicit, SA_noGrad
     type(ARES_tensor_3D_type), pointer :: Mi(:,:,:), Mc(:,:,:), Mt(:,:,:)   ! cell metrics of the sources (Source_Metrics)
 
     SpalartShur = obj_rans%SpalartShur
     SAR         = obj_rans%SAR
     SAcomp      = obj_rans%SAcomp
     rough       = obj_rans%rough
+    SA_noGrad   = obj_rans%SA_noGrad
     ! The point-implicit factor serves steady runs only: in time-accurate runs (time-accurate, or a time-accurate
     ! HYDRA coupling) the source is explicit and its stiffness enters the time step (Compute_dt)
     point_implicit = obj_rans%point_implicit .and. &
@@ -74,7 +75,7 @@ contains
                            domain % blk(b) % dtlocal,      &
                            domain % blk(b) % dim,          &
                            SpalartShur, SAR, SAcomp, rough,&
-                           point_implicit                  )
+                           point_implicit, SA_noGrad       )
     
     end do
 
@@ -82,7 +83,7 @@ contains
 
 
   subroutine SA_Source_Blk ( Prim, Res, M, Mc, Mt, yn, ks, vol, gradv, rc1, rc2, dt, n, SpalartShur, SAR, SAcomp, rough, &
-                             point_implicit )
+                             point_implicit, SA_noGrad )
     use ARES_Base_Types_m
     use ARES_Global_m
     use FLINT_Lib_Thermodynamic
@@ -92,6 +93,7 @@ contains
     implicit none
     integer, intent(in) :: n(3)
     logical, intent(in) :: SpalartShur, SAR, SAcomp, rough, point_implicit
+    logical, intent(in) :: SA_noGrad ! drop the density-gradient diffusion term
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: Prim
     real(R8), dimension(nprim, 1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(inout) :: Res
     real(R8), dimension(1-gc:n(1)+gc, 1-gc:n(2)+gc, 1-gc:n(3)+gc), intent(in) :: yn
@@ -193,16 +195,19 @@ contains
 
       Gradnit2 = Sum ( Gradnit**2 )              ! ni-tilde gradient squared
 
-      ! Density gradient, same differences
-      Gradrho(:) = ( rho_n(2,:) - rho_n(1,:) ) * 0.5d0
-      Gradrho = Matmul ( Gradrho, Mc(i,j,k) % c )   ! behind a wall the density follows the temperature (Ghost_Wall)
-
       ! Diffusion terms outside the flux div((mu + rho nu~) grad nu~)/sigma: the cb2 term and, with variable density,
       ! -(nu + nu~) grad rho . grad nu~ / sigma, which makes this conservation form equal to the original equation
       ! (S. R. Allmaras, F. T. Johnson, P. R. Spalart, ICCFD7-1902, 2012, eq. 9). The source below is multiplied by
-      ! rho, so the second term enters divided by rho.
-      Diffusion = cb2 / sigma * Gradnit2 &
-                - ( nil + nitilde ) * Dot_Product ( Gradrho, Gradnit ) / ( sigma * rho ) ! questo è aggiunto rispetto a prima
+      ! rho, so the second term enters divided by rho. SA-noGrad = .true. keeps the cb2 term only (previous versions).
+      Diffusion = cb2 / sigma * Gradnit2
+
+      if ( .not. SA_noGrad ) then
+        ! Density gradient, same differences
+        Gradrho(:) = ( rho_n(2,:) - rho_n(1,:) ) * 0.5d0
+        Gradrho = Matmul ( Gradrho, Mc(i,j,k) % c )   ! behind a wall the density follows the temperature (Ghost_Wall)
+        Diffusion = Diffusion &
+                  - ( nil + nitilde ) * Dot_Product ( Gradrho, Gradnit ) / ( sigma * rho ) ! questo è aggiunto rispetto a prima
+      end if
 
       ! Destruction term computation
       r_Fun = nitilde / ( Stilde * cK**2 * ynlocal**2 )

@@ -340,14 +340,15 @@ contains
       else
         simulation%domain(1)%itermax = obj_sim_param%iter_threshold
       endif
-      ! IRS can only be switched on at setup, where its arrays are allocated: irs = true, or irs-beta > 0, added to
-      ! a run started without it is ignored (irs = false, irs-beta and irs-variables do act on a run started with IRS).
-      if ( ( obj_irs%enabled .or. obj_irs%beta > 0d0 ) .and. .not. obj_irs%at_setup ) then
+      ! irs-beta is taken at setup only, and with it the switch of IRS (on when irs-beta > 0): a new value at this
+      ! reading is ignored, with a warning, and IRS stays as the setup left it
+      if ( obj_irs%beta /= obj_irs%beta_setup ) then
         if ( mpi_is_root .and. .not. irs_runtime_warned ) write(*,'(A)') &
-          ' [WARNING] IRS cannot be switched on at runtime (start with irs-beta > 0): irs and irs-beta ignored'
+          ' [WARNING] irs-beta is read at setup only: the new value is ignored'
         irs_runtime_warned = .true.
-        obj_irs%enabled = .false.
+        obj_irs%beta = obj_irs%beta_setup
       endif
+      obj_irs%enabled = obj_irs%at_setup
     end if
     
 

@@ -62,8 +62,7 @@ Each probe named in `[ARES-Probes]` (`probe1 = <name>`) has a section `[<name>]`
 | cfl-rise-threshold | 0 | >= 0 | no | Iterations over which the time step is ramped up from 1/N of its value (0 = off) |
 | time-accurate | .false. | logical | **yes** | Time-accurate switch (false = march to steady state) |
 | integration-variables | prim | prim, prec | no | Update variables: primitive (prim) or preconditioned (prec, with riemann-solver = HLLC Prec) |
-| irs | .false. | logical | no | Implicit Residual Smoothing (steady runs only; switched on only at setup) |
-| irs-beta | 0.0 | >= 0 | no | IRS smoothing coefficient (> 0 also enables IRS; steady runs only; 0.5 damps the shortest wave the most) |
+| irs-beta | 0.0 | >= 0 | no | Implicit Residual Smoothing coefficient (> 0 switches IRS on; read at setup only; steady runs only; 0.5 damps the shortest wave the most) |
 | irs-variables | all | flow, all | no | Residuals smoothed by IRS: all (also the RANS equations; for Spalart-Allmaras: the k-omega models can diverge with all) or flow (mass, momentum, energy) |
 | preconditioning-Uref | -1.0 |  | no | Reference velocity for preconditioning (< 0 = local sound speed; it sets U_r only: alpha takes the speed of sound) |
 | preconditioning-eps-min | -1.0 |  | no | Minimum cut-off epsilon of the preconditioning parameter (< 0 = default 0.10) |

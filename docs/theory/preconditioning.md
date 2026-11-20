@@ -68,10 +68,11 @@ $$
 M_\text{loc} = \frac{\lVert\mathbf u\rVert}{U_\text{ref}} .
 $$
 
-The reference velocity is then the local velocity, bounded into the band $[\varepsilon\,U_\text{ref},\ U_\text{ref}]$:
+The reference velocity is then the local velocity, bounded into the band $[\varepsilon\,U_\text{ref},\ U_\text{ref}]$, and never above the local speed of sound $a$:
 
 $$
-U_r =
+U_r = \min\bigl(a,\ \tilde U_r\bigr),\qquad
+\tilde U_r =
 \begin{cases}
 \varepsilon\,U_\text{ref} & \lVert\mathbf u\rVert < \varepsilon\,U_\text{ref}\quad(\text{stagnation floor})\\[4pt]
 \lVert\mathbf u\rVert & \varepsilon\,U_\text{ref} \le \lVert\mathbf u\rVert \le U_\text{ref}\\[4pt]
@@ -79,11 +80,13 @@ U_\text{ref} & \lVert\mathbf u\rVert > U_\text{ref}\quad(\text{transonic/superso
 \end{cases}
 $$
 
+The bound $U_r \le a$ acts only with a positive `preconditioning-Uref` larger than the local $a$; with the default ($U_\text{ref} = a$) it is already met. Without it $U_r > a$ would give $\alpha < 0$ below and acoustic eigenvalues larger than the un-preconditioned ones.
+
 The three branches encode the standard cut-offs:
 
 - **Stagnation floor** — near stagnation points $\lVert\mathbf u\rVert\to0$, so $U_r$ is held at $\varepsilon\,U_\text{ref}$ to prevent the preconditioner from becoming singular (and to keep some dissipation for stability).
 - **Convective band** — in the bulk low-Mach flow, $U_r$ tracks the local velocity, exactly matching the dissipation to the convective scale.
-- **Transonic cap** — once $\lVert\mathbf u\rVert$ reaches $U_\text{ref}$ (the sound speed, by default), $U_r$ is capped so the scheme smoothly reverts to the standard, un-preconditioned compressible solver. **Preconditioning therefore turns itself off automatically where it is not needed.**
+- **Transonic cap** — once $\lVert\mathbf u\rVert$ reaches $U_\text{ref}$, $U_r$ is capped at $\min(U_\text{ref}, a)$. With the default $U_\text{ref} = a$ the scheme then reverts smoothly to the standard, un-preconditioned compressible solver, so **preconditioning turns itself off where it is not needed**; with a positive `preconditioning-Uref` below $a$ it stays active ($\alpha > 0$) wherever $U_r = U_\text{ref} < a$.
 
 ---
 

@@ -142,7 +142,8 @@ module ARES_Config_Types_m
     real(R8)  :: beta
     character(len=llen) :: variables           ! all (also the RANS equations) or flow (mass, momentum, energy)
     ! Useful variables
-    logical   :: enabled
+    logical   :: enabled = .false.             ! IRS on: irs-beta > 0 at set-up, for the whole run
+    real(R8)  :: beta_setup = 0.0_R8           ! irs-beta of the set-up: the value of the whole run (not read again)
     logical   :: at_setup = .false.            ! IRS on at setup: only then are its arrays allocated
   end type irs_t
   !! ------------------------------------------------------
@@ -270,6 +271,7 @@ module ARES_Config_Types_m
     logical :: QCR2000, blowing_corr
     logical :: k_energy_coupling = .false. ! k in the total energy (k-energy-coupling, two-equation models)
     logical :: point_implicit  ! Point-implicit factor on the increment of the turbulence equations (steady runs)
+    logical :: SA_noGrad = .false. ! SA without the term -(nu + nu~) grad rho . grad nu~ / sigma (SA-noGrad)
     character(len=llen) :: omega_wall_bc  ! omega wall condition: 'practical' or 'asymptotic'
     character(len=llen) :: wall_distance = 'exact' ! wall distance of the turbulence models: 'exact' or 'face-centre'
     character(len=llen) :: sst_production ! SST production: 'incompressible' or 'compressible'

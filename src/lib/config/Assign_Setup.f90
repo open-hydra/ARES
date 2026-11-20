@@ -84,11 +84,9 @@ contains
     else
       obj_time_scheme%n_rk = 1
     end if
-    if (obj_irs%beta>0d0) obj_irs%enabled = .true.
-    if (obj_irs%enabled .and. obj_irs%beta<=0d0) then
-      obj_irs%warning_message = '[WARNING] IRS enabled but irs-beta is not set (or <= 0). IRS will have no effect.'
-      obj_irs%enabled = .false.
-    end if
+    ! IRS is on when irs-beta > 0; irs-beta is taken here only, for the whole run
+    obj_irs%beta_setup = obj_irs%beta
+    obj_irs%enabled = obj_irs%beta > 0d0
     obj_irs%at_setup = obj_irs%enabled
     call Assign_Integration_Variables()
 
