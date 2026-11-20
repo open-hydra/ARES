@@ -54,7 +54,7 @@ Note that it scales $\Delta t$ itself, so it ramps the convective **and** viscou
 
 ## Buying a larger CFL: implicit residual smoothing
 
-`irs = .true.` with `irs-beta = β` smooths the residual before the update,
+`irs-beta = β > 0` smooths the residual before the update,
 
 $$
 R^\ast = R + \beta\,\nabla^2 R^\ast
@@ -117,7 +117,7 @@ Every `ini-diter` iterations the solver re-reads `input.ini` and re-validates th
 - `sol-diter`, `res-diter`, `shell-diter`, `sol-overwrite` — start dumping snapshots the moment a run starts misbehaving
 
 !!! warning "What hot-reload does *not* change"
-    Keys consumed **once at setup** are copied into the running state and will not change mid-run even though the registry value updates: anything that binds the solver's structure — turbulence model, mesh, multigrid level count, reconstruction, Riemann solver —, `preconditioning-Uref` and `preconditioning-eps-min`, and the switch-on of IRS, whose arrays are allocated at set-up (`irs` or `irs-beta > 0` added to a run started without IRS is ignored, with a warning). `iter-threshold` and `level<n>-iter` do take effect at the reading: they set the iteration limit of each level again. `sol-format`, `time-accurate`, `Prt-correction`, `point-implicit` and `sst-asymptotic` are read at run time too, so a change takes effect (without the checks of the set-up): they are not meant to change during a run. A key removed or commented out keeps the value it had: give it its off value to switch it off ([Input File](input.md)).
+    Keys consumed **once at setup** are copied into the running state and will not change mid-run even though the registry value updates: anything that binds the solver's structure — turbulence model, mesh, multigrid level count, reconstruction, Riemann solver —, `preconditioning-Uref` and `preconditioning-eps-min`, and `irs-beta`, with it the switch of IRS, whose arrays are allocated at set-up (a new value during the run is ignored, with a warning). `iter-threshold` and `level<n>-iter` do take effect at the reading: they set the iteration limit of each level again. `sol-format`, `time-accurate`, `Prt-correction`, `point-implicit` and `sst-asymptotic` are read at run time too, so a change takes effect (without the checks of the set-up): they are not meant to change during a run. A key removed or commented out keeps the value it had: give it its off value to switch it off ([Input File](input.md)).
 
 Set `ini-diter` small enough to be responsive and large enough not to hammer the filesystem; the default is 10000. The file is re-validated on every reload: with `ini-error = warn`, the default, a reading with an error (a value out of its rule, a value that does not read as its type) is not taken, the run keeps the values it held and says so; with `ini-error = stop` the run stops.
 
@@ -131,5 +131,5 @@ Set `ini-diter` small enough to be responsive and large enough not to hammer the
 | Step pinned however high `cfl` goes | the VNN limit is binding — `vnn`, or the near-wall spacing |
 | Stalls at low Mach, residual flat | `integration-variables = prec` + `HLLC Prec` |
 | Residual oscillates without dropping | more dissipative `flux-limiter`, or `first-order` to re-establish |
-| Stable but too slow | `irs` + higher `cfl`, or multigrid levels |
+| Stable but too slow | `irs-beta > 0` + higher `cfl`, or multigrid levels |
 | Diverged and no usable output | `sol-overwrite = false`, rerun |

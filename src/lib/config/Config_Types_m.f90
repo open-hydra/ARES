@@ -142,7 +142,8 @@ module ARES_Config_Types_m
     real(R8)  :: beta
     character(len=llen) :: variables           ! all (also the RANS equations) or flow (mass, momentum, energy)
     ! Useful variables
-    logical   :: enabled
+    logical   :: enabled = .false.             ! IRS on: irs-beta > 0 at set-up, for the whole run
+    real(R8)  :: beta_setup = 0.0_R8           ! irs-beta of the set-up: the value of the whole run (not read again)
     logical   :: at_setup = .false.            ! IRS on at setup: only then are its arrays allocated
   end type irs_t
   !! ------------------------------------------------------

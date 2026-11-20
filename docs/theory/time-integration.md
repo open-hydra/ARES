@@ -301,18 +301,18 @@ $$
 \mathbf R^\ast_i = \frac{\mathbf R_i + \varepsilon(\mathbf R^\ast_{i-1} + \mathbf R^\ast_{i+1})}{1 + 2\varepsilon},
 $$
 
-approximated with two Jacobi sweeps from $\mathbf R^\ast = \mathbf R$. On the shortest wave ($\mathbf R_{i\pm1} = -\mathbf R_i$) the two sweeps give the gain $g = (1 + 4\varepsilon^2)/(1 + 2\varepsilon)^2$, smallest, $1/2$, at $\varepsilon = 1/2$: `irs-beta = 0.5` damps that wave the most, and a larger value damps it less. Enable it with `irs = .true.`.
+approximated with two Jacobi sweeps from $\mathbf R^\ast = \mathbf R$. On the shortest wave ($\mathbf R_{i\pm1} = -\mathbf R_i$) the two sweeps give the gain $g = (1 + 4\varepsilon^2)/(1 + 2\varepsilon)^2$, smallest, $1/2$, at $\varepsilon = 1/2$: `irs-beta = 0.5` damps that wave the most, and a larger value damps it less. `irs-beta > 0` switches it on.
 
 ### Steady runs only
 
 The smoothed residual is not the residual of the space discretization, so a run with IRS does not follow the
 transient of the discretized equations: IRS accelerates the convergence of steady (pseudo-time) runs. It is switched
-on by `irs = true` or by `irs-beta > 0` alone, and ARES refuses it at set-up when `time-accurate = true`. The change
+on by `irs-beta > 0` (there is no other switch), and ARES refuses it at set-up when `time-accurate = true`. The change
 does not vanish as $\Delta t \to 0$: the smoothing turns the semi-discrete system into
 $(I - \varepsilon\,\delta^2)\,d\mathbf{U}/dt = -\mathbf{R}/V$ in each direction, which slows a Fourier mode of
 wavenumber $k$ by $1 + 4\varepsilon\sin^2(k\Delta x/2)$: a change of order $\varepsilon (k\Delta x)^2$ for resolved
-waves and of order one at discontinuities. IRS can only be switched on at set-up, where its work arrays are allocated:
-a reading of `input.ini` during the run that turns it on is ignored, with a warning.
+waves and of order one at discontinuities. IRS is switched on or off at set-up only, where its work arrays are allocated:
+`irs-beta` is not read again during the run (a new value is ignored, with a warning).
 
 ### Smoothed residuals
 
@@ -324,8 +324,8 @@ become the unstable part. `all` is meant for Spalart–Allmaras: the k-omega mod
 can diverge with it, and with them `flow` is the choice. Smoothing changes the
 path to the steady state, not the
 steady state itself (a zero residual stays zero). On a run started with IRS,
-`irs-beta` and `irs-variables` can change at runtime, and `irs = false` switches it
-off.
+`irs-variables` can change at runtime; `irs-beta` is read at set-up only, so IRS stays
+as the set-up left it for the whole run (a new value is ignored, with a warning).
 
 ---
 

@@ -47,10 +47,9 @@ contains
     obj_irs%description     = 'none'
     obj_irs%warning_message = 'none'
     obj_irs%error_message   = 'none'
-    call reg%add( trim(section), 'irs', obj_irs%enabled, '.false.', &
-          'Implicit Residual Smoothing (steady runs only; switched on only at setup)', 'logical', .false. )
     call reg%add( trim(section), 'irs-beta', obj_irs%beta, '0.0', &
-          'IRS smoothing coefficient (> 0 also enables IRS; steady runs only; 0.5 damps the shortest wave the most)', &
+          'Implicit Residual Smoothing coefficient (> 0 switches IRS on; read at setup only; steady runs only; '// &
+          '0.5 damps the shortest wave the most)', &
           '>= 0', .false. )
     call reg%add( trim(section), 'irs-variables', obj_irs%variables, 'all', &
           'Residuals smoothed by IRS: all (also the RANS equations; for Spalart-Allmaras: the k-omega models can '// &
