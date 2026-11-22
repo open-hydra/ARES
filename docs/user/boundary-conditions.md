@@ -78,6 +78,7 @@ The `type` key of a boundary section selects one of the following. They fall int
 | `wall` | wall | Viscous no-slip wall (or slip wall if no data) | `q` / `T`, `ks`, `eps` |
 | `inlet` | flow | Inflow boundary | see [Inlets](#inlets) |
 | `outlet` | flow | Outflow boundary | `p`, `rf` |
+| `manifold` | flow | Faces joined by a lumped plenum (a turn-around, a header) | see [Manifold](#manifold) |
 | `null` | — | No boundary condition (placeholder) | — |
 
 ### Geometric and connectivity boundaries
@@ -188,6 +189,52 @@ p    = 46.11e5       ; back (ambient) pressure [Pa]
 
 An inlet (`404`, `405`) takes its face as a slip (symmetry) wall, for that evaluation, when the gas of its boundary cell is not moving into the domain — a cell at rest included: a mass-flux inlet takes nothing from the velocity of the cell, so a case started at rest, with the outlet at the initial pressure, never starts moving. An outlet (`406`) does the same when the gas of its cell moves into the domain. At the end of a run in which it happened one line gives the number of flux evaluations of each kind; start such a case with a velocity into the domain at the inlet. An outlet with `p = 0` reverts to extrapolation.
 
+### Manifold
+
+`type = manifold` joins faces through a lumped plenum: the gas that leaves the domain through the `outlet` faces of the
+section comes back through its `inlet` faces, any number of each, on any blocks and ranks, matching or not cell by cell
+(the turn-around between the two channels of a counter-flow element, a header feeding several channels). One section
+per manifold; the roles are fixed by the section, not by the direction of the flow:
+
+```ini
+[turn]
+type   = manifold
+outlet = 1:2        ; block:face where the gas leaves the domain (comma-separated list)
+inlet  = 2:2        ; block:face where it comes back
+K      = 1.0        ; loss on the dynamic pressure of the outlet faces (default 0)
+```
+
+Once per stage ARES sums, over the cells of the outlet faces whose gas leaves, the mass flow $\dot m = \sum \rho\,
+u_n\,A$ and, weighted by it, the total enthalpy $h_0 = h + v^2/2$, the dynamic pressure $q = \rho v^2/2$ and the
+turbulence variables; over the cells of the inlet faces, the area $A_\text{in}$, the static pressure and their own dynamic
+pressure. Then
+
+- the inlet faces take the mass flux $g = \texttt{mdot-ratio}\;\dot m / A_\text{in}$, uniform, along the face normal,
+  the total enthalpy $h_{0,\text{out}} - \texttt{dh0}$ and the mean turbulence; the static state of the face follows
+  from the pressure of its cell and $h = h_0 - (g/\rho(p,h))^2/2$ through the fluid tables;
+- the outlet faces take the static pressure $p_{0,\text{out}} - q_\text{out}$ of the total pressure
+  $p_{0,\text{out}} = p_{0,\text{in}} / \texttt{p0-ratio} + K\,q_\text{out}$, with $p_{0,\text{in}}$ the mean static
+  pressure of the inlet cells plus their mass-weighted dynamic pressure, through the outlet `406`.
+
+With the defaults (`K` = 0, `mdot-ratio` = 1, `p0-ratio` = 1, `dh0` = 0) the plenum is loss-free and perfectly mixed:
+mass, total enthalpy and total pressure cross it exactly. `K` = 1 loses the dynamic pressure of the gas that leaves, as
+a jet into a plenum at rest does (the static pressure is then about the same on the two sides). The three ratios lump
+the topology of a flow system on one link (one element simulated out of N, a bleed, the total-pressure ratio and the
+specific work `dh0` [J/kg] of a turbine): with `mdot-ratio` ≠ 1 or `dh0` ≠ 0 the link is a mass or energy sink by
+construction. `rf` (default 1) acts on the outlet faces: their static pressure is `rf` times that of the manifold plus
+(1 − `rf`) times that of their own cell; the inlet faces take the values of the manifold as they are.
+
+An outlet face whose cell has the gas moving inward is a slip wall for that evaluation, as on a `406`. While nothing
+leaves through the outlet faces (a case started at rest), the inlet faces are slip walls and the outlet faces take the
+mean static pressure of the inlet side. Unlike the inlet `404`, an inlet face of a manifold takes its mass flux whatever
+the direction of the gas of its cell. The log has one line per manifold and grid level at the shell interval
+(`shell-diter`): `manifold <id>, grid level <l>, iteration <n>: mdot out/in, h0 out/in, p0 out/in, taken out` (the
+mass flows, total enthalpies and total pressures of the two sides, and the power $\dot m\,\texttt{dh0}$). The same
+rule holds on every grid level of a multigrid run, each level gathering its own faces. The record is refused at set-up
+when `gid` < 1, `role` is not 1 or 2, `K` < 0, `rel_fac` is outside (0, 1], a ratio is not positive, when the records
+of a group do not carry the same parameters, or when a group has no outlet or no inlet face. The tests `Manifold` and
+`MPIManifold` check it ([Testing](../development/testing.md#ci-tests)).
+
 ---
 
 ## Splitting a face into patches
@@ -280,6 +327,7 @@ The codes ARES reads (`IO_BC`, `Mod_BC_Fluxes`), with the `[BCB]` type that prod
 | `404` | `inlet` (`g`,`T`) | Subsonic inlet: mass flux + static temperature | `T, g, α, β, rel[, turb]` |
 | `405` | `inlet` (`mach`,…) | Supersonic inlet: Mach + static `T` + static `p` | `M, T, p, α, β, rel[, turb]` |
 | `406` | `outlet` (`p`)  | Subsonic outlet: back pressure `pAmb` | `p, rel` |
+| `501` | `manifold`      | Face of a lumped plenum: role 1 the gas leaves the domain, 2 it comes back ([Manifold](#manifold)) | `gid, role, K, rel, mdot_ratio, p0_ratio, dh0` |
 
 where `α`, `β` are the inflow angles (`normal` = face-normal; `404`: $V_y/V_x = \tan\alpha$, $V_z/V_x = \tan\beta$; `405`: azimuth and elevation, see [Inlets](#inlets)) and `rel` a relaxation factor: required on the three lines, it is used by the supersonic inlet `405` only, which blends its Mach number and pressure with those of the cell, $\text{rel}\,M_\text{bc} + (1-\text{rel})\,M_\text{cell}$. A type that is not in this table stops the run at set-up with the line of `bc.txt`; so do a block or a face out of range, a cell outside its block or not next to the face it names, two records for the same cell and face, and a temperature or a pressure of a data line (`302` `T`; `404` `T`; `405` `p` and `T`; `406` `p` when not zero) outside the range of the fluid tables. The mass flux `g` of the inlet `404` is positive into the domain on every face: zero, or a negative value on a face 1, 3 or 5, stops the run at set-up (an inlet only lets gas in; give a face where the gas leaves an outlet type, `406` or `400`); on a face 2, 4 or 6 a negative value is taken as its magnitude. The supersonic inlet `405` with `α` and `β` both `normal` lets the gas in along the normal of the face into the domain, on every face; with one angle `normal`, that angle is the one of that normal (`α` its azimuth, `β` its elevation). On an inlet, `turb` is the trailing group of as many values as the model transports (1, 2 or 7), read by position as the **specific** quantities `nuTilde`, `k`, `omega`, `Rij` — see [Inlets](#inlets) above. An inlet or an outlet whose cell has the gas moving the wrong way, or at rest on an inlet, acts as a slip wall for that evaluation, and the end of the run counts the evaluations (see [Outlets](#outlets)).
 

@@ -15,20 +15,24 @@ contains
     !---------------------------------------------------------------------------
     use ARES_Advanced_Types_m
     use ARES_Config_Types_m, only: obj_rans, obj_sim_param
+    use ARES_Lib_BC_Fluxes_Manifold, only: Manifold_Gather
     implicit none
     type(ARES_domain_type), intent(inout), target :: domain
 
     ! Connection faces (101, 201): one flux per face, for the two cells
     call Connection_Fluxes ( domain, obj_sim_param%Sc, obj_rans%Sct, obj_rans%Prt, obj_rans%Prt_correction )
 
+    ! Manifolds (501): the state the faces of each group take at this stage, from the cells of its faces on every rank
+    call Manifold_Gather ( domain )
+
     call BC_Fluxes_core ( domain%bc, domain%blk, domain%local_bf_first, domain%local_bf_count, &
                           domain%local_bf_idx, domain%nb, size(domain%bc), size(domain%blk), &
-                          size(domain%local_bf_idx) )
+                          size(domain%local_bf_idx), domain%man )
 
   end subroutine BC_Fluxes
 
 
-  subroutine BC_Fluxes_core ( bc, blk, bf_first, bf_count, bf_idx, nb, nbc, nblk, nidx )
+  subroutine BC_Fluxes_core ( bc, blk, bf_first, bf_count, bf_idx, nb, nbc, nblk, nidx, man )
     use ARES_Advanced_Types_m
     use ARES_Config_Types_m, only: obj_rans, obj_sim_param, obj_space_scheme, obj_riemann
     use ARES_Global_m, only: model, np, nrans, nprim
@@ -41,16 +45,18 @@ contains
     use ARES_Lib_BC_Fluxes_Extrapolation
     use ARES_Lib_BC_Fluxes_Wall_Heat
     use ARES_Lib_BC_Fluxes_Wall_Temperature
+    use ARES_Lib_BC_Fluxes_Manifold, only: MANIFOLD_OUTLET
     implicit none
     integer,               intent(in)    :: nb, nbc, nblk, nidx
     type(ARES_bc_type),    intent(inout) :: bc(nbc)
     type(ARES_block_type), intent(inout) :: blk(nblk)
     integer,               intent(in)    :: bf_first(nb,6), bf_count(nb,6), bf_idx(nidx)
+    type(ARES_manifold_type), intent(in) :: man(:)                  ! the manifolds of the level (none: size 0, Manifold_Setup)
     ! Local
     integer  :: f, lower, upper, i, ii, b
     integer  :: error
-    integer  :: Bm, Im, Jm, Km, Fm, Bs, Fs
-    real(R8) :: T0, g, pstat
+    integer  :: Bm, Im, Jm, Km, Fm, Bs, Fs, mman
+    real(R8) :: T0, g, pstat, mdot_face, p_face
     real(R8) :: r_fc(3)
     real(R8) :: Sc, Sct, Prt
     logical  :: Prt_corr
@@ -74,7 +80,8 @@ contains
         lower = bf_first(b,f)
         upper = lower + bf_count(b,f) - 1
 
-        !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, T0, g, pstat, r_fc, dR)
+        !$omp do schedule (dynamic, 64) private(ii, i, Bm, Im, Jm, Km, Fm, error, Bs, Fs, T0, g, pstat, r_fc, dR, &
+        !$omp   mman, mdot_face, p_face)
         do ii = lower, upper
           i  = bf_idx(ii)
           Bm = bc(i) % b
@@ -159,6 +166,24 @@ contains
                 call Count_Closed ( .false. )
                 call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
               endif
+
+            case (501) ! manifold: the faces of a group joined by a lumped plenum, in the state of the group (Manifold_Gather)
+              mman = bc(i) % man_idx
+              if ( bc(i) % man_role == MANIFOLD_OUTLET ) then
+                ! The gas leaves at the static pressure that the inlet side gives the group, blended with the cell's by
+                ! rel_fac (406; a cell whose gas moves inward is a slip wall for the stage)
+                p_face = bc(i) % rel_fac * man(mman) % p_out + (1d0 - bc(i) % rel_fac) * blk(Bm) % P(np,Im,Jm,Km)
+                call BC_Outflow ( Bm, Im, Jm, Km, Fm, blk(Bm), p_face, bc(i) % rel_fac, mdot_face, error )
+                if (error == 1) call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
+              else if ( man(mman) % active ) then
+                ! The gas comes back with the mass flux, total enthalpy and turbulence of the group, along the face
+                ! normal (BC_Inlet_MassFlux_H0)
+                call BC_Inlet_MassFlux_H0 ( Bm, Im, Jm, Km, Fm, blk(Bm), man(mman) % h0_in, man(mman) % g_in, &
+                                            man(mman) % ci_in )
+              else
+                ! Nothing leaves through the outlet faces of the group yet: a slip wall
+                call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
+              end if
 
           end select
 

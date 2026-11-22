@@ -72,7 +72,32 @@ module ARES_Advanced_Types_m
     real(R8)                  :: mdot                              ! BC 4 (inflow/outflow) specifications
     real(R8)                  :: rel_fac                           ! BC 4 (inflow/outflow) specifications
     real(R8), allocatable     :: ci(:)                             ! BC 4 (inflow/outflow) specifications
+    ! BC 501 (manifold): the group of the record, its role (1 outlet, 2 inlet), its index in domain % man, and the
+    ! parameters of the group (rel_fac above): the loss K on the dynamic pressure of the outlet faces, the mass flow,
+    ! total pressure and total enthalpy of the inlet faces against those of the outlet faces (Lib_BC_Fluxes_Manifold)
+    integer                   :: man_gid = 0, man_role = 0, man_idx = 0
+    real(R8)                  :: man_K = 0.0_R8, man_mratio = 1.0_R8, man_p0ratio = 1.0_R8, man_dh0 = 0.0_R8
   end type ARES_bc_type
+
+
+  !> A manifold (BC 501): one group of faces joined by a lumped plenum, built from the records of a grid level
+  !> (Manifold_Setup) and given the state its faces take at each stage (Manifold_Gather, Lib_BC_Fluxes_Manifold)
+  type :: ARES_manifold_type
+    integer  :: gid = 0                                  ! the group id of the records
+    integer  :: n_out = 0, n_in = 0                      ! records of each role in the whole domain
+    integer  :: first = 0                                ! the first record of the group (its parameters)
+    real(R8) :: K = 0.0_R8, rf = 1.0_R8                  ! loss on the dynamic pressure, relaxation factor: outlet faces
+    real(R8) :: mratio = 1.0_R8, p0ratio = 1.0_R8        ! mass flow and total pressure of the inlet faces over the outlet's
+    real(R8) :: dh0 = 0.0_R8                             ! total enthalpy taken out between them [J/kg]
+    logical  :: active = .false.                         ! gas leaves through the outlet faces at this stage
+    real(R8) :: g_in = 0.0_R8, h0_in = 0.0_R8            ! mass flux and total enthalpy the inlet faces take
+    real(R8) :: p_out = 0.0_R8                           ! static pressure the outlet faces take
+    real(R8), allocatable :: ci_in(:)                    ! turbulence (1:nrans, specific) of the inlet faces
+    real(R8) :: mdot_out = 0.0_R8, mdot_in = 0.0_R8      ! the line of the log: mass flow, total enthalpy and total pressure
+    real(R8) :: h0_out = 0.0_R8                          !   of the two sides (h0_in above)
+    real(R8) :: p0_out = 0.0_R8, p0_in = 0.0_R8
+    integer  :: last_line = -1                           ! the iteration of the last line written
+  end type ARES_manifold_type
 
 
   ! COMPOUND TYPES
@@ -95,6 +120,9 @@ module ARES_Advanced_Types_m
     integer, dimension(:,:), allocatable             :: local_bf_count   ! 0 on blocks of other ranks
     integer, dimension(:), allocatable               :: local_bf_idx
     integer                                          :: mg_level = 1     ! Multigrid level of this domain (selects exchange schedules)
+    ! The manifolds (501) of this grid level (Manifold_Setup)
+    integer                                          :: nman = 0
+    type(ARES_manifold_type), dimension(:), allocatable :: man
   end type ARES_domain_type
 
 

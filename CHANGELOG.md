@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - CI tests on every pull request (`ctest -L ci`): CO2 shock tube, low-Mach cylinder, smoke runs of every turbulence model.
+- Manifold boundary `501`: outlet and inlet faces of a group joined by a lumped plenum, on any ranks; tests
+  `Manifold`, `MPIManifold`. See [Boundary Conditions](docs/user/boundary-conditions.md#manifold).
 
 ### Changed
 

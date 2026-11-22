@@ -25,7 +25,7 @@
 !> wall value and x1 + s (x1 - x2) for the extrapolated ones, behind a 400 face x1 + s (x1 - x2) (Ghost_Wall; s = l0/l1,
 !> x1 with one cell across the face), 3 x1 - 3 x2 + x3 behind the faces whose ghost value is 3 u1 - 3 u2 + u3
 !> (Ghost_Extrapolate; 2 x1 - x2, or x1, in a block with two cells, or one, across the face), the cell itself behind the
-!> zero-gradient faces (0, 404-406), its mirror image across a symmetry face (300; the cell itself on a face of zero area,
+!> zero-gradient faces (0, 404-406, 501), its mirror image across a symmetry face (300; the cell itself on a face of zero area,
 !> an axis, where the ghost value is a copy of the cell), and on the k faces of a wedge or of a 3-D sector (200) the source
 !> of the ghost cell, the cell next to the opposite k face of the block (on a wedge the cell itself), rotated by the angle
 !> of the wedge or sector, or, on a translated sector, translated from its outer face to this face as across a periodic
@@ -246,7 +246,7 @@ contains
 
     select case ( domain % bc(r) % type )
 
-      case (404:406)                            ! zero gradient: the ghost value is the cell value
+      case (404:406, 501)                       ! zero gradient: the ghost value is the cell value
         xc(b) % x(:,Ig,Jg,Kg) = x1
 
       case (300)                                ! symmetry: mirror image across the face

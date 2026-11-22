@@ -98,7 +98,7 @@ contains
           call Ghost_Axysimmetry ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(300)
           call Ghost_Symmetry ( Im, Jm, Km, Fm, domain % blk(Bm) )
-        case(404:406) ! inlet/outlet: zero-gradient
+        case(404:406, 501) ! inlet/outlet, manifold: zero-gradient
           call Ghost_ZG_Extrapolate ( Im, Jm, Km, Fm, domain % blk(Bm) )
         case(103,104,301,302,400) ! walls (103, 104: coupled to another solver) and extrapolation faces
           call Ghost_Wall ( domain % bc(i), domain % blk(Bm) )

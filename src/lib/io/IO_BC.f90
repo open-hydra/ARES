@@ -123,7 +123,7 @@ contains
     do while (ios==0)
       read( unitfile,*,iostat=ios ) di(1), di(2), di(3), di(4), di(5), ti
       select case(ti)
-      case(101, 103, 201, 301:302, 404:406)
+      case(101, 103, 201, 301:302, 404:406, 501)
         read( unitfile,*,iostat=ios )
       case(102, 104) ! chimera, coupled chimera: donor counts of the two ghost rows, then one line per donor
         read( unitfile,*,iostat=ios ) ci, cii
@@ -137,7 +137,7 @@ contains
         if ( ios == 0 ) then
           obj_io_bc%error_message = '[ERROR] Boundary file: record '//trim(str(.true.,n_proof+2))//' has type '// &
             trim(str(.true.,ti))//', which is not a boundary type of ARES (101 102 103 104 200 201 300 301 302 400 '// &
-            '404 405 406)'
+            '404 405 406 501)'
           close(unitfile)
           ios = 1
           return
@@ -448,11 +448,34 @@ contains
             call Need_In_Tables ( i, bc(i)%type, nline, bc(i)%pamb, 'p_back', plo, phi, 'pressures' )
 
         ! ─────────────────────────────────────────────────────────────────────
+        ! Manifold (501): the faces of a group joined by a lumped plenum (Lib_BC_Fluxes_Manifold)
+        ! Second line: gid, role, K, rel_fac, mdot_ratio, p0_ratio, dh0, as the boundary-condition builder of ATLAS writes
+        !   them: the group id and the role of the face (1 outlet: the gas leaves the domain there; 2 inlet: it comes
+        !   back), two integers; the loss K on the dynamic pressure of the outlet faces; the relaxation factor of the
+        !   faces; the mass flow, total pressure and total enthalpy of the inlet faces against those of the outlet faces.
+        !   The groups (the same parameters on every record, an outlet and an inlet face in each) are checked once every
+        !   record of the level is read (Manifold_Setup).
+        case(501)
+          if (level == 1) nio = nio + 1
+          bc(i)%man_gid = IEMPTY ; bc(i)%man_role = IEMPTY
+          bc(i)%man_K = EMPTY ; bc(i)%rel_fac = EMPTY ; bc(i)%man_mratio = EMPTY ; bc(i)%man_p0ratio = EMPTY
+          bc(i)%man_dh0 = EMPTY
+          call Next_Line ( unitfile, pline, ios, nline )
+          if ( ios == 0 ) read( pline,*,iostat=ios ) bc(i)%man_gid, bc(i)%man_role, bc(i)%man_K, bc(i)%rel_fac, &
+                                                       bc(i)%man_mratio, bc(i)%man_p0ratio, bc(i)%man_dh0
+          if ( ios == 0 ) call Need_I ( i, bc(i)%type, nline, [ bc(i)%man_gid, bc(i)%man_role ], 'gid role' )
+          if ( ios == 0 ) call Need_Finite ( i, bc(i)%type, nline, [ bc(i)%man_K, bc(i)%rel_fac, bc(i)%man_mratio, &
+                                             bc(i)%man_p0ratio, bc(i)%man_dh0 ], 'K rel_fac mdot_ratio p0_ratio dh0' )
+          if ( ios == 0 ) call Need_R ( i, bc(i)%type, nline, [ bc(i)%man_K, bc(i)%rel_fac, bc(i)%man_mratio, &
+                                        bc(i)%man_p0ratio, bc(i)%man_dh0 ], 'K rel_fac mdot_ratio p0_ratio dh0' )
+          if ( ios == 0 ) call Need_Manifold ( i, nline, bc(i) )
+
+        ! ─────────────────────────────────────────────────────────────────────
         ! A type ARES does not have: without a property line it would run with no flux on the face (Check_BC stops the
         ! types with one first, on the count of the records)
         case default
           write(msg,'(3A,I0,A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', i, '): type ', &
-            bc(i)%type, ' is not a boundary type of ARES (101 102 103 104 200 201 300 301 302 400 404 405 406)'
+            bc(i)%type, ' is not a boundary type of ARES (101 102 103 104 200 201 300 301 302 400 404 405 406 501)'
           call mpi_stop_all ( trim(msg) )
 
       end select
@@ -971,6 +994,46 @@ contains
     call Need_R ( n, bc%type, nline, bc%ci(1:nrans), 'turb' )
 
   end subroutine Need_Inlet
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_Manifold: the values of a manifold record (501), record n at line nline: the group id from 1, the role 1 (outlet)
+  !   or 2 (inlet), K >= 0, 0 < rel_fac <= 1, mdot_ratio > 0 and p0_ratio > 0 (dh0 takes any value). The groups
+  !   themselves -- the same parameters on every record, an outlet and an inlet face in each -- are checked once every
+  !   record of the level is read (Manifold_Setup, Lib_BC_Fluxes_Manifold).
+  subroutine Need_Manifold ( n, nline, bc )
+    use ARES_Advanced_Types_m, only: ARES_bc_type
+    use ARES_Mod_MPI,          only: mpi_stop_all
+    implicit none
+    integer,            intent(in) :: n, nline
+    type(ARES_bc_type), intent(in) :: bc
+    ! Local
+    character(len=400) :: msg
+    character(len=120) :: head
+
+    write(head,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type 501):'
+    if ( bc%man_gid < 1 ) then
+      write(msg,'(A,I0,A)') trim(head)//' the group id is ', bc%man_gid, '; the ids of the manifolds start at 1'
+    else if ( bc%man_role /= 1 .and. bc%man_role /= 2 ) then
+      write(msg,'(A,I0,A)') trim(head)//' the role is ', bc%man_role, &
+        '; it is 1 (outlet: the gas leaves the domain through the face) or 2 (inlet: it comes back)'
+    else if ( bc%man_K < 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' K = ', bc%man_K, &
+        ' is negative; the loss on the dynamic pressure of the outlet faces is 0 or positive'
+    else if ( bc%rel_fac <= 0d0 .or. bc%rel_fac > 1d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' rel_fac = ', bc%rel_fac, ' is outside (0, 1]'
+    else if ( bc%man_mratio <= 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' mdot_ratio = ', bc%man_mratio, &
+        ' is not positive; it is the mass flow of the inlet faces over that of the outlet faces'
+    else if ( bc%man_p0ratio <= 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' p0_ratio = ', bc%man_p0ratio, &
+        ' is not positive; it is the total pressure of the inlet faces over that of the outlet faces'
+    else
+      return
+    end if
+    call mpi_stop_all ( trim(msg) )
+
+  end subroutine Need_Manifold
+
 
   !─────────────────────────────────────────────────────────────────────────────
   ! Need_Inward: the mass flux g of an inlet 404 (v, named name), of record n, type btype, line nline of the file, on
