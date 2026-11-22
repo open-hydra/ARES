@@ -94,6 +94,69 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
+  ! The inlet faces of a manifold (501): mass flux g [kg/m2/s] and total enthalpy h0 [J/kg], along the face normal into
+  ! the domain, the turbulence of the group. Both are blended with those of the boundary cell by rel_fac (1: the values
+  ! of the group). The pressure is extrapolated from the cell; the static enthalpy of the face follows from
+  ! h = h0 - (g/rho(p,h))^2/2 through the tables (a fixed point, converged to round-off: its factor is about the square
+  ! of the Mach number). Unlike 404, the face takes the mass flux whatever the direction of the gas of its cell: the
+  ! manifold feeds it (at rest included).
+  subroutine BC_Inlet_MassFlux_H0 ( Bm, Im, Jm, Km, Fm, Blk, BC_h0, BC_g, BC_rel_fac, BC_RANS )
+
+    use FLINT_Lib_Thermodynamic
+    use ARES_Global_m
+
+    implicit none
+    type(ARES_block_type), intent(inout) :: Blk
+    integer,  intent(in)    :: Bm, Im, Jm, Km, Fm
+    real(R8), intent(in)    :: BC_h0, BC_g, BC_rel_fac
+    real(R8), intent(in)    :: BC_RANS(1:)
+    ! Local
+    integer  :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, it
+    real(R8) :: Normal(3), Area, t_Vec(3), BC_Sign, Fmass, g, h0f, hf, hn, rho3, p3, Un3, scale
+    real(R8) :: Bound_Prim(nprim), Int_Prim(nprim)
+    real(R8) :: Un, Bound_rho, Bound_Sound
+    real(R8) :: Face_Vel(3), Flux(nprim)
+
+    call Setup_Inflow_Geometry ( Blk, Im, Jm, Km, Fm, modfm, modfm1, modfm2, modfm3, &
+                                  Int_i, Int_j, Int_k, Normal, Area, t_Vec, BC_Sign,   &
+                                  Bound_Prim, Int_Prim, Un, Bound_rho, Bound_Sound )
+
+    ! The values of the group blended with those of the cell (the cell's mass flux along the normal into the domain)
+    g  = BC_rel_fac * abs(BC_g)  + (1d0 - BC_rel_fac) * Bound_rho * max ( - BC_Sign * Un, 0d0 )
+    h0f = BC_rel_fac * BC_h0      + (1d0 - BC_rel_fac) * ( Bound_Prim(nh) + 0.5d0 * sum ( Bound_Prim(nu:nw)**2 ) )
+
+    ! The static state of the face at the pressure of the cell
+    p3 = Bound_Prim(np)
+    hf  = h0f
+    do it = 1, 100
+      rho3  = ph2vars( p3, hf, rho_tab )
+      hn    = h0f - 0.5d0 * ( g / rho3 )**2
+      scale = max ( abs(h0f), ( g / rho3 )**2, 1d0 )
+      if ( abs(hn - hf) <= 1d-15 * scale ) then
+        hf = hn
+        exit
+      end if
+      hf = hn
+    end do
+    rho3 = ph2vars( p3, hf, rho_tab )
+
+    ! Along the normal into the domain: Normal points toward growing index, out of the domain on the faces 2, 4, 6
+    ! (BC_Sign = +1), into it on the faces 1, 3, 5 (BC_Sign = -1)
+    Un3      = - BC_Sign * g / rho3
+    Face_Vel = Un3 * Normal
+    Fmass    = rho3 * Un3 * Area
+    Flux(np) = Fmass
+    Flux(nu:nw) = Fmass * Face_Vel + p3 * Area * Normal
+    Flux(nh) = Fmass * ( 0.5d0 * sum( Face_Vel**2 ) + hf )
+    ! the specific turbulence of the group times the mass flux (the transported variables are density-weighted)
+    if (model==2) Flux(nt:nprim) = BC_RANS * Fmass
+
+    Blk % r(:,Im,Jm,Km) = Blk % r(:,Im,Jm,Km) + modfm2 * Flux
+
+  end subroutine BC_Inlet_MassFlux_H0
+
+
+  !─────────────────────────────────────────────────────────────────────────────
   ! BC 405: Supersonic inlet — Mach, static temperature T and static pressure p. The flux of the face is that of the
   ! Riemann problem of the imposed state (Supersonic_Inflow: the static pressure and the Mach number blended with those
   ! of the cell by rel_fac, the direction from alpha and beta or along the normal of the face into the domain) with the

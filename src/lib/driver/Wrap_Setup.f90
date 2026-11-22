@@ -18,6 +18,7 @@ contains
     use ARES_Mod_Allocate_Data,    only: Setup_Data_Structure, deallocate_remote_computation_data
     use ARES_Mod_Multigrid,        only: Setup_Multigrid, Restriction
     use ARES_IO_BC,                only: Setup_BC
+    use ARES_Lib_BC_Fluxes_Manifold, only: Manifold_Setup
     use ARES_Lib_BC_Fluxes_Extrapolation, only: Setup_400_Entering
     use ARES_Mod_Metrics,          only: Setup_Metrics
     use ARES_Mod_Fluxes,           only: Setup_Quasi2D_W
@@ -125,6 +126,8 @@ contains
       simulation%domain(m)%mg_level = m
       call build_ghost_schedule(simulation%domain(m))
       call build_local_bc_index(simulation%domain(m))
+      ! The manifold groups (501) of the level, from the records every rank has read
+      call Manifold_Setup(simulation%domain(m), m)
     end do
 
     ! Read grid file and setup metrics in each grid level. The finest level last: the mesh type it finds (ndir,

@@ -18,6 +18,19 @@ ares_test(RealFluidShockTube real-fluid-shock-tube 1
   "CO2 shock tube vs the exact solution of the CoolProp equation of state")
 ares_test(LowMachCylinder low-mach-cylinder 3
   "Preconditioning: Mach-independent Cp of CO2 past a cylinder, prim loses it")
+ares_test(Manifold manifold 1
+  "Manifold (501): a CO2 duct cut in two joined by a lumped plenum gives the one-block duct; the ratios of the link act")
+
+# The manifold across MPI ranks: the two sides of the manifold on two ranks give the fields of one rank bit for bit. It
+# runs mpiexec ($ARES_MPIEXEC), so it is not a ci test (those run as one process): ctest -L mpi
+if(USE_MPI)
+  add_test(NAME ManifoldMPI COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/manifold/run.sh mpi)
+  set_tests_properties(ManifoldMPI PROPERTIES
+    ENVIRONMENT "ARES_BIN=$<TARGET_FILE:${solver}>;ARES_MPIEXEC=${MPIEXEC_EXECUTABLE}"
+    LABELS "mpi"
+    PROCESSORS 2
+    TIMEOUT 600)
+endif()
 
 # One test per turbulence model, each in its own runs/<model>: short runs from a turbulent boundary layer (smoke tests,
 # not accuracy: the flat-plate validations are test/flat-plate-*). SAcomp is refused by ARES at set-up.
