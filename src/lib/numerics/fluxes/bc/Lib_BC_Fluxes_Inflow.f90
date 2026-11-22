@@ -95,12 +95,12 @@ contains
 
   !─────────────────────────────────────────────────────────────────────────────
   ! The inlet faces of a manifold (501): mass flux g [kg/m2/s] and total enthalpy h0 [J/kg], along the face normal into
-  ! the domain, the turbulence of the group. Both are blended with those of the boundary cell by rel_fac (1: the values
-  ! of the group). The pressure is extrapolated from the cell; the static enthalpy of the face follows from
+  ! the domain, the turbulence of the group, as the manifold gives them (its rel_fac acts on the outlet faces only, as
+  ! in MOSE). The pressure is extrapolated from the cell; the static enthalpy of the face follows from
   ! h = h0 - (g/rho(p,h))^2/2 through the tables (a fixed point, converged to round-off: its factor is about the square
   ! of the Mach number). Unlike 404, the face takes the mass flux whatever the direction of the gas of its cell: the
   ! manifold feeds it (at rest included).
-  subroutine BC_Inlet_MassFlux_H0 ( Bm, Im, Jm, Km, Fm, Blk, BC_h0, BC_g, BC_rel_fac, BC_RANS )
+  subroutine BC_Inlet_MassFlux_H0 ( Bm, Im, Jm, Km, Fm, Blk, BC_h0, BC_g, BC_RANS )
 
     use FLINT_Lib_Thermodynamic
     use ARES_Global_m
@@ -108,7 +108,7 @@ contains
     implicit none
     type(ARES_block_type), intent(inout) :: Blk
     integer,  intent(in)    :: Bm, Im, Jm, Km, Fm
-    real(R8), intent(in)    :: BC_h0, BC_g, BC_rel_fac
+    real(R8), intent(in)    :: BC_h0, BC_g
     real(R8), intent(in)    :: BC_RANS(1:)
     ! Local
     integer  :: modfm, modfm1, modfm2, modfm3, Int_i, Int_j, Int_k, it
@@ -121,9 +121,8 @@ contains
                                   Int_i, Int_j, Int_k, Normal, Area, t_Vec, BC_Sign,   &
                                   Bound_Prim, Int_Prim, Un, Bound_rho, Bound_Sound )
 
-    ! The values of the group blended with those of the cell (the cell's mass flux along the normal into the domain)
-    g  = BC_rel_fac * abs(BC_g)  + (1d0 - BC_rel_fac) * Bound_rho * max ( - BC_Sign * Un, 0d0 )
-    h0f = BC_rel_fac * BC_h0      + (1d0 - BC_rel_fac) * ( Bound_Prim(nh) + 0.5d0 * sum ( Bound_Prim(nu:nw)**2 ) )
+    g   = abs(BC_g)
+    h0f = BC_h0
 
     ! The static state of the face at the pressure of the cell
     p3 = Bound_Prim(np)

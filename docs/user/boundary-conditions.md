@@ -221,8 +221,8 @@ mass, total enthalpy and total pressure cross it exactly. `K` = 1 loses the dyna
 a jet into a plenum at rest does (the static pressure is then about the same on the two sides). The three ratios lump
 the topology of a flow system on one link (one element simulated out of N, a bleed, the total-pressure ratio and the
 specific work `dh0` [J/kg] of a turbine): with `mdot-ratio` ≠ 1 or `dh0` ≠ 0 the link is a mass or energy sink by
-construction. `rf` (default 1) blends the value of the manifold with that of the face's own cell: the mass flux and
-total enthalpy of the inlet faces, the static pressure of the outlet faces.
+construction. `rf` (default 1) acts on the outlet faces: their static pressure is `rf` times that of the manifold plus
+(1 − `rf`) times that of their own cell; the inlet faces take the values of the manifold as they are.
 
 An outlet face whose cell has the gas moving inward is a slip wall for that evaluation, as on a `406`. While nothing
 leaves through the outlet faces (a case started at rest), the inlet faces are slip walls and the outlet faces take the

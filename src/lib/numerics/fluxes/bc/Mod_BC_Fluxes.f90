@@ -179,7 +179,7 @@ contains
                 ! The gas comes back with the mass flux, total enthalpy and turbulence of the group, along the face
                 ! normal (BC_Inlet_MassFlux_H0)
                 call BC_Inlet_MassFlux_H0 ( Bm, Im, Jm, Km, Fm, blk(Bm), man(mman) % h0_in, man(mman) % g_in, &
-                                            bc(i) % rel_fac, man(mman) % ci_in )
+                                            man(mman) % ci_in )
               else
                 ! Nothing leaves through the outlet faces of the group yet: a slip wall
                 call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )

@@ -86,7 +86,7 @@ module ARES_Advanced_Types_m
     integer  :: gid = 0                                  ! the group id of the records
     integer  :: n_out = 0, n_in = 0                      ! records of each role in the whole domain
     integer  :: first = 0                                ! the first record of the group (its parameters)
-    real(R8) :: K = 0.0_R8, rf = 1.0_R8                  ! loss on the dynamic pressure of the outlet faces; relaxation factor
+    real(R8) :: K = 0.0_R8, rf = 1.0_R8                  ! loss on the dynamic pressure, relaxation factor: outlet faces
     real(R8) :: mratio = 1.0_R8, p0ratio = 1.0_R8        ! mass flow and total pressure of the inlet faces over the outlet's
     real(R8) :: dh0 = 0.0_R8                             ! total enthalpy taken out between them [J/kg]
     logical  :: active = .false.                         ! gas leaves through the outlet faces at this stage
