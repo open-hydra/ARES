@@ -142,7 +142,7 @@ written at run time by `make_case.py`, which reads the free-stream enthalpy from
 | `Manifold` | `manifold/`: a CO2 duct cut in two blocks joined by a manifold (501), straight and turned back, then with the ratios of the link | the converged field equals the one-block duct (1e-9; 3e-12), mass, total enthalpy and total pressure cross the manifold (1e-10; 0), mdot-ratio, dh0, K and p0-ratio act as the record says | about 3 s |
 | `TurbulenceSmoke.<model>` | `turbulence-smoke/`: coarse flat plate in air, 300 iterations from a turbulent boundary layer, one test per model | the field is finite, the turbulence variables and mut are not negative, mut/mu stays between 5 and 1e4, the residual falls | about 2 s each |
 
-`ManifoldMPI` (label `mpi`, registered in an MPI build only, not run by the CI, which runs one process per test) runs
+`MPIManifold` (label `mpi`, registered in an MPI build only, not run by the CI, which runs one process per test) runs
 the two manifold layouts of `Manifold` on 1 and on 2 ranks, the two sides of the manifold on two ranks, and requires
 the same fields bit for bit: `ctest --test-dir build -L mpi` (`ARES_MPIEXEC` names `mpiexec` when run by hand).
 

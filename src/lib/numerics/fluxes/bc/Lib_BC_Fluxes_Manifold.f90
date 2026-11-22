@@ -1,25 +1,9 @@
 !> The manifold (BC 501): the faces of a group joined by a lumped plenum. The gas that leaves the domain through the
-!> outlet faces of the group (role 1) comes back through its inlet faces (role 2): once per stage, before the boundary
-!> fluxes, Manifold_Gather sums over the faces of each group that this rank owns, adds the sums of the other ranks (one
-!> reduction per stage), and sets the state the faces of the group take at this stage; BC_Fluxes then applies it with
-!> BC_Inlet_MassFlux_H0 (mass flux and total enthalpy, along the face normal, the mean turbulence) on the inlet faces and
-!> the outlet 406 (a static pressure) on the outlet faces.
-!>
-!> The means are mass-flow-weighted: the inlet faces get the mass flow of the outlet faces (times mdot-ratio) spread
-!> uniformly over their area, the mass-flow-weighted total enthalpy (less dh0) and turbulence of the gas that leaves; the
-!> outlet faces take the static pressure that gives them the total pressure of the inlet side (over p0-ratio, plus the
-!> loss K on their dynamic pressure). With the defaults mass, total enthalpy and total pressure cross the manifold
-!> exactly: a loss-free, perfectly mixed plenum. K = 1 loses the dynamic pressure of the gas that leaves, as a jet into a
-!> plenum at rest does. The fluid is that of the tables: the state of a face follows from its pressure and enthalpy.
-!>
-!> The roles are those of the records: no sign of the flow changes them. A cell of an outlet face whose gas moves inward
-!> is a slip wall for the stage, as on a 406; when nothing leaves through the outlet faces of a group (the first stages
-!> of a run from rest), its inlet faces are slip walls and its outlet faces take the mean static pressure of the inlet
-!> side. rel_fac blends the value of the group with that of the face's own cell: the mass flux and total enthalpy of the
-!> inlet faces, the static pressure of the outlet faces (1: the group's value).
-!>
-!> Every rank reads every record, so the groups are built without a reduction (Manifold_Setup, at set-up, per grid
-!> level); the faces of a group may lie on any ranks and be cut by the decomposition.
+!> outlet faces of the group (role 1) comes back through its inlet faces (role 2). Once per stage, before the boundary
+!> fluxes, Manifold_Gather sums over the faces of each group on every rank and sets the state of the group; BC_Fluxes
+!> applies it with BC_Inlet_MassFlux_H0 on the inlet faces and the outlet 406 on the outlet faces. The roles are those
+!> of the records: no sign of the flow changes them. The groups are built at set-up, per grid level, from the records
+!> every rank has read (Manifold_Setup); the faces of a group may lie on any ranks and be cut by the decomposition.
 module ARES_Lib_BC_Fluxes_Manifold
   use iso_fortran_env, only: I4 => int32, R8 => real64
   use ARES_Advanced_Types_m
@@ -154,7 +138,8 @@ contains
   !> sum g qd dA with its own g = rho |u.n|. Then, for the group, the mass-flow-weighted means: the inlet faces take the
   !> mass flux g_in = mdot-ratio mdot / A_in, the total enthalpy h0_in = h0_out - dh0 and the mean turbulence; the outlet
   !> faces take the static pressure p_out = p0_out - q_out of the total pressure p0_out = p0_in / p0-ratio + K q_out, with
-  !> p0_in = mean p of the inlet cells + their mass-weighted qd.
+  !> p0_in = mean p of the inlet cells + their mass-weighted qd: the total pressure is the same on the two sides of a
+  !> loss-free plenum (K = 0, p0-ratio = 1), and mass and total enthalpy cross it exactly (mdot-ratio = 1, dh0 = 0).
   subroutine Manifold_Gather ( domain )
     use ARES_Mod_MPI,        only: mpi_size_, mpi_allreduce_sum_r8_array, mpi_is_root
     use ARES_Config_Types_m, only: obj_io
@@ -238,10 +223,11 @@ contains
         gr % mdot_out = sums(imdot,m)
         gr % active   = gr % mdot_out > 0d0 .and. A_in > 0d0
         if (gr % active) then
-          ! The inlet faces: the mass flux, the total enthalpy carried over (less dh0) and the turbulence of the gas
-          ! that leaves
+          ! The mass-flow-weighted means of the gas that leaves
           gr % h0_out = sums(igh0,m) / gr % mdot_out
           q_out       = sums(igq,m)  / gr % mdot_out
+          ! The inlet faces: the mass flux, the total enthalpy carried over (less dh0) and the turbulence of the gas
+          ! that leaves
           gr % g_in   = gr % mratio * gr % mdot_out / A_in
           gr % h0_in  = gr % h0_out - gr % dh0
           do k = 1, nrans

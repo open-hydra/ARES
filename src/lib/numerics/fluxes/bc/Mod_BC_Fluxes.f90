@@ -176,7 +176,8 @@ contains
                 call BC_Outflow ( Bm, Im, Jm, Km, Fm, blk(Bm), p_face, bc(i) % rel_fac, mdot_face, error )
                 if (error == 1) call BC_Symmetry_Eul ( Im, Jm, Km, Fm, blk(Bm) )
               else if ( man(mman) % active ) then
-                ! The gas comes back with the mass flux, total enthalpy and turbulence of the group, along the face normal
+                ! The gas comes back with the mass flux, total enthalpy and turbulence of the group, along the face
+                ! normal (BC_Inlet_MassFlux_H0)
                 call BC_Inlet_MassFlux_H0 ( Bm, Im, Jm, Km, Fm, blk(Bm), man(mman) % h0_in, man(mman) % g_in, &
                                             bc(i) % rel_fac, man(mman) % ci_in )
               else

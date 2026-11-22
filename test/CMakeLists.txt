@@ -24,8 +24,8 @@ ares_test(Manifold manifold 1
 # The manifold across MPI ranks: the two sides of the manifold on two ranks give the fields of one rank bit for bit. It
 # runs mpiexec ($ARES_MPIEXEC), so it is not a ci test (those run as one process): ctest -L mpi
 if(USE_MPI)
-  add_test(NAME ManifoldMPI COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/manifold/run.sh mpi)
-  set_tests_properties(ManifoldMPI PROPERTIES
+  add_test(NAME MPIManifold COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/manifold/run.sh mpi)
+  set_tests_properties(MPIManifold PROPERTIES
     ENVIRONMENT "ARES_BIN=$<TARGET_FILE:${solver}>;ARES_MPIEXEC=${MPIEXEC_EXECUTABLE}"
     LABELS "mpi"
     PROCESSORS 2

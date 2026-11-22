@@ -1,6 +1,6 @@
 # Manifold (BC 501), real fluid
 
-CI test `Manifold`, and `ManifoldMPI` in an MPI build (`docs/development/testing.md`). A duct of supercritical CO2
+CI test `Manifold`, and `MPIManifold` in an MPI build (`docs/development/testing.md`). A duct of supercritical CO2
 (7 MPa, 345 K, 2000 kg/m²s) cut in two blocks joined by a manifold: the converged field must be that of the one-block
 duct, and the log line of the manifold must show mass, total enthalpy and total pressure crossing it, or the relations
 of the record when the ratios of the link are set.

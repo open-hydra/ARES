@@ -938,46 +938,6 @@ contains
 
 
   !─────────────────────────────────────────────────────────────────────────────
-  ! Need_Manifold: the values of a manifold record (501), record n at line nline: the group id from 1, the role 1 (outlet)
-  !   or 2 (inlet), K >= 0, 0 < rel_fac <= 1, mdot_ratio > 0 and p0_ratio > 0 (dh0 takes any value). The groups
-  !   themselves -- the same parameters on every record, an outlet and an inlet face in each -- are checked once every
-  !   record of the level is read (Manifold_Setup, Lib_BC_Fluxes_Manifold).
-  subroutine Need_Manifold ( n, nline, bc )
-    use ARES_Advanced_Types_m, only: ARES_bc_type
-    use ARES_Mod_MPI,          only: mpi_stop_all
-    implicit none
-    integer,            intent(in) :: n, nline
-    type(ARES_bc_type), intent(in) :: bc
-    ! Local
-    character(len=400) :: msg
-    character(len=120) :: head
-
-    write(head,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type 501):'
-    if ( bc%man_gid < 1 ) then
-      write(msg,'(A,I0,A)') trim(head)//' the group id is ', bc%man_gid, '; the ids of the manifolds start at 1'
-    else if ( bc%man_role /= 1 .and. bc%man_role /= 2 ) then
-      write(msg,'(A,I0,A)') trim(head)//' the role is ', bc%man_role, &
-        '; it is 1 (outlet: the gas leaves the domain through the face) or 2 (inlet: it comes back)'
-    else if ( bc%man_K < 0d0 ) then
-      write(msg,'(A,ES12.5,A)') trim(head)//' K = ', bc%man_K, &
-        ' is negative; the loss on the dynamic pressure of the outlet faces is 0 or positive'
-    else if ( bc%rel_fac <= 0d0 .or. bc%rel_fac > 1d0 ) then
-      write(msg,'(A,ES12.5,A)') trim(head)//' rel_fac = ', bc%rel_fac, ' is outside (0, 1]'
-    else if ( bc%man_mratio <= 0d0 ) then
-      write(msg,'(A,ES12.5,A)') trim(head)//' mdot_ratio = ', bc%man_mratio, &
-        ' is not positive; it is the mass flow of the inlet faces over that of the outlet faces'
-    else if ( bc%man_p0ratio <= 0d0 ) then
-      write(msg,'(A,ES12.5,A)') trim(head)//' p0_ratio = ', bc%man_p0ratio, &
-        ' is not positive; it is the total pressure of the inlet faces over that of the outlet faces'
-    else
-      return
-    end if
-    call mpi_stop_all ( trim(msg) )
-
-  end subroutine Need_Manifold
-
-
-  !─────────────────────────────────────────────────────────────────────────────
   ! Need_R, Need_I: stop the run (Empty_Field) on the first of the values v of record n, type btype, line nline of the
   !   file, still EMPTY after the read of its property line. names: their names, blank-separated, in the order of the
   !   line; the last name stands for the values after it (a list of mass fractions, say).
@@ -1034,6 +994,46 @@ contains
     call Need_R ( n, bc%type, nline, bc%ci(1:nrans), 'turb' )
 
   end subroutine Need_Inlet
+
+  !─────────────────────────────────────────────────────────────────────────────
+  ! Need_Manifold: the values of a manifold record (501), record n at line nline: the group id from 1, the role 1 (outlet)
+  !   or 2 (inlet), K >= 0, 0 < rel_fac <= 1, mdot_ratio > 0 and p0_ratio > 0 (dh0 takes any value). The groups
+  !   themselves -- the same parameters on every record, an outlet and an inlet face in each -- are checked once every
+  !   record of the level is read (Manifold_Setup, Lib_BC_Fluxes_Manifold).
+  subroutine Need_Manifold ( n, nline, bc )
+    use ARES_Advanced_Types_m, only: ARES_bc_type
+    use ARES_Mod_MPI,          only: mpi_stop_all
+    implicit none
+    integer,            intent(in) :: n, nline
+    type(ARES_bc_type), intent(in) :: bc
+    ! Local
+    character(len=400) :: msg
+    character(len=120) :: head
+
+    write(head,'(3A,I0,A,I0,A)') '[ERROR] ', trim(bc_name), ' line ', nline, ' (record ', n, ', type 501):'
+    if ( bc%man_gid < 1 ) then
+      write(msg,'(A,I0,A)') trim(head)//' the group id is ', bc%man_gid, '; the ids of the manifolds start at 1'
+    else if ( bc%man_role /= 1 .and. bc%man_role /= 2 ) then
+      write(msg,'(A,I0,A)') trim(head)//' the role is ', bc%man_role, &
+        '; it is 1 (outlet: the gas leaves the domain through the face) or 2 (inlet: it comes back)'
+    else if ( bc%man_K < 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' K = ', bc%man_K, &
+        ' is negative; the loss on the dynamic pressure of the outlet faces is 0 or positive'
+    else if ( bc%rel_fac <= 0d0 .or. bc%rel_fac > 1d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' rel_fac = ', bc%rel_fac, ' is outside (0, 1]'
+    else if ( bc%man_mratio <= 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' mdot_ratio = ', bc%man_mratio, &
+        ' is not positive; it is the mass flow of the inlet faces over that of the outlet faces'
+    else if ( bc%man_p0ratio <= 0d0 ) then
+      write(msg,'(A,ES12.5,A)') trim(head)//' p0_ratio = ', bc%man_p0ratio, &
+        ' is not positive; it is the total pressure of the inlet faces over that of the outlet faces'
+    else
+      return
+    end if
+    call mpi_stop_all ( trim(msg) )
+
+  end subroutine Need_Manifold
+
 
   !─────────────────────────────────────────────────────────────────────────────
   ! Need_Inward: the mass flux g of an inlet 404 (v, named name), of record n, type btype, line nline of the file, on

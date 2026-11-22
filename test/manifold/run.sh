@@ -17,7 +17,7 @@
 #       block 2, dh0 lowers its total enthalpy by dh0, and the log line shows
 #       the mass flow, total enthalpy and total pressure in the relations of
 #       the record (mdot-ratio 0.5, K 0.5, p0-ratio 0.9, dh0 20 kJ/kg).
-#  With the argument "mpi" (test ManifoldMPI): the two manifold layouts on 1
+#  With the argument "mpi" (test MPIManifold): the two manifold layouts on 1
 #  and on 2 ranks (one block each, the two sides of the manifold on two
 #  ranks), bit for bit the same; $ARES_MPIEXEC (default mpiexec) runs them.
 #  The binary is $ARES_BIN, or bin/ARES of the source tree.
@@ -30,7 +30,7 @@ BIN="${ARES_BIN:-$HERE/../../bin/ARES}"
 [[ -x "$BIN" ]] || { echo "no ARES binary at $BIN (set ARES_BIN)"; exit 1; }
 MODE="${1:-serial}"
 MPIEXEC="${ARES_MPIEXEC:-mpiexec}"
-NAME=Manifold; [[ $MODE == mpi ]] && NAME=ManifoldMPI
+NAME=Manifold; [[ $MODE == mpi ]] && NAME=MPIManifold
 
 ulimit -s unlimited 2>/dev/null || true
 export OMP_NUM_THREADS=1 OMP_PROC_BIND=false

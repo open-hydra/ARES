@@ -229,8 +229,11 @@ leaves through the outlet faces (a case started at rest), the inlet faces are sl
 mean static pressure of the inlet side. Unlike the inlet `404`, an inlet face of a manifold takes its mass flux whatever
 the direction of the gas of its cell. The log has one line per manifold and grid level at the shell interval
 (`shell-diter`): `manifold <id>, grid level <l>, iteration <n>: mdot out/in, h0 out/in, p0 out/in, taken out` (the
-mass flows, total enthalpies and total pressures of the two sides, and the power $\dot m\,\texttt{dh0}$). The test
-`Manifold` checks it ([Testing](../development/testing.md#ci-tests)).
+mass flows, total enthalpies and total pressures of the two sides, and the power $\dot m\,\texttt{dh0}$). The same
+rule holds on every grid level of a multigrid run, each level gathering its own faces. The record is refused at set-up
+when `gid` < 1, `role` is not 1 or 2, `K` < 0, `rel_fac` is outside (0, 1], a ratio is not positive, when the records
+of a group do not carry the same parameters, or when a group has no outlet or no inlet face. The tests `Manifold` and
+`MPIManifold` check it ([Testing](../development/testing.md#ci-tests)).
 
 ---
 

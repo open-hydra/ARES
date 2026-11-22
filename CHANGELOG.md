@@ -9,11 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - CI tests on every pull request (`ctest -L ci`): CO2 shock tube, low-Mach cylinder, smoke runs of every turbulence model.
-- The manifold boundary (`501`): faces of a group joined by a lumped plenum, the gas leaving through the outlet faces
-  coming back through the inlet faces with its mass flow, total enthalpy and turbulence (mass-flow-weighted) and the
-  same total pressure, optionally through a loss `K` and the ratios of a lumped link (`mdot_ratio`, `p0_ratio`, `dh0`);
-  any number of faces on any ranks, the record of ATLAS `bcb/manifold-groups`. Tests `Manifold` (ci) and `ManifoldMPI`.
-  See [Boundary Conditions](docs/user/boundary-conditions.md#manifold).
+- Manifold boundary `501`: outlet and inlet faces of a group joined by a lumped plenum, on any ranks; tests
+  `Manifold`, `MPIManifold`. See [Boundary Conditions](docs/user/boundary-conditions.md#manifold).
 
 ### Changed
 
